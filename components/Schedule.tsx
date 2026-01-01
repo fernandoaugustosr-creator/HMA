@@ -379,7 +379,16 @@ export default function Schedule() {
                 Adicionar Profissional...
              </button>
           </td>
-          <td colSpan={3 + daysInMonth + 1} className="border border-black px-2 py-1 bg-gray-50"></td>
+          <td className="border border-black px-1 py-1"></td>
+          <td className="border border-black px-1 py-1"></td>
+          <td className="border border-black px-1 py-1"></td>
+          {daysArray.map(({ day, isWeekend }) => (
+            <td 
+              key={`placeholder-${day}`} 
+              className={`border border-black px-0 py-0 ${isWeekend ? 'bg-gray-400' : ''}`}
+            ></td>
+          ))}
+          <td className="border border-black px-1 py-1"></td>
         </tr>
       </>
     )
@@ -482,106 +491,81 @@ export default function Schedule() {
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto border border-black rounded-none shadow-none max-w-full relative">
-        <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
-          <thead>
-            {/* Main Headers Row 1 */}
-            <tr className="bg-blue-100 text-black">
-              <th className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold" rowSpan={2}>#</th>
-              <th className="border border-black px-1 py-1 text-center min-w-[250px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm">ENFERMEIROS</th>
-              <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>COREN</th>
-              <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>VÍNCULO</th>
-              <th className="border border-black px-1 py-1 text-center w-24 font-bold">D. SEMANA</th>
-              {daysArray.map(({ day, weekday, isWeekend }) => (
-                <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-6 ${isWeekend ? 'bg-gray-400' : ''}`}>
-                  {weekday}
-                </th>
-              ))}
-              <th className="border border-black px-1 py-1 text-center w-16 font-bold">TOTAL</th>
-            </tr>
-            {/* Main Headers Row 2 */}
-            <tr className="bg-blue-100 text-black">
-               <th className="border border-black px-1 py-1 text-center sticky left-8 bg-blue-200 z-20 border-r-2 border-r-black font-bold uppercase text-xs">INTERNAÇÃO PS - OBSERVAÇÃO</th>
-              <th className="border border-black px-1 py-1 text-center font-bold uppercase">OBSERVAÇÃO</th>
-              {daysArray.map(({ day, isWeekend }) => (
-                <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400' : ''}`}>
-                  {day}
-                </th>
-              ))}
-              <th className="border border-black px-1 py-1 text-center font-bold">PLANTÃO</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={100} className="text-center py-4">Carregando...</td></tr>
-            ) : (
-              <>
-                {data.sections.map(section => (
-                    <React.Fragment key={section.id}>
-                        {/* Section Header Row that mimics the main header style but for the specific section */}
-                        {/* Only show this if it's NOT the first section, OR if we want to explicitly label every section */}
-                        {/* Given the user wants it to look like the image, and the image has "ENFERMEIROS" then "TÉCNICOS", let's use the section title as a sub-header */}
-                        
-                        <tr className="bg-blue-100 text-black">
-                            <td className="border border-black px-1 py-1 text-center text-xs font-bold sticky left-0 bg-blue-100 z-20">#</td>
-                            <td className="border border-black px-1 py-1 text-center text-xs font-bold uppercase sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black flex justify-between items-center group min-w-[250px]">
-                                {editingSectionId === section.id ? (
-                                    <div className="flex items-center gap-1 w-full">
-                                        <input 
-                                            value={editingSectionTitle}
-                                            onChange={e => setEditingSectionTitle(e.target.value)}
-                                            className="text-xs border rounded px-1 py-0.5 w-full bg-white text-black"
-                                            autoFocus
-                                        />
-                                        <button onClick={saveSectionTitle} className="text-green-600 p-1 hover:bg-gray-200 rounded"><Save size={14} /></button>
-                                        <button onClick={() => setEditingSectionId(null)} className="text-red-600 p-1 hover:bg-gray-200 rounded"><X size={14} /></button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <span className="flex-1 text-center">{section.title}</span>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
-                                            <button 
-                                                onClick={() => startEditingSection(section)} 
-                                                className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-gray-200"
-                                                title="Editar nome do bloco"
-                                            >
-                                                <Pencil size={12} />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDeleteSection(section.id)} 
-                                                className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-gray-200"
-                                                title="Excluir bloco"
-                                            >
-                                                <Trash2 size={12} />
-                                            </button>
+      <div className="overflow-x-auto border-none shadow-none max-w-full relative">
+        {loading ? (
+             <div className="text-center py-4">Carregando...</div>
+        ) : (
+             <>
+             {data.sections.map(section => (
+                 <div key={section.id} className="mb-8 border border-black">
+                     <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
+                         <thead>
+                            {/* Main Headers Row 1 */}
+                            <tr className="bg-blue-100 text-black">
+                                <th className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold" rowSpan={2}>#</th>
+                                <th className="border border-black px-1 py-1 text-center min-w-[250px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group" rowSpan={2}>
+                                     {editingSectionId === section.id ? (
+                                        <div className="flex items-center gap-1 w-full justify-center">
+                                            <input 
+                                                value={editingSectionTitle}
+                                                onChange={e => setEditingSectionTitle(e.target.value)}
+                                                className="text-xs border rounded px-1 py-0.5 w-full bg-white text-black"
+                                                autoFocus
+                                            />
+                                            <button onClick={saveSectionTitle} className="text-green-600 p-1 hover:bg-gray-200 rounded"><Save size={14} /></button>
+                                            <button onClick={() => setEditingSectionId(null)} className="text-red-600 p-1 hover:bg-gray-200 rounded"><X size={14} /></button>
                                         </div>
-                                    </>
-                                )}
-                            </td>
-                            {/* COREN & VINCULO placeholders for section header line - usually empty or merged */}
-                            <td className="border border-black px-1 py-1 text-center text-[10px] bg-blue-100"></td>
-                            <td className="border border-black px-1 py-1 text-center text-[10px] bg-blue-100"></td>
-                             {/* OBSERVAÇÃO placeholder */}
-                            <td className="border border-black px-1 py-1 text-center text-[10px] bg-blue-100 font-bold uppercase"></td>
-                            
-                            {/* Days - Just empty or maybe repeating numbers? Image implies just grid lines or merged. 
-                                Let's keep it clean or repeat the weekday/number if the section is far down.
-                                For compactness, let's just show the grid cells empty or with a light fill.
-                            */}
-                            {daysArray.map(({ day, isWeekend }) => (
-                                <td key={`sh-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400' : 'bg-blue-100'}`}>
-                                </td>
-                            ))}
-                            <td className="border border-black px-1 py-1 text-center text-xs font-medium bg-blue-100">PLANTÃO</td>
-                        </tr>
-
-                        {renderGrid(data.nurses.filter(n => n.section_id === section.id && (!selectedUnitId || n.unit_id === selectedUnitId)), section)}
-                    </React.Fragment>
-                ))}
-              </>
-            )}
-          </tbody>
-        </table>
+                                    ) : (
+                                        <div className="flex justify-between items-center w-full">
+                                            <span className="flex-1 text-center">{section.title}</span>
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
+                                                <button 
+                                                    onClick={() => startEditingSection(section)} 
+                                                    className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-gray-200"
+                                                    title="Editar nome do bloco"
+                                                >
+                                                    <Pencil size={12} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteSection(section.id)} 
+                                                    className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-gray-200"
+                                                    title="Excluir bloco"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </th>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>COREN</th>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold">D. SEMANA</th>
+                                {daysArray.map(({ day, weekday, isWeekend }) => (
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-6 ${isWeekend ? 'bg-gray-400' : ''}`}>
+                                    {weekday}
+                                    </th>
+                                ))}
+                                <th className="border border-black px-1 py-1 text-center w-16 font-bold">TOTAL</th>
+                            </tr>
+                            {/* Main Headers Row 2 */}
+                            <tr className="bg-blue-100 text-black">
+                                <th className="border border-black px-1 py-1 text-center font-bold uppercase">OBSERVAÇÃO</th>
+                                {daysArray.map(({ day, isWeekend }) => (
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400' : ''}`}>
+                                    {day}
+                                    </th>
+                                ))}
+                                <th className="border border-black px-1 py-1 text-center font-bold">PLANTÃO</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {renderGrid(data.nurses.filter(n => n.section_id === section.id && (!selectedUnitId || n.unit_id === selectedUnitId)), section)}
+                        </tbody>
+                    </table>
+                 </div>
+             ))}
+             </>
+        )}
       </div>
       
       {/* Signatures Footer */}

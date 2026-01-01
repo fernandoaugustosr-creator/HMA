@@ -38,7 +38,7 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
   async function handleAssign(nurseId: string) {
     setLoading(true)
     try {
-        const res = await assignNurseToSection(nurseId, sectionId)
+        const res = await assignNurseToSection(nurseId, sectionId, unitId)
         if (res.success) {
             onSuccess()
             onClose()

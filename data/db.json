@@ -5,19 +5,109 @@
       "name": "Maria Silva (Local)",
       "cpf": "111.111.111-11",
       "role": "ENFERMEIRO",
-      "section_id": "2d90dc60-5571-426a-884c-751692e35139",
-      "password": "123"
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "password": "123",
+      "unit_id": "unit-1"
     },
     {
       "id": "mock-3",
       "name": "Administrador",
       "cpf": "02170025367",
       "role": "ENFERMEIRO",
-      "section_id": "2d90dc60-5571-426a-884c-751692e35139",
-      "password": "123456"
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "password": "123456",
+      "unit_id": "unit-1"
+    },
+    {
+      "id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "name": "sdsd",
+      "cpf": "sds",
+      "password": "123456",
+      "coren": "sdsd",
+      "vinculo": "",
+      "role": "ENFERMEIRO",
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "unit_id": "unit-1",
+      "created_at": "2026-01-01T20:44:25.321Z"
+    },
+    {
+      "id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "name": "MANOEL DA COSTA NETO ",
+      "cpf": "1",
+      "password": "123456",
+      "coren": "",
+      "vinculo": "02170025367",
+      "role": "ENFERMEIRO",
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "unit_id": null,
+      "created_at": "2026-01-01T21:50:33.684Z"
     }
   ],
-  "shifts": [],
+  "shifts": [
+    {
+      "id": "2d784802-3f78-4067-a412-5f6c40200b34",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-01",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T20:58:35.339Z"
+    },
+    {
+      "id": "afa0b276-2503-44cc-ace9-24117e412fa4",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-05",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T20:58:35.339Z"
+    },
+    {
+      "id": "e7f3f409-6428-48c8-bf7d-72efbb0a3446",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-09",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T20:58:35.339Z"
+    },
+    {
+      "id": "55491a3c-3e85-4096-a2c6-70dd5fb14d48",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-13",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T20:58:35.339Z"
+    },
+    {
+      "id": "8ebc0735-4fdc-49b7-a20c-badb79fb55fd",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-17",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T20:58:35.339Z"
+    },
+    {
+      "id": "bbfcfe5d-c6fc-4b47-a5ca-16be826ec24a",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-21",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T20:58:35.339Z"
+    },
+    {
+      "id": "e9f4230e-fe97-4823-a7a4-3a138a1ead96",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-25",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T20:58:35.339Z"
+    },
+    {
+      "id": "8f940064-2158-429e-a691-befba884d85f",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-29",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T20:58:35.339Z"
+    },
+    {
+      "id": "95b51be1-1552-44fb-88d5-4307dfe1e071",
+      "nurse_id": "bdeecc06-1f7d-41a6-8998-7f389069f769",
+      "shift_date": "2026-01-02",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T20:58:22.669Z"
+    }
+  ],
   "time_off_requests": [
     {
       "id": "d3c2f445-1d95-4d8e-be4b-29ed7c9687d4",
@@ -52,10 +142,16 @@
   ],
   "schedule_sections": [
     {
-      "id": "2d90dc60-5571-426a-884c-751692e35139",
-      "title": "EFDF",
+      "id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "title": "ENFERMEIROS",
+      "position": 3,
+      "created_at": "2026-01-01T20:48:54.357Z"
+    },
+    {
+      "id": "706c6177-efec-46a9-aae5-d66248f7e33b",
+      "title": "TÉCNICOS DE ENFERMAGEM",
       "position": 2,
-      "created_at": "2026-01-01T19:34:07.422Z"
+      "created_at": "2026-01-01T21:01:07.210Z"
     }
   ],
   "units": [
@@ -74,6 +170,10 @@
     {
       "id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
       "title": "dgdg"
+    },
+    {
+      "id": "d395a651-aacf-49da-bd95-3fa28c7d2d5d",
+      "title": "SD"
     }
   ]
 }

@@ -25,3 +25,48 @@ body {
     )
     rgb(var(--background-start-rgb));
 }
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 5mm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Reset layout constraints for printing */
+  .max-w-7xl, .container, .mx-auto, .w-full, .overflow-x-auto {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure table takes full width and fits */
+  table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto !important;
+  }
+  
+  /* Adjust font size for print if necessary */
+  table td, table th {
+    font-size: 9px !important; 
+    padding: 1px !important;
+  }
+
+  /* Hide scrollbars */
+  * {
+    overflow: visible !important;
+  }
+}
