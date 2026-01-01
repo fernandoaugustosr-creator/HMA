@@ -8,9 +8,57 @@
       "coren": "",
       "vinculo": "02170025367",
       "role": "ENFERMEIRO",
-      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "section_id": "706c6177-efec-46a9-aae5-d66248f7e33b",
       "unit_id": "unit-1",
       "created_at": "2026-01-01T21:50:33.684Z"
+    },
+    {
+      "id": "0c22564d-5419-466f-8294-6ad1a36f6863",
+      "name": "THIAGO AGUIAR DE HOLANDA",
+      "cpf": "267164",
+      "password": "123",
+      "coren": "267164",
+      "vinculo": "CONCURSO",
+      "role": "ENFERMEIRO",
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "unit_id": null,
+      "created_at": "2026-01-01T22:14:51.575Z"
+    },
+    {
+      "id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "name": "ANA FLÁVIA CARVALHO MOREIRA",
+      "cpf": "423076",
+      "password": "123",
+      "coren": "423076",
+      "vinculo": "CONCURSO",
+      "role": "ENFERMEIRO",
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "unit_id": null,
+      "created_at": "2026-01-01T22:14:51.580Z"
+    },
+    {
+      "id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "name": "MARIA EDICLEIA RIBEIRO DOS SANTOS",
+      "cpf": "449788",
+      "password": "123",
+      "coren": "449788",
+      "vinculo": "CONCURSO",
+      "role": "ENFERMEIRO",
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "unit_id": null,
+      "created_at": "2026-01-01T22:14:51.580Z"
+    },
+    {
+      "id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "name": "PRISCILA HENRIQUETA OLIVEIRA DESTERRO",
+      "cpf": "544909",
+      "password": "123",
+      "coren": "544909",
+      "vinculo": "CONCURSO",
+      "role": "ENFERMEIRO",
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "unit_id": null,
+      "created_at": "2026-01-01T22:14:51.580Z"
     }
   ],
   "shifts": [
@@ -26,7 +74,56 @@
       "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
       "shift_date": "2026-01-01",
       "shift_type": "night",
-      "updated_at": "2026-01-01T22:11:56.799Z"
+      "updated_at": "2026-01-01T22:13:38.438Z"
+    },
+    {
+      "id": "e338a896-02c1-429b-84a9-0c01096cd857",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "shift_date": "2026-01-05",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T22:13:28.692Z"
+    },
+    {
+      "id": "ef39e5e5-1f28-4259-af08-a76ffdbc90a3",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "shift_date": "2026-01-09",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T22:13:28.692Z"
+    },
+    {
+      "id": "590b2d50-4984-4df9-bd69-b4332ffb1f73",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "shift_date": "2026-01-13",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T22:13:28.692Z"
+    },
+    {
+      "id": "18a42fdb-4c62-4d32-aeea-74f700366237",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "shift_date": "2026-01-17",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T22:13:28.692Z"
+    },
+    {
+      "id": "dde4109f-cac2-4f08-a585-1c0b4483a759",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "shift_date": "2026-01-21",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T22:13:28.692Z"
+    },
+    {
+      "id": "f95ea402-d574-4dad-8fc1-603929ebaab2",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "shift_date": "2026-01-25",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T22:13:28.692Z"
+    },
+    {
+      "id": "e51fa55c-f21e-46ba-bbbe-726c136eb393",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "shift_date": "2026-01-29",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T22:13:28.692Z"
     }
   ],
   "time_off_requests": [
