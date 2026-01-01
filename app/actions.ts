@@ -392,13 +392,15 @@ export async function reassignNurse(oldId: string, newId: string) {
 }
 
 export async function assignNurseToSection(nurseId: string, sectionId: string, unitId?: string) {
+  const finalUnitId = unitId === '' ? null : unitId
+
   if (isLocalMode()) {
     const db = readDb()
     const nurse = db.nurses.find(n => n.id === nurseId)
     if (nurse) {
       nurse.section_id = sectionId
-      if (unitId !== undefined) {
-        nurse.unit_id = unitId
+      if (finalUnitId !== undefined) {
+        nurse.unit_id = finalUnitId
       }
       writeDb(db)
     }
@@ -408,8 +410,8 @@ export async function assignNurseToSection(nurseId: string, sectionId: string, u
 
   const supabase = createClient()
   const updates: any = { section_id: sectionId }
-  if (unitId !== undefined) {
-    updates.unit_id = unitId
+  if (finalUnitId !== undefined) {
+    updates.unit_id = finalUnitId
   }
 
   const { error } = await supabase.from('nurses').update(updates).eq('id', nurseId)

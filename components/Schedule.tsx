@@ -397,7 +397,19 @@ export default function Schedule() {
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .map(nurse => {
                         const isInCurrentContext = nurse.section_id === section.id && (!selectedUnitId || nurse.unit_id === selectedUnitId);
-                        const isInOtherUnit = nurse.section_id === section.id && selectedUnitId && nurse.unit_id !== selectedUnitId;
+                        
+                        // Find location info
+                        const nurseSection = data.sections.find(s => s.id === nurse.section_id)?.title
+                        const nurseUnit = data.units.find(u => u.id === nurse.unit_id)?.title
+
+                        let label = `${nurse.name} ${nurse.coren ? `(${nurse.coren})` : ''}`
+                        
+                        if (isInCurrentContext) {
+                            label += ' (Já nesta lista)'
+                        } else {
+                            if (nurseSection) label += ` - ${nurseSection}`
+                            if (nurseUnit) label += ` (${nurseUnit})`
+                        }
                         
                         return (
                             <option 
@@ -406,9 +418,7 @@ export default function Schedule() {
                                 className="text-black not-italic"
                                 disabled={isInCurrentContext}
                             >
-                                {nurse.name} {nurse.coren ? `(${nurse.coren})` : ''}
-                                {isInCurrentContext ? ' (Já nesta lista)' : ''}
-                                {isInOtherUnit ? ' (Em outro setor)' : ''}
+                                {label}
                             </option>
                         )
                     })
