@@ -121,6 +121,7 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
   const startDate = formData.get('startDate') as string
   const endDate = formData.get('endDate') as string
   const reason = formData.get('reason') as string
+  const nurseIdFromForm = formData.get('nurseId') as string
   
   if (!startDate || !endDate) {
     return { message: 'Datas de início e fim são obrigatórias' }
@@ -129,6 +130,12 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
   const session = cookies().get('session_user')
   if (!session) return { message: 'Usuário não autenticado' }
   const user = JSON.parse(session.value)
+  const isAdmin = user.cpf === '02170025367'
+
+  // Se for admin e tiver nurseId no form, usa o do form. Senão usa o do usuário logado.
+  const targetNurseId = (isAdmin && nurseIdFromForm) ? nurseIdFromForm : user.id
+  // Se for admin criando, já aprova automaticamente.
+  const initialStatus = (isAdmin && nurseIdFromForm) ? 'approved' : 'pending'
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!supabaseUrl || supabaseUrl.includes('sua_url')) {
@@ -137,11 +144,11 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
 
   const supabase = createClient()
   const { error } = await supabase.from('time_off_requests').insert({
-    nurse_id: user.id,
+    nurse_id: targetNurseId,
     start_date: startDate,
     end_date: endDate,
     reason,
-    status: 'pending'
+    status: initialStatus
   })
 
   if (error) {

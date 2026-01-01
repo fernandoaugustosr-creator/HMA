@@ -9,7 +9,7 @@ const initialState = {
   success: false
 }
 
-export default function RequestForm() {
+export default function RequestForm({ nurses }: { nurses?: any[] }) {
   const [state, formAction] = useFormState(requestTimeOff, initialState)
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -21,6 +21,25 @@ export default function RequestForm() {
 
   return (
     <form ref={formRef} action={formAction} className="space-y-4">
+      {nurses && nurses.length > 0 && (
+        <div>
+          <label htmlFor="nurseId" className="block text-sm font-medium text-gray-700">Enfermeiro(a)</label>
+          <select
+            name="nurseId"
+            id="nurseId"
+            required
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+          >
+            <option value="">Selecione um enfermeiro(a)</option>
+            {nurses.map((nurse) => (
+              <option key={nurse.id} value={nurse.id}>
+                {nurse.name} - {nurse.cpf}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">Data de Início</label>
