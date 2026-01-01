@@ -16,6 +16,17 @@ create table if not exists schedules (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- Tabela de Solicitações de Folga
+create table if not exists time_off_requests (
+  id uuid default gen_random_uuid() primary key,
+  nurse_id uuid references nurses(id) not null,
+  start_date date not null,
+  end_date date not null,
+  reason text,
+  status text check (status in ('pending', 'approved', 'rejected')) default 'pending',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Inserir Administrador (apenas se não existir)
 insert into nurses (name, cpf, password)
 select 'Administrador', '02170025367', '123456'

@@ -116,3 +116,115 @@ export async function logout() {
   cookies().delete('session_user')
   redirect('/login')
 }
+
+export async function requestTimeOff(prevState: any, formData: FormData) {
+  const startDate = formData.get('startDate') as string
+  const endDate = formData.get('endDate') as string
+  const reason = formData.get('reason') as string
+  
+  if (!startDate || !endDate) {
+    return { message: 'Datas de início e fim são obrigatórias' }
+  }
+
+  const session = cookies().get('session_user')
+  if (!session) return { message: 'Usuário não autenticado' }
+  const user = JSON.parse(session.value)
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!supabaseUrl || supabaseUrl.includes('sua_url')) {
+    return { success: true, message: 'Solicitação enviada (Modo Mock)' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('time_off_requests').insert({
+    nurse_id: user.id,
+    start_date: startDate,
+    end_date: endDate,
+    reason,
+    status: 'pending'
+  })
+
+  if (error) {
+    return { message: 'Erro ao solicitar folga: ' + error.message }
+  }
+
+  revalidatePath('/folgas')
+  return { success: true, message: 'Solicitação enviada com sucesso' }
+}
+
+export async function getTimeOffRequests() {
+  const session = cookies().get('session_user')
+  if (!session) return []
+  const user = JSON.parse(session.value)
+  const isAdmin = user.cpf === '02170025367'
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!supabaseUrl || supabaseUrl.includes('sua_url')) {
+    // Mock Data
+    const mockData = [
+      { 
+        id: '1', 
+        nurse_id: 'mock-1', 
+        start_date: '2026-02-10', 
+        end_date: '2026-02-15', 
+        reason: 'Viagem', 
+        status: 'pending',
+        nurses: { name: 'Maria Silva (Mock)' }
+      },
+      { 
+        id: '2', 
+        nurse_id: 'mock-2', 
+        start_date: '2026-03-01', 
+        end_date: '2026-03-05', 
+        reason: 'Descanso', 
+        status: 'approved',
+        nurses: { name: 'João Santos (Mock)' }
+      }
+    ]
+    if (isAdmin) return mockData
+    return mockData.filter(r => r.nurse_id === user.id)
+  }
+
+  const supabase = createClient()
+  
+  let query = supabase
+    .from('time_off_requests')
+    .select(`
+      *,
+      nurses (name)
+    `)
+    .order('created_at', { ascending: false })
+
+  if (!isAdmin) {
+    query = query.eq('nurse_id', user.id)
+  }
+
+  const { data, error } = await query
+  
+  if (error) {
+    console.error('Erro ao buscar folgas:', error)
+    return []
+  }
+
+  return data
+}
+
+export async function updateTimeOffStatus(requestId: string, newStatus: 'approved' | 'rejected') {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!supabaseUrl || supabaseUrl.includes('sua_url')) {
+    return { success: true } // Mock
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('time_off_requests')
+    .update({ status: newStatus })
+    .eq('id', requestId)
+
+  if (error) {
+    throw new Error('Erro ao atualizar status: ' + error.message)
+  }
+
+  revalidatePath('/folgas')
+  return { success: true }
+}
