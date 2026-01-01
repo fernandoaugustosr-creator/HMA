@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase'
 import { readDb, writeDb } from '@/lib/local-db'
+import { randomUUID } from 'crypto'
 
 // Types
 export interface Section {
@@ -68,7 +69,7 @@ export async function createNurse(prevState: any, formData: FormData) {
     }
 
     const newNurse = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       name,
       cpf: finalCpf,
       password, // Plain text for local dev
@@ -252,7 +253,7 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
   if (isLocalMode()) {
     const db = readDb()
     const newRequest = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       nurse_id: targetNurseId,
       start_date: startDate,
       end_date: endDate,
@@ -303,7 +304,7 @@ export async function assignLeave(prevState: any, formData: FormData) {
   if (isLocalMode()) {
     const db = readDb()
     const newRequest = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       nurse_id: nurseId,
       start_date: startDate,
       end_date: endDate,
@@ -466,7 +467,7 @@ export async function addSection(title: string) {
   if (isLocalMode()) {
     const db = readDb()
     db.schedule_sections.push({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       title,
       position: db.schedule_sections.length + 1,
       created_at: new Date().toISOString()

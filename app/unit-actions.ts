@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { readDb, writeDb } from '@/lib/local-db'
 import { createClient } from '@/lib/supabase'
+import { randomUUID } from 'crypto'
 
 function isLocalMode() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -14,7 +15,7 @@ export async function addUnit(title: string) {
     const db = readDb()
     db.units = db.units || []
     db.units.push({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       title
     })
     writeDb(db)

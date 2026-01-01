@@ -64,6 +64,10 @@ export default function Schedule() {
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
   const [editingSectionTitle, setEditingSectionTitle] = useState('')
   const [modalSectionId, setModalSectionId] = useState<string | null>(null)
+  
+  // Unit Management State
+  const [isAddingUnit, setIsAddingUnit] = useState(false)
+  const [newUnitTitle, setNewUnitTitle] = useState('')
 
   useEffect(() => {
     fetchData()
@@ -90,17 +94,32 @@ export default function Schedule() {
   const handleUnitChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value
     if (value === 'new_unit_action') {
-      const title = prompt('Nome do novo setor/unidade (ex: POSTO 3):')
-      if (title) {
-        setLoading(true)
-        await addUnit(title)
-        await fetchData()
-      }
-      // Reset select to previous or default if cancelled? 
-      // Actually fetchData will reload and if I don't set selectedUnitId to the new one it might be confusing.
-      // But for now let's just reload.
+      setIsAddingUnit(true)
     } else {
       setSelectedUnitId(value)
+    }
+  }
+
+  const saveNewUnit = async () => {
+    if (!newUnitTitle.trim()) return
+    setLoading(true)
+    try {
+        const res = await addUnit(newUnitTitle)
+        if (res.success) {
+            setNewUnitTitle('')
+            setIsAddingUnit(false)
+            await fetchData()
+            // Try to set the new unit as selected? 
+            // Since we don't get the ID back easily without fetching, we rely on user selecting it or auto-select logic.
+            // But we can rely on user selecting it from the list after reload.
+        } else {
+            alert('Erro ao adicionar setor')
+        }
+    } catch (error) {
+        console.error(error)
+        alert('Erro inesperado')
+    } finally {
+        setLoading(false)
     }
   }
 
@@ -631,6 +650,36 @@ export default function Schedule() {
         })}
       </div>
       
+      {/* Unit Creation Modal */}
+      {isAddingUnit && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-4 rounded shadow-lg w-full max-w-sm">
+                <h3 className="font-bold text-lg mb-4 text-black">Adicionar Novo Setor</h3>
+                <input 
+                    value={newUnitTitle}
+                    onChange={e => setNewUnitTitle(e.target.value)}
+                    className="w-full border p-2 mb-4 rounded text-black"
+                    placeholder="Nome do setor (ex: POSTO 3)"
+                    autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                    <button 
+                        onClick={() => setIsAddingUnit(false)}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={saveNewUnit}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                        Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       <style jsx global>{`
         @media print {
           .no-print {
