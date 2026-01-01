@@ -4,6 +4,9 @@ create table if not exists nurses (
   name text not null,
   cpf text unique not null,
   password text not null, -- Em produção, use hash!
+  coren text,
+  role text default 'ENFERMEIRO', -- 'ENFERMEIRO', 'TECNICO', etc.
+  vinculo text, -- 'CONCURSO', 'SELETIVO', etc.
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -12,17 +15,18 @@ create table if not exists schedules (
   id uuid default gen_random_uuid() primary key,
   nurse_id uuid references nurses(id) not null,
   shift_date date not null,
-  shift_type text check (shift_type in ('day', 'night')) not null,
+  shift_type text check (shift_type in ('day', 'night')) not null, -- Pode ser expandido para outros códigos
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Tabela de Solicitações de Folga
+-- Tabela de Solicitações de Folga / Licenças
 create table if not exists time_off_requests (
   id uuid default gen_random_uuid() primary key,
   nurse_id uuid references nurses(id) not null,
   start_date date not null,
   end_date date not null,
   reason text,
+  type text default 'folga', -- 'folga', 'ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'
   status text check (status in ('pending', 'approved', 'rejected')) default 'pending',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
