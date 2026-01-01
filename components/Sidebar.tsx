@@ -4,10 +4,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { logout } from '@/app/actions'
+import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
 
 export default function Sidebar({ user }: { user: any }) {
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   const navItems = [
     { name: 'Escala', href: '/', icon: (
@@ -102,9 +104,7 @@ export default function Sidebar({ user }: { user: any }) {
                   type="submit"
                   className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
                 >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
+                  <LogOut className="w-5 h-5 mr-2" />
                   Sair
                 </button>
               </form>
@@ -114,51 +114,60 @@ export default function Sidebar({ user }: { user: any }) {
       )}
 
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex flex-col w-64 h-screen px-4 py-8 bg-white border-r border-gray-200 sticky top-0">
-        <div className="flex items-center justify-center mb-8">
-          <h2 className="text-2xl font-bold text-indigo-600">ENF-HMA</h2>
+      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-screen bg-white border-r border-gray-200 sticky top-0 transition-all duration-300`}>
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
+            {!isCollapsed && <h2 className="text-2xl font-bold text-indigo-600 truncate">ENF-HMA</h2>}
+            <button 
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="p-1 rounded-full hover:bg-gray-100 text-gray-500"
+                title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+            >
+                {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            </button>
         </div>
 
-        <nav className="flex-1 space-y-2">
+        <nav className="flex-1 space-y-2 px-2">
           {navItems.map((item) => {
             const isActive = pathname === item.href
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-4'} py-3 text-sm font-medium rounded-lg transition-colors ${
                   isActive
                     ? 'bg-indigo-50 text-indigo-700'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
+                title={isCollapsed ? item.name : ''}
               >
-                <span className="mr-3">{item.icon}</span>
-                {item.name}
+                <span className={`${isCollapsed ? '' : 'mr-3'}`}>{item.icon}</span>
+                {!isCollapsed && <span className="truncate">{item.name}</span>}
               </Link>
             )
           })}
         </nav>
 
-        <div className="mt-auto pt-4 border-t border-gray-200">
-          <div className="flex items-center mb-4 px-2">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+        <div className="mt-auto pt-4 border-t border-gray-200 p-2">
+          <div className={`flex items-center mb-4 ${isCollapsed ? 'justify-center' : 'px-2'}`}>
+            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
               {user?.name?.charAt(0) || 'U'}
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-900">{user?.name || 'Usuário'}</p>
-              <p className="text-xs text-gray-500 truncate max-w-[140px]">{user?.cpf || ''}</p>
-            </div>
+            {!isCollapsed && (
+                <div className="ml-3 overflow-hidden">
+                <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'Usuário'}</p>
+                <p className="text-xs text-gray-500 truncate max-w-[140px]">{user?.cpf || ''}</p>
+                </div>
+            )}
           </div>
           
           <form action={logout}>
             <button
               type="submit"
-              className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'justify-start px-4'} py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors`}
+              title={isCollapsed ? "Sair" : ""}
             >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Sair
+              <LogOut className={`w-5 h-5 ${isCollapsed ? '' : 'mr-2'}`} />
+              {!isCollapsed && 'Sair'}
             </button>
           </form>
         </div>

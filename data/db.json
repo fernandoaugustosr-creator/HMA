@@ -5,7 +5,7 @@
       "name": "Maria Silva (Local)",
       "cpf": "111.111.111-11",
       "role": "ENFERMEIRO",
-      "section_id": null,
+      "section_id": "2d90dc60-5571-426a-884c-751692e35139",
       "password": "123"
     },
     {
@@ -13,7 +13,7 @@
       "name": "Administrador",
       "cpf": "02170025367",
       "role": "ENFERMEIRO",
-      "section_id": null,
+      "section_id": "2d90dc60-5571-426a-884c-751692e35139",
       "password": "123456"
     }
   ],
@@ -73,7 +73,7 @@
   "schedule_sections": [
     {
       "id": "2d90dc60-5571-426a-884c-751692e35139",
-      "title": "EWE",
+      "title": "EFDF",
       "position": 2,
       "created_at": "2026-01-01T19:34:07.422Z"
     }
