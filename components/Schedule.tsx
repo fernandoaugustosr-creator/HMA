@@ -486,7 +486,7 @@ export default function Schedule() {
           </h3>
         </div>
         <div className="bg-gray-200 border border-black p-1 text-center">
-           <h4 className="font-bold text-md uppercase text-black">ESCALA DE ENFERMEIROS E TÉCNICOS - {MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
+           <h4 className="font-bold text-md uppercase text-black">{MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
         </div>
       </div>
 
