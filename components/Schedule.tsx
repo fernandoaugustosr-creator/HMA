@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, addSection, updateSection, deleteSection, Section, Unit } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, addSection, updateSection, deleteSection, saveShifts, Section, Unit } from '@/app/actions'
 import { addUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
@@ -68,6 +68,12 @@ export default function Schedule() {
   // Unit Management State
   const [isAddingUnit, setIsAddingUnit] = useState(false)
   const [newUnitTitle, setNewUnitTitle] = useState('')
+
+  // Shift Management State
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
+  const [shiftModalData, setShiftModalData] = useState<{nurseId: string, nurseName: string, date: string} | null>(null)
+  const [shiftType, setShiftType] = useState<'day' | 'night' | 'delete'>('day')
+  const [recurrence, setRecurrence] = useState<'none' | 'daily' | '12x36' | '24x72' | 'every3'>('none')
 
   useEffect(() => {
     fetchData()
@@ -191,6 +197,65 @@ export default function Schedule() {
     setIsModalOpen(true)
   }
 
+  const handleCellClick = (nurse: Nurse, dateStr: string) => {
+    setShiftModalData({
+        nurseId: nurse.id,
+        nurseName: nurse.name,
+        date: dateStr
+    })
+    setShiftType('day')
+    setRecurrence('none')
+    setIsShiftModalOpen(true)
+  }
+
+  const handleSaveShifts = async () => {
+    if (!shiftModalData) return
+    setLoading(true)
+    
+    try {
+        const shiftsToSave: { nurseId: string, date: string, type: string }[] = []
+        const startDate = new Date(shiftModalData.date + 'T12:00:00') // Avoid timezone issues
+        const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+        const endOfMonthDate = new Date(selectedYear, selectedMonth, lastDayOfMonth) // Local time
+        
+        // Calculate dates based on recurrence
+        let currentDateIter = new Date(startDate)
+        
+        while (currentDateIter.getMonth() === selectedMonth && currentDateIter.getFullYear() === selectedYear) {
+             const dateString = `${currentDateIter.getFullYear()}-${String(currentDateIter.getMonth() + 1).padStart(2, '0')}-${String(currentDateIter.getDate()).padStart(2, '0')}`
+             
+             shiftsToSave.push({
+                 nurseId: shiftModalData.nurseId,
+                 date: dateString,
+                 type: shiftType === 'delete' ? 'DELETE' : shiftType
+             })
+
+             if (recurrence === 'none') break
+             
+             // Increment based on recurrence
+             if (recurrence === 'daily') {
+                 currentDateIter.setDate(currentDateIter.getDate() + 1)
+             } else if (recurrence === '12x36') {
+                 currentDateIter.setDate(currentDateIter.getDate() + 2)
+             } else if (recurrence === 'every3') {
+                 currentDateIter.setDate(currentDateIter.getDate() + 3)
+             } else if (recurrence === '24x72') {
+                 currentDateIter.setDate(currentDateIter.getDate() + 4)
+             }
+        }
+
+        await saveShifts(shiftsToSave)
+        setIsShiftModalOpen(false)
+        await fetchData()
+
+    } catch (error) {
+        console.error("Error saving shifts:", error)
+        alert('Erro ao salvar plantões')
+    } finally {
+        setLoading(false)
+    }
+  }
+
   const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => {
     const date = new Date(selectedYear, selectedMonth, i + 1)
@@ -285,7 +350,12 @@ export default function Schedule() {
                 }
 
                 return (
-                  <td key={day} className={cellClass}>
+                  <td 
+                    key={day} 
+                    className={`${cellClass} cursor-pointer hover:bg-yellow-100 transition-colors`}
+                    onClick={() => handleCellClick(nurse, dateStr)}
+                    title="Clique para gerenciar plantão"
+                  >
                     {content}
                   </td>
                 )
@@ -694,6 +764,77 @@ export default function Schedule() {
           }
         }
       `}</style>
+      {/* Shift Management Modal */}
+      {isShiftModalOpen && shiftModalData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
+                <h3 className="font-bold text-lg mb-4 text-black border-b pb-2">
+                    Gerenciar Plantão
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    <strong>Profissional:</strong> {shiftModalData.nurseName}<br/>
+                    <strong>Data Inicial:</strong> {shiftModalData.date.split('-').reverse().join('/')}
+                </p>
+
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-black mb-2">Tipo de Plantão</label>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setShiftType('day')}
+                            className={`flex-1 py-2 px-4 rounded border ${shiftType === 'day' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            Dia (D)
+                        </button>
+                        <button 
+                            onClick={() => setShiftType('night')}
+                            className={`flex-1 py-2 px-4 rounded border ${shiftType === 'night' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            Noite (N)
+                        </button>
+                        <button 
+                            onClick={() => setShiftType('delete')}
+                            className={`flex-1 py-2 px-4 rounded border ${shiftType === 'delete' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            Limpar
+                        </button>
+                    </div>
+                </div>
+
+                <div className="mb-6">
+                    <label className="block text-sm font-medium text-black mb-2">Frequência (Preenchimento Automático)</label>
+                    <select 
+                        value={recurrence} 
+                        onChange={(e) => setRecurrence(e.target.value as any)}
+                        className="w-full border p-2 rounded text-black bg-white"
+                    >
+                        <option value="none">Apenas este dia</option>
+                        <option value="daily">Todos os dias (Diário)</option>
+                        <option value="12x36">A cada 2 dias (12x36 - Dia sim, dia não)</option>
+                        <option value="every3">A cada 3 dias</option>
+                        <option value="24x72">A cada 4 dias (24x72)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                        O preenchimento será aplicado desta data até o final do mês.
+                    </p>
+                </div>
+
+                <div className="flex justify-end gap-2 border-t pt-4">
+                    <button 
+                        onClick={() => setIsShiftModalOpen(false)}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleSaveShifts}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold"
+                    >
+                        Salvar Alterações
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   )
 }

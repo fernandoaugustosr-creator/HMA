@@ -522,3 +522,74 @@ export async function deleteSection(id: string) {
   revalidatePath('/')
   return { success: true }
 }
+
+export async function saveShifts(shifts: { nurseId: string, date: string, type: string }[]) {
+  if (!shifts.length) return { success: true }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    
+    shifts.forEach(shift => {
+      // Check if exists
+      const existingIndex = db.shifts.findIndex(s => s.nurse_id === shift.nurseId && s.shift_date === shift.date)
+      
+      if (shift.type === 'DELETE') {
+        if (existingIndex !== -1) {
+          db.shifts.splice(existingIndex, 1)
+        }
+      } else {
+        const newShift = {
+          id: existingIndex !== -1 ? db.shifts[existingIndex].id : randomUUID(),
+          nurse_id: shift.nurseId,
+          shift_date: shift.date,
+          shift_type: shift.type,
+          updated_at: new Date().toISOString()
+        }
+        
+        if (existingIndex !== -1) {
+          db.shifts[existingIndex] = newShift
+        } else {
+          db.shifts.push(newShift)
+        }
+      }
+    })
+    
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  
+  // Process sequentially or batch? Batch is better but upsert might be tricky with DELETE mixed in.
+  // Let's separate DELETEs and UPSERTs
+  const toDelete = shifts.filter(s => s.type === 'DELETE')
+  const toUpsert = shifts.filter(s => s.type !== 'DELETE')
+  
+  // Handle Deletes
+  if (toDelete.length > 0) {
+     // Use nurse_id and shift_date to delete
+     // Supabase doesn't support array-based delete with composite key easily in one go without RPC or iteration.
+     // Iteration is safest for now.
+     await Promise.all(toDelete.map(s => 
+       supabase.from('schedules').delete().match({ nurse_id: s.nurseId, shift_date: s.date })
+     ))
+  }
+  
+  // Handle Upserts
+  if (toUpsert.length > 0) {
+      const { error } = await supabase.from('schedules').upsert(
+          toUpsert.map(s => ({
+              nurse_id: s.nurseId,
+              shift_date: s.date,
+              shift_type: s.type,
+              updated_at: new Date().toISOString()
+          })),
+          { onConflict: 'nurse_id,shift_date' }
+      )
+      if (error) return { success: false, message: error.message }
+  }
+  
+  revalidatePath('/')
+  return { success: true }
+}
