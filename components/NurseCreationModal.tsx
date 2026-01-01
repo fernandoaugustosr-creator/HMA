@@ -8,9 +8,10 @@ interface NurseCreationModalProps {
   onClose: () => void
   onSuccess: () => void
   defaultRole?: string
+  defaultSectionId?: string
 }
 
-export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO' }: NurseCreationModalProps) {
+export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId }: NurseCreationModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,6 +26,9 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     // Add role if missing or ensure it's set
     if (!formData.get('role')) {
         formData.set('role', defaultRole)
+    }
+    if (defaultSectionId) {
+        formData.set('sectionId', defaultSectionId)
     }
 
     const result = await createNurse(null, formData)
@@ -56,7 +60,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
               type="text" 
               name="name" 
               required 
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-black"
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
             />
           </div>
 
@@ -66,12 +70,12 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                 <input 
                 type="text" 
                 name="coren" 
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-black"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 />
             </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700">Vínculo</label>
-                <select name="vinculo" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-black">
+                <select name="vinculo" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black">
                     <option value="CONCURSO">CONCURSO</option>
                     <option value="SELETIVO">SELETIVO</option>
                     <option value="COOPERATIVA">COOPERATIVA</option>
@@ -84,7 +88,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
             <select 
                 name="role" 
                 defaultValue={defaultRole}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-black"
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
             >
                 <option value="ENFERMEIRO">ENFERMEIRO</option>
                 <option value="TECNICO">TÉCNICO DE ENFERMAGEM</option>
@@ -97,7 +101,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
               type="text" 
               name="cpf" 
               placeholder="Apenas números"
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-black"
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
             />
           </div>
 

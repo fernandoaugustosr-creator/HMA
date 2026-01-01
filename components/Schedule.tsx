@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse } from '@/app/actions'
-import { Trash2, Plus } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, addSection, updateSection, deleteSection, Section } from '@/app/actions'
+import { Trash2, Plus, Pencil, Save, X, Check } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
-import VacationManagerModal from './VacationManagerModal'
+import NurseSelectionModal from './NurseSelectionModal'
+import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
 
 interface Nurse {
   id: string
@@ -12,6 +13,7 @@ interface Nurse {
   coren: string
   role: string
   vinculo: string
+  section_id?: string
 }
 
 interface Shift {
@@ -33,6 +35,7 @@ interface ScheduleData {
   nurses: Nurse[]
   shifts: Shift[]
   timeOffs: TimeOff[]
+  sections: Section[]
 }
 
 const MONTHS = [
@@ -46,11 +49,17 @@ export default function Schedule() {
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth())
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
-  const [data, setData] = useState<ScheduleData>({ nurses: [], shifts: [], timeOffs: [] })
+  const [data, setData] = useState<ScheduleData>({ nurses: [], shifts: [], timeOffs: [], sections: [] })
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isVacationModalOpen, setIsVacationModalOpen] = useState(false)
-  const [modalRole, setModalRole] = useState('ENFERMEIRO')
+  const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
+  
+  // Section Management State
+  const [isAddingSection, setIsAddingSection] = useState(false)
+  const [newSectionTitle, setNewSectionTitle] = useState('')
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
+  const [editingSectionTitle, setEditingSectionTitle] = useState('')
+  const [modalSectionId, setModalSectionId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -90,6 +99,52 @@ export default function Schedule() {
     await fetchData()
   }
 
+  // Section Handlers
+  const saveNewSection = async () => {
+    if (!newSectionTitle.trim()) return
+    setLoading(true)
+    try {
+        const res = await addSection(newSectionTitle)
+        if (!res.success) {
+            alert(res.message || 'Erro ao criar bloco')
+        } else {
+            setNewSectionTitle('')
+            setIsAddingSection(false)
+            await fetchData()
+        }
+    } catch (error) {
+        console.error(error)
+        alert('Erro inesperado ao criar bloco')
+    } finally {
+        setLoading(false)
+    }
+  }
+
+  const handleDeleteSection = async (id: string) => {
+    if (!confirm('Tem certeza que deseja remover este bloco? Os profissionais associados não serão excluídos, mas ficarão sem bloco.')) return
+    setLoading(true)
+    await deleteSection(id)
+    await fetchData()
+  }
+
+  const startEditingSection = (section: Section) => {
+    setEditingSectionId(section.id)
+    setEditingSectionTitle(section.title)
+  }
+
+  const saveSectionTitle = async () => {
+    if (!editingSectionId) return
+    setLoading(true)
+    await updateSection(editingSectionId, editingSectionTitle)
+    setEditingSectionId(null)
+    await fetchData()
+  }
+
+  const openNurseModal = (sectionId: string) => {
+    setModalSectionId(sectionId)
+    setIsModalOpen(true)
+  }
+
   const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => {
     const date = new Date(selectedYear, selectedMonth, i + 1)
@@ -99,16 +154,7 @@ export default function Schedule() {
     }
   })
 
-  // Filter nurses by role
-  const nurses = data.nurses.filter(n => !n.role || n.role.toUpperCase() === 'ENFERMEIRO' || n.role.toUpperCase() === 'ENFERMEIRA')
-  const technicians = data.nurses.filter(n => n.role && (n.role.toUpperCase() === 'TECNICO' || n.role.toUpperCase() === 'TÉCNICO'))
-
-  const openModal = (role: string) => {
-    setModalRole(role)
-    setIsModalOpen(true)
-  }
-
-  const renderGrid = (professionals: Nurse[], roleType: string) => {
+  const renderGrid = (professionals: Nurse[], section: Section) => {
     return (
       <>
         {professionals.map((nurse, index) => (
@@ -158,7 +204,11 @@ export default function Schedule() {
               let content = null
 
               if (timeOff) {
-                if (timeOff.type === 'ferias') cellClass += " bg-yellow-400"
+                // REMOVED YELLOW BG for ferias as requested
+                if (timeOff.type === 'ferias') {
+                     // cellClass += " bg-yellow-400" // REMOVED
+                     cellClass += " bg-gray-50" // Optional subtle bg
+                }
                 else if (timeOff.type === 'licenca_saude') cellClass += " bg-red-400"
                 else if (timeOff.type === 'licenca_maternidade') cellClass += " bg-blue-400"
                 else if (timeOff.type === 'cessao') cellClass += " bg-cyan-400"
@@ -188,11 +238,11 @@ export default function Schedule() {
           <td className="border border-gray-400 px-1 py-1 sticky left-0 bg-white z-10"></td>
           <td className="border border-gray-400 px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-gray-300">
              <button 
-                onClick={() => openModal(roleType)}
+                onClick={() => openNurseModal(section.id)}
                 className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 italic w-full text-left"
              >
                 <Plus size={14} />
-                Adicionar novo...
+                Adicionar Profissional...
              </button>
           </td>
           <td colSpan={3 + daysInMonth + 1} className="border border-gray-400 px-2 py-1 bg-gray-50"></td>
@@ -269,7 +319,7 @@ export default function Schedule() {
             {/* Main Headers */}
             <tr className="bg-gray-100 text-black">
               <th className="border border-gray-400 px-2 py-1 text-left text-xs w-8 sticky left-0 bg-gray-100 z-20">#</th>
-              <th className="border border-gray-400 px-2 py-1 text-left text-xs min-w-[200px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">ENFERMEIROS</th>
+              <th className="border border-gray-400 px-2 py-1 text-left text-xs min-w-[200px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">PROFISSIONAL</th>
               <th className="border border-gray-400 px-2 py-1 text-center text-xs w-20"></th>
               <th className="border border-gray-400 px-2 py-1 text-center text-xs w-24">COREN</th>
               <th className="border border-gray-400 px-2 py-1 text-center text-xs w-24">VINCULO</th>
@@ -281,7 +331,7 @@ export default function Schedule() {
               ))}
               <th className="border border-gray-400 px-1 py-1 text-center text-xs w-12">TOTAL</th>
             </tr>
-            {/* Days Numbers */}
+            {/* Days Numbers Row (Only at top for reference) */}
             <tr className="bg-gray-100 text-black">
               <th className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-0 bg-gray-100 z-20"></th>
               <th className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">DIAS DO MÊS →</th>
@@ -299,73 +349,124 @@ export default function Schedule() {
               <tr><td colSpan={100} className="text-center py-4">Carregando...</td></tr>
             ) : (
               <>
-                {renderGrid(nurses, 'ENFERMEIRO')}
-                
-                {/* Section Separator */}
-                <tr className="bg-gray-100 text-black">
-                  <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium sticky left-0 bg-gray-100 z-20">#</td>
-                  <td className="border border-gray-400 px-2 py-1 text-left text-xs font-bold sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300 flex justify-between items-center group">
-                    <span>TÉCNICOS DE ENFERMAGEM</span>
-                    <button 
-                      className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" 
-                      title="Excluir subgrupo (Apenas visual)"
-                      onClick={() => alert('Para excluir o subgrupo, remova todos os técnicos associados.')}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </td>
-                  <td colSpan={4} className="border border-gray-400 px-1 py-1"></td>
-                  {daysArray.map(({ day, weekday }) => (
-                    <td key={day} className={`border border-gray-400 px-0 py-1 text-center text-[10px] ${['S', 'D'].includes(weekday) ? 'bg-gray-200' : ''}`}>
-                      {weekday}
-                    </td>
-                  ))}
-                  <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium">TOTAL</td>
-                </tr>
-                 <tr className="bg-gray-100 text-black">
-                  <td className="border border-gray-400 px-2 py-1 sticky left-0 bg-gray-100 z-20"></td>
-                  <td className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">DIAS DO MÊS →</td>
-                  <td colSpan={4} className="border border-gray-400"></td>
-                  {daysArray.map(({ day }) => (
-                    <td key={day} className="border border-gray-400 px-0 py-1 text-center text-[10px]">
-                      {day}
-                    </td>
-                  ))}
-                  <td className="border border-gray-400"></td>
-                </tr>
+                {data.sections.map(section => (
+                    <React.Fragment key={section.id}>
+                        {/* Section Header */}
+                        <tr className="bg-gray-100 text-black">
+                            <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium sticky left-0 bg-gray-100 z-20">#</td>
+                            <td className="border border-gray-400 px-2 py-1 text-left text-xs font-bold sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300 flex justify-between items-center group min-w-[200px]">
+                                {editingSectionId === section.id ? (
+                                    <div className="flex items-center gap-1 w-full">
+                                        <input 
+                                            value={editingSectionTitle}
+                                            onChange={e => setEditingSectionTitle(e.target.value)}
+                                            className="text-xs border rounded px-1 py-0.5 w-full bg-white text-black"
+                                            autoFocus
+                                        />
+                                        <button onClick={saveSectionTitle} className="text-green-600 p-1 hover:bg-gray-200 rounded"><Save size={14} /></button>
+                                        <button onClick={() => setEditingSectionId(null)} className="text-red-600 p-1 hover:bg-gray-200 rounded"><X size={14} /></button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <span className="flex-1 text-center">{section.title}</span>
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={() => startEditingSection(section)} 
+                                                className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-gray-200"
+                                                title="Editar nome do bloco"
+                                            >
+                                                <Pencil size={12} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteSection(section.id)} 
+                                                className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-gray-200"
+                                                title="Excluir bloco"
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </td>
+                            <td colSpan={4} className="border border-gray-400 px-1 py-1"></td>
+                            {daysArray.map(({ day, weekday }) => (
+                                <td key={day} className={`border border-gray-400 px-0 py-1 text-center text-[10px] ${['S', 'D'].includes(weekday) ? 'bg-gray-200' : ''}`}>
+                                {weekday}
+                                </td>
+                            ))}
+                            <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium">TOTAL</td>
+                        </tr>
+                        {/* Repeat Days Numbers for clarity in each section */}
+                         <tr className="bg-gray-100 text-black">
+                            <td className="border border-gray-400 px-2 py-1 sticky left-0 bg-gray-100 z-20"></td>
+                            <td className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">DIAS DO MÊS →</td>
+                            <td colSpan={4} className="border border-gray-400"></td>
+                            {daysArray.map(({ day }) => (
+                                <td key={day} className="border border-gray-400 px-0 py-1 text-center text-[10px]">
+                                {day}
+                                </td>
+                            ))}
+                            <td className="border border-gray-400"></td>
+                        </tr>
 
-                {renderGrid(technicians, 'TECNICO')}
+                        {renderGrid(data.nurses.filter(n => n.section_id === section.id), section)}
+                    </React.Fragment>
+                ))}
               </>
             )}
           </tbody>
         </table>
       </div>
       
-      <NurseCreationModal 
+      <NurseSelectionModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={() => {
             fetchData()
             setIsModalOpen(false)
         }}
-        defaultRole={modalRole}
+        nurses={data.nurses}
+        sectionId={modalSectionId || ''}
+        sectionTitle={data.sections.find(s => s.id === modalSectionId)?.title}
       />
 
-      <VacationManagerModal
-        isOpen={isVacationModalOpen}
-        onClose={() => setIsVacationModalOpen(false)}
+      <LeaveManagerModal
+        isOpen={!!leaveModalType}
+        onClose={() => setLeaveModalType(null)}
         onSuccess={() => {
             fetchData()
-            setIsVacationModalOpen(false)
+            setLeaveModalType(null)
         }}
         nurses={data.nurses}
+        existingLeaves={data.timeOffs}
+        type={leaveModalType || 'ferias'}
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
       />
 
       {/* Footer / Actions */}
       <div className="mt-4 flex justify-end gap-2 no-print">
-        <button className="px-3 py-1 border border-blue-500 text-blue-500 text-xs rounded hover:bg-blue-50">
-          + Nova Categoria
-        </button>
+         {isAddingSection ? (
+            <div className="flex items-center gap-2">
+                <input 
+                    value={newSectionTitle}
+                    onChange={e => setNewSectionTitle(e.target.value)}
+                    className="border rounded px-2 py-1 text-sm bg-white text-black"
+                    placeholder="Nome do novo bloco..."
+                    autoFocus
+                />
+                <button onClick={saveNewSection} className="text-green-600 hover:text-green-800"><Check /></button>
+                <button onClick={() => setIsAddingSection(false)} className="text-red-600 hover:text-red-800"><X /></button>
+            </div>
+         ) : (
+            <button 
+                onClick={() => setIsAddingSection(true)}
+                className="px-3 py-1 border border-blue-500 text-blue-500 text-xs rounded hover:bg-blue-50 flex items-center gap-1"
+            >
+              <Plus size={14} />
+              Novo Bloco de Profissionais
+            </button>
+         )}
       </div>
 
       {/* Footer Legends */}
@@ -373,14 +474,29 @@ export default function Schedule() {
         <div className="flex flex-wrap gap-2 justify-end mb-2 no-print">
             <button className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50">Editar texto do rodapé</button>
             <button 
-              onClick={() => setIsVacationModalOpen(true)}
+              onClick={() => setLeaveModalType('ferias')}
               className="px-2 py-1 text-xs border rounded text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100"
             >
               Gerenciar Férias
             </button>
-            <button className="px-2 py-1 text-xs border rounded text-red-600 border-red-200 bg-red-50">Licença Saúde</button>
-            <button className="px-2 py-1 text-xs border rounded text-blue-600 border-blue-200 bg-blue-50">Licença Maternidade</button>
-            <button className="px-2 py-1 text-xs border rounded text-cyan-600 border-cyan-200 bg-cyan-50">Cessão</button>
+            <button 
+              onClick={() => setLeaveModalType('licenca_saude')}
+              className="px-2 py-1 text-xs border rounded text-red-600 border-red-200 bg-red-50 hover:bg-red-100"
+            >
+              Licença Saúde
+            </button>
+            <button 
+              onClick={() => setLeaveModalType('licenca_maternidade')}
+              className="px-2 py-1 text-xs border rounded text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100"
+            >
+              Licença Maternidade
+            </button>
+            <button 
+              onClick={() => setLeaveModalType('cessao')}
+              className="px-2 py-1 text-xs border rounded text-cyan-600 border-cyan-200 bg-cyan-50 hover:bg-cyan-100"
+            >
+              Cessão
+            </button>
         </div>
 
         {/* Dynamic Legend List - Shows who is on leave */}

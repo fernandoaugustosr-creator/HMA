@@ -1,0 +1,81 @@
+{
+  "nurses": [
+    {
+      "id": "mock-1",
+      "name": "Maria Silva (Local)",
+      "cpf": "111.111.111-11",
+      "role": "ENFERMEIRO",
+      "section_id": null,
+      "password": "123"
+    },
+    {
+      "id": "mock-3",
+      "name": "Administrador",
+      "cpf": "02170025367",
+      "role": "ENFERMEIRO",
+      "section_id": null,
+      "password": "123456"
+    }
+  ],
+  "shifts": [],
+  "time_off_requests": [
+    {
+      "id": "d3c2f445-1d95-4d8e-be4b-29ed7c9687d4",
+      "nurse_id": "mock-3",
+      "start_date": "2026-01-01",
+      "end_date": "2026-01-01",
+      "reason": "ds",
+      "status": "approved",
+      "type": "folga",
+      "created_at": "2026-01-01T14:25:12.952Z"
+    },
+    {
+      "id": "e19ebe6e-c698-4e8b-b766-0d0fe735073d",
+      "nurse_id": "mock-1",
+      "start_date": "2026-01-01",
+      "end_date": "2026-01-31",
+      "reason": "Férias programadas",
+      "type": "ferias",
+      "status": "approved",
+      "created_at": "2026-01-01T14:33:07.499Z"
+    },
+    {
+      "id": "b5c3ab9f-6fe6-4dbe-927f-9cecfe3d8627",
+      "nurse_id": "mock-1",
+      "start_date": "2026-01-26",
+      "end_date": "2025-12-30",
+      "reason": "Férias programadas",
+      "type": "ferias",
+      "status": "approved",
+      "created_at": "2026-01-01T14:44:03.169Z"
+    },
+    {
+      "id": "7b09f575-a615-4ffa-8528-5ffdf4f0610f",
+      "nurse_id": "mock-3",
+      "start_date": "2026-01-01",
+      "end_date": "2026-01-01",
+      "reason": "Licença Maternidade",
+      "type": "licenca_maternidade",
+      "status": "approved",
+      "created_at": "2026-01-01T14:44:15.921Z"
+    },
+    {
+      "id": "46b85bd9-e5fa-44b0-aea0-836dab3e721f",
+      "nurse_id": "mock-1",
+      "start_date": "2026-01-01",
+      "end_date": "2026-01-01",
+      "reason": "Licença Maternidade",
+      "type": "licenca_maternidade",
+      "status": "approved",
+      "created_at": "2026-01-01T14:49:02.897Z"
+    }
+  ],
+  "schedule_sections": [
+    {
+      "id": "a45d8a82-bb1d-486a-9b21-ad2a11862d86",
+      "title": "ENFERMEIROS",
+      "position": 1,
+      "created_at": "2026-01-01T14:54:02.396Z"
+    }
+  ]
+}
