@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, addSection, updateSection, deleteSection, Section } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, addSection, updateSection, deleteSection, Section, Unit } from '@/app/actions'
+import { addUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
 import NurseSelectionModal from './NurseSelectionModal'
@@ -14,6 +15,7 @@ interface Nurse {
   role: string
   vinculo: string
   section_id?: string
+  unit_id?: string
 }
 
 interface Shift {
@@ -36,6 +38,7 @@ interface ScheduleData {
   shifts: Shift[]
   timeOffs: TimeOff[]
   sections: Section[]
+  units: Unit[]
 }
 
 const MONTHS = [
@@ -49,8 +52,9 @@ export default function Schedule() {
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth())
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
-  const [data, setData] = useState<ScheduleData>({ nurses: [], shifts: [], timeOffs: [], sections: [] })
+  const [data, setData] = useState<ScheduleData>({ nurses: [], shifts: [], timeOffs: [], sections: [], units: [] })
   const [loading, setLoading] = useState(true)
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
   
@@ -71,12 +75,35 @@ export default function Schedule() {
       // Month is 0-indexed for Date, but action expects 1-indexed (1-12)
       const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear)
       setData(result as ScheduleData)
+      
+      // Set default unit if none selected and units exist
+      if (!selectedUnitId && result.units && result.units.length > 0) {
+        setSelectedUnitId(result.units[0].id)
+      }
     } catch (error) {
       console.error('Error fetching schedule:', error)
     } finally {
       setLoading(false)
     }
   }
+
+  const handleUnitChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value
+    if (value === 'new_unit_action') {
+      const title = prompt('Nome do novo setor/unidade (ex: POSTO 3):')
+      if (title) {
+        setLoading(true)
+        await addUnit(title)
+        await fetchData()
+      }
+      // Reset select to previous or default if cancelled? 
+      // Actually fetchData will reload and if I don't set selectedUnitId to the new one it might be confusing.
+      // But for now let's just reload.
+    } else {
+      setSelectedUnitId(value)
+    }
+  }
+
 
   const handlePrint = () => {
     window.print()
@@ -272,9 +299,17 @@ export default function Schedule() {
       <div className="flex flex-col md:flex-row gap-4 mb-6 items-start md:items-end no-print">
         <div className="w-full md:w-auto">
           <label className="block text-sm font-medium text-black mb-1">Setor</label>
-          <select className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black">
-            <option>POSTO 1</option>
-            <option>POSTO 2</option>
+          <select 
+            value={selectedUnitId} 
+            onChange={handleUnitChange}
+            className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
+          >
+            <option value="">Selecione um setor...</option>
+            {data.units.map(unit => (
+              <option key={unit.id} value={unit.id}>{unit.title}</option>
+            ))}
+            <option disabled>──────────</option>
+            <option value="new_unit_action">+ Adicionar novo setor...</option>
           </select>
         </div>
         <div className="w-full md:w-auto">
@@ -301,13 +336,15 @@ export default function Schedule() {
             ))}
           </select>
         </div>
-        <button 
-          onClick={handlePrint}
-          className="w-full md:w-auto md:ml-auto bg-blue-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-600 transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-          Imprimir
-        </button>
+        {!loading && (
+          <button 
+            onClick={handlePrint}
+            className="w-full md:w-auto md:ml-auto bg-blue-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-600 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            Imprimir
+          </button>
+        )}
       </div>
 
       {/* Report Header */}
@@ -444,7 +481,7 @@ export default function Schedule() {
                             <td className="border border-black px-1 py-1 text-center text-xs font-medium bg-blue-100">PLANTÃO</td>
                         </tr>
 
-                        {renderGrid(data.nurses.filter(n => n.section_id === section.id), section)}
+                        {renderGrid(data.nurses.filter(n => n.section_id === section.id && (!selectedUnitId || n.unit_id === selectedUnitId)), section)}
                     </React.Fragment>
                 ))}
               </>
@@ -489,6 +526,7 @@ export default function Schedule() {
         nurses={data.nurses}
         sectionId={modalSectionId || ''}
         sectionTitle={data.sections.find(s => s.id === modalSectionId)?.title}
+        unitId={selectedUnitId}
       />
 
       <LeaveManagerModal

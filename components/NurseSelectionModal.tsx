@@ -20,9 +20,10 @@ interface NurseSelectionModalProps {
   nurses: Nurse[]
   sectionId: string
   sectionTitle?: string
+  unitId?: string
 }
 
-export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses, sectionId, sectionTitle }: NurseSelectionModalProps) {
+export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses, sectionId, sectionTitle, unitId }: NurseSelectionModalProps) {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [isCreationModalOpen, setIsCreationModalOpen] = useState(false)
@@ -132,6 +133,7 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
                 onClose()
             }}
             defaultSectionId={sectionId}
+            defaultUnitId={unitId}
         />
     </>
   )

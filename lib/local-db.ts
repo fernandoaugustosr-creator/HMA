@@ -8,19 +8,24 @@ interface DB {
   shifts: any[]
   time_off_requests: any[]
   schedule_sections: any[]
+  units: any[]
 }
 
 const INITIAL_DB: DB = {
   nurses: [
-    { id: 'mock-1', name: 'Maria Silva (Local)', cpf: '111.111.111-11', role: 'ENFERMEIRO', section_id: 'sec-1', password: '123' },
-    { id: 'mock-2', name: 'João Santos (Local)', cpf: '222.222.222-22', role: 'TECNICO', section_id: 'sec-2', password: '123' },
-    { id: 'mock-3', name: 'Administrador', cpf: '02170025367', role: 'ENFERMEIRO', section_id: 'sec-1', password: '123456' }
+    { id: 'mock-1', name: 'Maria Silva (Local)', cpf: '111.111.111-11', role: 'ENFERMEIRO', section_id: 'sec-1', unit_id: 'unit-1', password: '123' },
+    { id: 'mock-2', name: 'João Santos (Local)', cpf: '222.222.222-22', role: 'TECNICO', section_id: 'sec-2', unit_id: 'unit-1', password: '123' },
+    { id: 'mock-3', name: 'Administrador', cpf: '02170025367', role: 'ENFERMEIRO', section_id: 'sec-1', unit_id: 'unit-1', password: '123456' }
   ],
   shifts: [],
   time_off_requests: [],
   schedule_sections: [
     { id: 'sec-1', title: 'ENFERMEIROS', position: 1 },
     { id: 'sec-2', title: 'TÉCNICOS DE ENFERMAGEM', position: 2 }
+  ],
+  units: [
+    { id: 'unit-1', title: 'POSTO 1' },
+    { id: 'unit-2', title: 'POSTO 2' }
   ]
 }
 

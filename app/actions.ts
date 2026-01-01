@@ -13,6 +13,11 @@ export interface Section {
   position: number
 }
 
+export interface Unit {
+  id: string
+  title: string
+}
+
 // Helper para verificar se usa DB Local
 function isLocalMode() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -38,6 +43,7 @@ export async function createNurse(prevState: any, formData: FormData) {
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string || 'ENFERMEIRO'
   const sectionId = formData.get('sectionId') as string
+  const unitId = formData.get('unitId') as string
 
   // Validate Name (Essential)
   if (!name) {
@@ -70,6 +76,7 @@ export async function createNurse(prevState: any, formData: FormData) {
       vinculo,
       role,
       section_id: finalSectionId,
+      unit_id: unitId,
       created_at: new Date().toISOString()
     }
 
@@ -99,7 +106,8 @@ export async function createNurse(prevState: any, formData: FormData) {
     coren,
     vinculo,
     role,
-    section_id: finalSectionId
+    section_id: finalSectionId,
+    unit_id: unitId
   })
 
   if (error) {
@@ -187,13 +195,15 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       nurses: db.nurses || [],
       shifts: shifts || [],
       timeOffs: timeOffs || [],
-      sections: db.schedule_sections || []
+      sections: db.schedule_sections || [],
+      units: db.units || []
     }
   }
 
   const supabase = createClient()
   
   const { data: sections } = await supabase.from('schedule_sections').select('*').order('position')
+  const { data: units } = await supabase.from('units').select('*') // Assuming 'units' table exists in supabase for symmetry, though we are focusing on local
   const { data: nurses } = await supabase.from('nurses').select('*').order('name')
   
   const { data: shifts } = await supabase
@@ -212,7 +222,8 @@ export async function getMonthlyScheduleData(month: number, year: number) {
     nurses: nurses || [],
     shifts: shifts || [],
     timeOffs: timeOffs || [],
-    sections: sections || []
+    sections: sections || [],
+    units: units || []
   }
 }
 

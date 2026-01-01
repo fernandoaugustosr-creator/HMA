@@ -9,9 +9,10 @@ interface NurseCreationModalProps {
   onSuccess: () => void
   defaultRole?: string
   defaultSectionId?: string
+  defaultUnitId?: string
 }
 
-export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId }: NurseCreationModalProps) {
+export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId, defaultUnitId }: NurseCreationModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,6 +30,9 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     }
     if (defaultSectionId) {
         formData.set('sectionId', defaultSectionId)
+    }
+    if (defaultUnitId) {
+        formData.set('unitId', defaultUnitId)
     }
 
     const result = await createNurse(null, formData)
