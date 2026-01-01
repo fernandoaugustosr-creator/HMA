@@ -15,7 +15,7 @@ create table if not exists schedules (
   id uuid default gen_random_uuid() primary key,
   nurse_id uuid references nurses(id) not null,
   shift_date date not null,
-  shift_type text check (shift_type in ('day', 'night')) not null, -- Pode ser expandido para outros códigos
+  shift_type text check (shift_type in ('day', 'night', 'morning', 'afternoon')) not null, -- Pode ser expandido para outros códigos
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

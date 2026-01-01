@@ -22,7 +22,7 @@ interface Shift {
   id: string
   nurse_id: string
   shift_date: string
-  shift_type: 'day' | 'night'
+  shift_type: 'day' | 'night' | 'morning' | 'afternoon'
 }
 
 interface TimeOff {
@@ -72,7 +72,7 @@ export default function Schedule() {
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [shiftModalData, setShiftModalData] = useState<{nurseId: string, nurseName: string, date: string} | null>(null)
-  const [shiftType, setShiftType] = useState<'day' | 'night' | 'delete'>('day')
+  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'delete'>('day')
   const [recurrence, setRecurrence] = useState<'none' | 'daily' | '12x36' | '24x72' | 'every3'>('none')
 
   useEffect(() => {
@@ -334,7 +334,10 @@ export default function Schedule() {
                   else if (timeOff.type === 'cessao') cellClass += " bg-cyan-400"
                   else cellClass += " bg-gray-200" 
                 } else if (shift) {
-                   content = shift.shift_type === 'day' ? 'D' : 'N'
+                   if (shift.shift_type === 'day') content = 'D'
+                   else if (shift.shift_type === 'night') content = 'N'
+                   else if (shift.shift_type === 'morning') content = 'M'
+                   else if (shift.shift_type === 'afternoon') content = 'T'
                 }
                 
                 // Highlight weekends (Gray background for entire column, overridden by specific statuses if needed, but image shows gray prevails or mixes)
@@ -778,45 +781,59 @@ export default function Schedule() {
 
                 <div className="mb-4">
                     <label className="block text-sm font-medium text-black mb-2">Tipo de Plantão</label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                         <button 
                             onClick={() => setShiftType('day')}
-                            className={`flex-1 py-2 px-4 rounded border ${shiftType === 'day' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'day' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
                         >
                             Dia (D)
                         </button>
                         <button 
                             onClick={() => setShiftType('night')}
-                            className={`flex-1 py-2 px-4 rounded border ${shiftType === 'night' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'night' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
                         >
                             Noite (N)
                         </button>
                         <button 
+                            onClick={() => setShiftType('morning')}
+                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'morning' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            Manhã (M)
+                        </button>
+                        <button 
+                            onClick={() => setShiftType('afternoon')}
+                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'afternoon' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            Tarde (T)
+                        </button>
+                        <button 
                             onClick={() => setShiftType('delete')}
-                            className={`flex-1 py-2 px-4 rounded border ${shiftType === 'delete' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'delete' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
                         >
                             Limpar
                         </button>
                     </div>
                 </div>
 
-                <div className="mb-6">
-                    <label className="block text-sm font-medium text-black mb-2">Frequência (Preenchimento Automático)</label>
-                    <select 
-                        value={recurrence} 
-                        onChange={(e) => setRecurrence(e.target.value as any)}
-                        className="w-full border p-2 rounded text-black bg-white"
-                    >
-                        <option value="none">Apenas este dia</option>
-                        <option value="daily">Todos os dias (Diário)</option>
-                        <option value="12x36">A cada 2 dias (12x36 - Dia sim, dia não)</option>
-                        <option value="every3">A cada 3 dias</option>
-                        <option value="24x72">A cada 4 dias (24x72)</option>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                        O preenchimento será aplicado desta data até o final do mês.
-                    </p>
-                </div>
+                {shiftModalData.date.endsWith('-01') && (
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-black mb-2">Frequência (Preenchimento Automático)</label>
+                        <select 
+                            value={recurrence} 
+                            onChange={(e) => setRecurrence(e.target.value as any)}
+                            className="w-full border p-2 rounded text-black bg-white"
+                        >
+                            <option value="none">Apenas este dia</option>
+                            <option value="daily">Todos os dias (Diário)</option>
+                            <option value="12x36">A cada 2 dias (12x36 - Dia sim, dia não)</option>
+                            <option value="every3">A cada 3 dias</option>
+                            <option value="24x72">A cada 4 dias (24x72)</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                            O preenchimento será aplicado desta data até o final do mês.
+                        </p>
+                    </div>
+                )}
 
                 <div className="flex justify-end gap-2 border-t pt-4">
                     <button 
