@@ -27,7 +27,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
         formData.set('role', defaultRole)
     }
 
-    const result = await createNurse(formData)
+    const result = await createNurse(null, formData)
 
     if (result.success) {
       onSuccess()

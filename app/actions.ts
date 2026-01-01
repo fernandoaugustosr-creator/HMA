@@ -24,10 +24,17 @@ export async function createNurse(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   const cpf = formData.get('cpf') as string
   const password = formData.get('password') as string || '123456'
+  const coren = formData.get('coren') as string
+  const vinculo = formData.get('vinculo') as string
+  const role = formData.get('role') as string || 'ENFERMEIRO'
 
-  if (!name || !cpf) {
-    return { message: 'Nome e CPF são obrigatórios' }
+  // Validate Name (Essential)
+  if (!name) {
+    return { success: false, message: 'Nome é obrigatório' }
   }
+
+  // Handle CPF: Use provided or generate temporary
+  const finalCpf = cpf || `TEMP-${Date.now()}`
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!supabaseUrl || supabaseUrl.includes('sua_url')) {
@@ -35,13 +42,21 @@ export async function createNurse(prevState: any, formData: FormData) {
   }
 
   const supabase = createClient()
-  const { error } = await supabase.from('nurses').insert({ name, cpf, password })
+  const { error } = await supabase.from('nurses').insert({ 
+    name, 
+    cpf: finalCpf, 
+    password,
+    coren,
+    vinculo,
+    role
+  })
 
   if (error) {
-    if (error.code === '23505') return { message: 'CPF já cadastrado' }
-    return { message: 'Erro ao cadastrar servidor: ' + error.message }
+    if (error.code === '23505') return { success: false, message: 'CPF já cadastrado' }
+    return { success: false, message: 'Erro ao cadastrar servidor: ' + error.message }
   }
 
+  revalidatePath('/')
   revalidatePath('/servidores')
   return { success: true, message: 'Servidor cadastrado com sucesso' }
 }
@@ -277,37 +292,7 @@ export async function reassignNurse(oldId: string, newId: string) {
   return { success: true }
 }
 
-export async function createNurse(formData: FormData) {
-  const name = formData.get('name') as string
-  const coren = formData.get('coren') as string
-  const vinculo = formData.get('vinculo') as string
-  const role = formData.get('role') as string
-  const cpf = formData.get('cpf') as string || `TEMP-${Date.now()}` // Fallback if no CPF provided
-  const password = '123' // Default password for quick creation
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!supabaseUrl || supabaseUrl.includes('sua_url')) {
-    return { success: true, message: 'Servidor criado (Mock)' }
-  }
-
-  const supabase = createClient()
-  
-  const { error } = await supabase.from('nurses').insert({
-    name,
-    coren,
-    vinculo,
-    role,
-    cpf,
-    password
-  })
-
-  if (error) {
-    return { success: false, message: 'Erro ao criar servidor: ' + error.message }
-  }
-
-  revalidatePath('/')
-  return { success: true, message: 'Servidor criado com sucesso' }
-}
 
 export async function getTimeOffRequests() {
   const session = cookies().get('session_user')
