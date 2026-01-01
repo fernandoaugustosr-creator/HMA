@@ -621,8 +621,7 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
       .map(s => ({
         nurse_id: s.nurseId,
         shift_date: s.date,
-        shift_type: s.type,
-        updated_at: new Date().toISOString()
+        shift_type: s.type
       }))
 
     if (toInsert.length > 0) {
