@@ -176,55 +176,72 @@ export async function login(prevState: any, formData: FormData) {
 }
 
 export async function getMonthlyScheduleData(month: number, year: number) {
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-  const lastDay = new Date(year, month, 0).getDate()
-  const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
+  try {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month, 0).getDate()
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
 
-  if (isLocalMode()) {
-    const db = readDb()
+    if (isLocalMode()) {
+      const db = readDb()
+      
+      // Filter shifts
+      const shifts = db.shifts.filter(s => s.shift_date >= startDate && s.shift_date <= endDate)
+      
+      // Filter timeOffs
+      const timeOffs = db.time_off_requests.filter(t => 
+        t.status === 'approved' && 
+        ((t.start_date <= endDate && t.end_date >= startDate))
+      )
+
+      return {
+        nurses: db.nurses || [],
+        shifts: shifts || [],
+        timeOffs: timeOffs || [],
+        sections: db.schedule_sections || [],
+        units: db.units || []
+      }
+    }
+
+    const supabase = createClient()
     
-    // Filter shifts
-    const shifts = db.shifts.filter(s => s.shift_date >= startDate && s.shift_date <= endDate)
+    const { data: sections, error: sectionsError } = await supabase.from('schedule_sections').select('*').order('position')
+    if (sectionsError) console.error('Error fetching sections:', sectionsError)
+
+    const { data: units } = await supabase.from('units').select('*')
+    const { data: nurses, error: nursesError } = await supabase.from('nurses').select('*').order('name')
+    if (nursesError) console.error('Error fetching nurses:', nursesError)
     
-    // Filter timeOffs
-    const timeOffs = db.time_off_requests.filter(t => 
-      t.status === 'approved' && 
-      ((t.start_date <= endDate && t.end_date >= startDate))
-    )
+    const { data: shifts, error: shiftsError } = await supabase
+      .from('schedules')
+      .select('*')
+      .gte('shift_date', startDate)
+      .lte('shift_date', endDate)
+    if (shiftsError) console.error('Error fetching shifts:', shiftsError)
+
+    const { data: timeOffs, error: timeOffsError } = await supabase
+      .from('time_off_requests')
+      .select('*')
+      .eq('status', 'approved')
+      .or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`)
+    if (timeOffsError) console.error('Error fetching timeOffs:', timeOffsError)
 
     return {
-      nurses: db.nurses || [],
+      nurses: nurses || [],
       shifts: shifts || [],
       timeOffs: timeOffs || [],
-      sections: db.schedule_sections || [],
-      units: db.units || []
+      sections: sections || [],
+      units: units || []
     }
-  }
-
-  const supabase = createClient()
-  
-  const { data: sections } = await supabase.from('schedule_sections').select('*').order('position')
-  const { data: units } = await supabase.from('units').select('*') // Assuming 'units' table exists in supabase for symmetry, though we are focusing on local
-  const { data: nurses } = await supabase.from('nurses').select('*').order('name')
-  
-  const { data: shifts } = await supabase
-    .from('schedules')
-    .select('*')
-    .gte('shift_date', startDate)
-    .lte('shift_date', endDate)
-
-  const { data: timeOffs } = await supabase
-    .from('time_off_requests')
-    .select('*')
-    .eq('status', 'approved')
-    .or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`)
-
-  return {
-    nurses: nurses || [],
-    shifts: shifts || [],
-    timeOffs: timeOffs || [],
-    sections: sections || [],
-    units: units || []
+  } catch (error) {
+    console.error('Critical error in getMonthlyScheduleData:', error)
+    // Return empty structure to prevent page crash
+    return {
+      nurses: [],
+      shifts: [],
+      timeOffs: [],
+      sections: [],
+      units: []
+    }
   }
 }
 
@@ -533,7 +550,10 @@ export async function deleteSection(id: string) {
 
 export async function saveShifts(shifts: { nurseId: string, date: string, type: string }[]) {
   console.log('saveShifts called with:', JSON.stringify(shifts, null, 2))
-  if (!shifts.length) return { success: true }
+  
+  if (!shifts || !Array.isArray(shifts) || !shifts.length) {
+    return { success: true }
+  }
 
   if (isLocalMode()) {
     const db = readDb()
