@@ -158,84 +158,100 @@ export default function Schedule() {
   const renderGrid = (professionals: Nurse[], section: Section) => {
     return (
       <>
-        {professionals.map((nurse, index) => (
-          <tr key={nurse.id} className="hover:bg-gray-50">
-            <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8">{index + 1}</td>
-            <td className="border border-gray-400 px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 min-w-[200px] border-r-2 border-r-gray-300">
-              <div className="flex items-center gap-1">
-                <button 
-                  onClick={() => handleDelete(nurse.id)} 
-                  className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors"
-                  title="Apagar linha"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <select 
-                  value={nurse.id} 
-                  onChange={(e) => handleReassign(nurse.id, e.target.value)}
-                  className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-medium text-black cursor-pointer outline-none"
-                >
-                  {data.nurses.map(n => (
-                    <option key={n.id} value={n.id}>{n.name}</option>
-                  ))}
-                </select>
-              </div>
-            </td>
-            <td className="border border-gray-400 px-1 py-1 text-center text-[10px]">{nurse.coren || '-'}</td>
-            <td className="border border-gray-400 px-1 py-1 text-center text-[10px]">{nurse.vinculo || '-'}</td>
-            <td className="border border-gray-400 px-1 py-1 text-center text-[10px]"></td>
-            
-            {daysArray.map(({ day, weekday, isWeekend }) => {
-              const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        {professionals.map((nurse, index) => {
+          // Calculate Total Shifts
+          const totalShifts = data.shifts.filter(s => 
+            s.nurse_id === nurse.id && 
+            s.shift_date.startsWith(`${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`)
+          ).length
+
+          return (
+            <tr key={nurse.id} className="hover:bg-gray-50">
+              <td className="border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8">{index + 1}</td>
+              <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 min-w-[250px] border-r-2 border-r-black">
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => handleDelete(nurse.id)} 
+                    className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors no-print"
+                    title="Apagar linha"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                  <select 
+                    value={nurse.id} 
+                    onChange={(e) => handleReassign(nurse.id, e.target.value)}
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-black cursor-pointer outline-none uppercase"
+                  >
+                    {data.nurses.map(n => (
+                      <option key={n.id} value={n.id}>{n.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </td>
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.vinculo || '-'}</td>
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase"></td>
               
-              // Find time off
-              const timeOff = data.timeOffs.find(t => 
-                t.nurse_id === nurse.id && 
-                t.start_date <= dateStr && 
-                t.end_date >= dateStr
-              )
+              {daysArray.map(({ day, weekday, isWeekend }) => {
+                const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                
+                // Find time off
+                const timeOff = data.timeOffs.find(t => 
+                  t.nurse_id === nurse.id && 
+                  t.start_date <= dateStr && 
+                  t.end_date >= dateStr
+                )
 
-              // Find shift
-              const shift = data.shifts.find(s => 
-                s.nurse_id === nurse.id && 
-                s.shift_date === dateStr
-              )
+                // Find shift
+                const shift = data.shifts.find(s => 
+                  s.nurse_id === nurse.id && 
+                  s.shift_date === dateStr
+                )
 
-              let cellClass = "border border-gray-400 px-0 py-0 h-6 w-6 text-center text-[10px] relative text-black"
-              let content = null
+                let cellClass = "border border-black px-0 py-0 h-5 w-6 text-center text-[10px] relative text-black font-bold"
+                let content = null
 
-              if (timeOff) {
-                // REMOVED YELLOW BG for ferias as requested
-                if (timeOff.type === 'ferias') {
-                     // cellClass += " bg-yellow-400" // REMOVED
-                     cellClass += " bg-gray-50" // Optional subtle bg
+                if (timeOff) {
+                  if (timeOff.type === 'ferias') {
+                       cellClass += " bg-gray-50"
+                  }
+                  else if (timeOff.type === 'licenca_saude') {
+                      cellClass += " bg-green-500 text-white" 
+                      content = "LS"
+                  }
+                  else if (timeOff.type === 'licenca_maternidade') cellClass += " bg-blue-400"
+                  else if (timeOff.type === 'cessao') cellClass += " bg-cyan-400"
+                  else cellClass += " bg-gray-200" 
+                } else if (shift) {
+                   content = shift.shift_type === 'day' ? 'D' : 'N'
                 }
-                else if (timeOff.type === 'licenca_saude') cellClass += " bg-red-400"
-                else if (timeOff.type === 'licenca_maternidade') cellClass += " bg-blue-400"
-                else if (timeOff.type === 'cessao') cellClass += " bg-cyan-400"
-                else cellClass += " bg-gray-200" // Default folga
-              } else if (shift) {
-                 content = shift.shift_type === 'day' ? 'D' : 'N'
-              }
-              
-              // Highlight weekends
-              if (isWeekend && !timeOff) {
-                cellClass += " bg-gray-300"
-              }
+                
+                // Highlight weekends (Gray background for entire column, overridden by specific statuses if needed, but image shows gray prevails or mixes)
+                // In image, weekend cells are gray. If there is a shift, it's just text on gray.
+                if (isWeekend) {
+                   if (!timeOff) {
+                       cellClass += " bg-gray-400"
+                   } else if (timeOff.type === 'ferias') {
+                       // Keep gray for weekends even in vacation? Usually vacation overrides.
+                       // But user said "OS FINAIS DE SEMANS FICARA COM A COR CINZA MAIS ESCULRA".
+                       // I'll prioritize weekend gray unless it's a special colored leave like Health License.
+                   }
+                }
 
-              return (
-                <td key={day} className={cellClass}>
-                  {content}
-                </td>
-              )
-            })}
-            <td className="border border-gray-400 px-1 py-1 text-center text-xs">0</td>
-          </tr>
-        ))}
+                return (
+                  <td key={day} className={cellClass}>
+                    {content}
+                  </td>
+                )
+              })}
+              <td className="border border-black px-1 py-1 text-center text-xs font-bold">{totalShifts}</td>
+            </tr>
+          )
+        })}
         {/* Add Professional Row Placeholder */}
-        <tr>
-          <td className="border border-gray-400 px-1 py-1 sticky left-0 bg-white z-10"></td>
-          <td className="border border-gray-400 px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-gray-300">
+        <tr className="no-print">
+          <td className="border border-black px-1 py-1 sticky left-0 bg-white z-10"></td>
+          <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black">
              <button 
                 onClick={() => openNurseModal(section.id)}
                 className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 italic w-full text-left"
@@ -244,7 +260,7 @@ export default function Schedule() {
                 Adicionar Profissional...
              </button>
           </td>
-          <td colSpan={3 + daysInMonth + 1} className="border border-gray-400 px-2 py-1 bg-gray-50"></td>
+          <td colSpan={3 + daysInMonth + 1} className="border border-black px-2 py-1 bg-gray-50"></td>
         </tr>
       </>
     )
@@ -296,51 +312,72 @@ export default function Schedule() {
 
       {/* Report Header */}
       <div className="mb-4">
-        <div className="flex flex-col md:flex-row justify-between items-start mb-2 gap-2">
-          <h1 className="text-xl font-bold text-blue-600">HMA</h1>
-          <div className="text-left md:text-right">
-            <h2 className="text-lg font-bold text-green-700">AÇAILÂNDIA</h2>
-            <p className="text-xs text-gray-500 uppercase">Prefeitura Municipal</p>
-          </div>
+        {/* Logos Header */}
+        <div className="flex justify-between items-center mb-4 border-b pb-2">
+            <div className="flex flex-col items-start">
+                {/* HMA Logo Placeholder */}
+                <div className="flex items-center gap-2">
+                    <div className="bg-blue-900 text-white p-2 rounded font-bold text-2xl flex items-center justify-center h-12 w-12">
+                        <Plus size={32} />
+                    </div>
+                    <div className="flex flex-col">
+                         <h1 className="text-3xl font-black text-blue-900 leading-none">HMA</h1>
+                         <span className="text-[10px] text-blue-900 font-bold tracking-wider">HOSPITAL MUNICIPAL DE AÇAILÂNDIA</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="flex flex-col items-end">
+                {/* City Hall Logo Placeholder */}
+                <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-end">
+                        <h2 className="text-xl font-bold text-blue-800">AÇAILÂNDIA</h2>
+                        <p className="text-[10px] text-yellow-600 font-bold uppercase tracking-widest">CIDADE ACOLHEDORA, CIDADE FORTE</p>
+                    </div>
+                     {/* Replace with actual logo image if available */}
+                     <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center text-blue-800 font-bold text-xs border-2 border-green-600">
+                        PREF
+                    </div>
+                </div>
+            </div>
         </div>
-        <p className="text-sm text-gray-500 mb-4">HOSPITAL MUNICIPAL DE AÇAILÂNDIA</p>
         
-        <div className="bg-gray-200 border border-gray-400 p-2 text-center">
-          <h3 className="font-bold text-sm uppercase text-black">POSTO 1</h3>
-          <h4 className="font-bold text-sm uppercase text-black">ESCALA DE ENFERMEIROS E TÉCNICOS - {selectedMonth + 1}/{selectedYear}</h4>
+        <div className="bg-gray-200 border border-black p-1 text-center mb-1">
+          <h3 className="font-bold text-lg uppercase text-black">OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO</h3>
+        </div>
+        <div className="bg-gray-200 border border-black p-1 text-center">
+           <h4 className="font-bold text-md uppercase text-black">ESCALA DE ENFERMEIROS E TÉCNICOS - {MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
         </div>
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto border border-gray-300 rounded shadow-sm max-w-full relative">
-        <table className="min-w-[1200px] w-full border-collapse border border-gray-400 text-black">
+      <div className="overflow-x-auto border border-black rounded-none shadow-none max-w-full relative">
+        <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
           <thead>
-            {/* Main Headers */}
-            <tr className="bg-gray-100 text-black">
-              <th className="border border-gray-400 px-2 py-1 text-left text-xs w-8 sticky left-0 bg-gray-100 z-20">#</th>
-              <th className="border border-gray-400 px-2 py-1 text-left text-xs min-w-[200px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">PROFISSIONAL</th>
-              <th className="border border-gray-400 px-2 py-1 text-center text-xs w-20"></th>
-              <th className="border border-gray-400 px-2 py-1 text-center text-xs w-24">COREN</th>
-              <th className="border border-gray-400 px-2 py-1 text-center text-xs w-24">VINCULO</th>
-              <th className="border border-gray-400 px-2 py-1 text-center text-xs w-32">OBSERVAÇÕES</th>
+            {/* Main Headers Row 1 */}
+            <tr className="bg-blue-100 text-black">
+              <th className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold" rowSpan={2}>#</th>
+              <th className="border border-black px-1 py-1 text-center min-w-[250px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm">ENFERMEIROS</th>
+              <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>COREN</th>
+              <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>VÍNCULO</th>
+              <th className="border border-black px-1 py-1 text-center w-24 font-bold">D. SEMANA</th>
               {daysArray.map(({ day, weekday, isWeekend }) => (
-                <th key={day} className={`border border-gray-400 px-0 py-1 text-center text-[10px] w-6 ${isWeekend ? 'bg-gray-400' : ''}`}>
+                <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-6 ${isWeekend ? 'bg-gray-400' : ''}`}>
                   {weekday}
                 </th>
               ))}
-              <th className="border border-gray-400 px-1 py-1 text-center text-xs w-12">TOTAL</th>
+              <th className="border border-black px-1 py-1 text-center w-16 font-bold">TOTAL</th>
             </tr>
-            {/* Days Numbers Row (Only at top for reference) */}
-            <tr className="bg-gray-100 text-black">
-              <th className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-0 bg-gray-100 z-20"></th>
-              <th className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">DIAS DO MÊS →</th>
-              <th colSpan={4} className="border border-gray-400 px-2 py-1"></th>
-              {daysArray.map(({ day }) => (
-                <th key={day} className="border border-gray-400 px-0 py-1 text-center text-[10px]">
+            {/* Main Headers Row 2 */}
+            <tr className="bg-blue-100 text-black">
+               <th className="border border-black px-1 py-1 text-center sticky left-8 bg-blue-200 z-20 border-r-2 border-r-black font-bold uppercase text-xs">INTERNAÇÃO PS - OBSERVAÇÃO</th>
+              <th className="border border-black px-1 py-1 text-center font-bold uppercase">OBSERVAÇÃO</th>
+              {daysArray.map(({ day, isWeekend }) => (
+                <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400' : ''}`}>
                   {day}
                 </th>
               ))}
-              <th className="border border-gray-400"></th>
+              <th className="border border-black px-1 py-1 text-center font-bold">PLANTÃO</th>
             </tr>
           </thead>
           <tbody>
@@ -350,10 +387,13 @@ export default function Schedule() {
               <>
                 {data.sections.map(section => (
                     <React.Fragment key={section.id}>
-                        {/* Section Header */}
-                        <tr className="bg-gray-100 text-black">
-                            <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium sticky left-0 bg-gray-100 z-20">#</td>
-                            <td className="border border-gray-400 px-2 py-1 text-left text-xs font-bold sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300 flex justify-between items-center group min-w-[200px]">
+                        {/* Section Header Row that mimics the main header style but for the specific section */}
+                        {/* Only show this if it's NOT the first section, OR if we want to explicitly label every section */}
+                        {/* Given the user wants it to look like the image, and the image has "ENFERMEIROS" then "TÉCNICOS", let's use the section title as a sub-header */}
+                        
+                        <tr className="bg-blue-100 text-black">
+                            <td className="border border-black px-1 py-1 text-center text-xs font-bold sticky left-0 bg-blue-100 z-20">#</td>
+                            <td className="border border-black px-1 py-1 text-center text-xs font-bold uppercase sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black flex justify-between items-center group min-w-[250px]">
                                 {editingSectionId === section.id ? (
                                     <div className="flex items-center gap-1 w-full">
                                         <input 
@@ -368,7 +408,7 @@ export default function Schedule() {
                                 ) : (
                                     <>
                                         <span className="flex-1 text-center">{section.title}</span>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
                                             <button 
                                                 onClick={() => startEditingSection(section)} 
                                                 className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-gray-200"
@@ -387,25 +427,21 @@ export default function Schedule() {
                                     </>
                                 )}
                             </td>
-                            <td colSpan={4} className="border border-gray-400 px-1 py-1"></td>
-                            {daysArray.map(({ day, weekday, isWeekend }) => (
-                                <td key={day} className={`border border-gray-400 px-0 py-1 text-center text-[10px] ${isWeekend ? 'bg-gray-400' : ''}`}>
-                                {weekday}
+                            {/* COREN & VINCULO placeholders for section header line - usually empty or merged */}
+                            <td className="border border-black px-1 py-1 text-center text-[10px] bg-blue-100"></td>
+                            <td className="border border-black px-1 py-1 text-center text-[10px] bg-blue-100"></td>
+                             {/* OBSERVAÇÃO placeholder */}
+                            <td className="border border-black px-1 py-1 text-center text-[10px] bg-blue-100 font-bold uppercase"></td>
+                            
+                            {/* Days - Just empty or maybe repeating numbers? Image implies just grid lines or merged. 
+                                Let's keep it clean or repeat the weekday/number if the section is far down.
+                                For compactness, let's just show the grid cells empty or with a light fill.
+                            */}
+                            {daysArray.map(({ day, isWeekend }) => (
+                                <td key={`sh-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400' : 'bg-blue-100'}`}>
                                 </td>
                             ))}
-                            <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium">TOTAL</td>
-                        </tr>
-                        {/* Repeat Days Numbers for clarity in each section */}
-                         <tr className="bg-gray-100 text-black">
-                            <td className="border border-gray-400 px-2 py-1 sticky left-0 bg-gray-100 z-20"></td>
-                            <td className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">DIAS DO MÊS →</td>
-                            <td colSpan={4} className="border border-gray-400"></td>
-                            {daysArray.map(({ day }) => (
-                                <td key={day} className="border border-gray-400 px-0 py-1 text-center text-[10px]">
-                                {day}
-                                </td>
-                            ))}
-                            <td className="border border-gray-400"></td>
+                            <td className="border border-black px-1 py-1 text-center text-xs font-medium bg-blue-100">PLANTÃO</td>
                         </tr>
 
                         {renderGrid(data.nurses.filter(n => n.section_id === section.id), section)}
@@ -417,6 +453,32 @@ export default function Schedule() {
         </table>
       </div>
       
+      {/* Signatures Footer */}
+      <div className="mt-8 mb-4 grid grid-cols-2 gap-8 text-center break-inside-avoid">
+        <div className="flex flex-col items-center">
+            <div className="w-64 border-b border-black mb-2"></div>
+            <p className="font-bold text-sm text-black">COORDENADOR(A) DE ENFERMAGEM</p>
+        </div>
+        <div className="flex flex-col items-center">
+            <div className="w-64 border-b border-black mb-2"></div>
+            <p className="font-bold text-sm text-black">DIRETOR(A) ADMINISTRATIVO(A)</p>
+        </div>
+      </div>
+
+      {/* Static Legend */}
+      <div className="mt-4 border border-black p-2 text-[10px] text-black bg-white break-inside-avoid">
+        <p className="font-bold mb-1">LEGENDA:</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <span><strong>D</strong> - DIURNO (07:00 às 19:00)</span>
+            <span><strong>N</strong> - NOTURNO (19:00 às 07:00)</span>
+            <span><strong>CH</strong> - CARGA HORÁRIA</span>
+            <span><strong>LM</strong> - LICENÇA MATERNIDADE</span>
+            <span><strong>LS</strong> - LICENÇA SAÚDE</span>
+            <span><strong>FE</strong> - FÉRIAS</span>
+            <span><strong>F</strong> - FOLGA</span>
+        </div>
+      </div>
+
       <NurseSelectionModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
