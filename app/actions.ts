@@ -5,7 +5,6 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase'
 import { readDb, writeDb } from '@/lib/local-db'
-import { v4 as uuidv4 } from 'uuid' // Usaremos crypto.randomUUID se uuid não estiver disponível, mas é node env
 
 // Types
 export interface Section {
