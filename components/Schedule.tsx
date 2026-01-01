@@ -388,13 +388,24 @@ export default function Schedule() {
              >
                 <option value="" disabled>+ Adicionar Profissional...</option>
                 {data.nurses
-                    .filter(n => n.section_id !== section.id)
                     .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(nurse => (
-                        <option key={nurse.id} value={nurse.id} className="text-black not-italic">
-                            {nurse.name} {nurse.coren ? `(${nurse.coren})` : ''}
-                        </option>
-                    ))
+                    .map(nurse => {
+                        const isInCurrentContext = nurse.section_id === section.id && (!selectedUnitId || nurse.unit_id === selectedUnitId);
+                        const isInOtherUnit = nurse.section_id === section.id && selectedUnitId && nurse.unit_id !== selectedUnitId;
+                        
+                        return (
+                            <option 
+                                key={nurse.id} 
+                                value={nurse.id} 
+                                className="text-black not-italic"
+                                disabled={isInCurrentContext}
+                            >
+                                {nurse.name} {nurse.coren ? `(${nurse.coren})` : ''}
+                                {isInCurrentContext ? ' (Já nesta lista)' : ''}
+                                {isInOtherUnit ? ' (Em outro setor)' : ''}
+                            </option>
+                        )
+                    })
                 }
              </select>
           </td>
