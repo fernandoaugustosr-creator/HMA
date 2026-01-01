@@ -570,33 +570,51 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
 
   const supabase = createClient()
   
-  // Process sequentially or batch? Batch is better but upsert might be tricky with DELETE mixed in.
-  // Let's separate DELETEs and UPSERTs
-  const toDelete = shifts.filter(s => s.type === 'DELETE')
-  const toUpsert = shifts.filter(s => s.type !== 'DELETE')
-  
-  // Handle Deletes
-  if (toDelete.length > 0) {
-     // Use nurse_id and shift_date to delete
-     // Supabase doesn't support array-based delete with composite key easily in one go without RPC or iteration.
-     // Iteration is safest for now.
-     await Promise.all(toDelete.map(s => 
-       supabase.from('schedules').delete().match({ nurse_id: s.nurseId, shift_date: s.date })
-     ))
-  }
-  
-  // Handle Upserts
-  if (toUpsert.length > 0) {
-      const { error } = await supabase.from('schedules').upsert(
-          toUpsert.map(s => ({
-              nurse_id: s.nurseId,
-              shift_date: s.date,
-              shift_type: s.type,
-              updated_at: new Date().toISOString()
-          })),
-          { onConflict: 'nurse_id,shift_date' }
-      )
-      if (error) return { success: false, message: error.message }
+  // Handle Upserts and Deletes logic safely
+  // We assume shifts are mostly for the same nurse, but we should handle mixed cases if any.
+  // Group by nurse to optimize
+  const shiftsByNurse: Record<string, typeof shifts> = {}
+  shifts.forEach(s => {
+    if (!shiftsByNurse[s.nurseId]) shiftsByNurse[s.nurseId] = []
+    shiftsByNurse[s.nurseId].push(s)
+  })
+
+  for (const nurseId of Object.keys(shiftsByNurse)) {
+    const nurseShifts = shiftsByNurse[nurseId]
+    const dates = nurseShifts.map(s => s.date)
+
+    // 1. Delete existing shifts for these dates (prevents duplicates if constraint is missing)
+    const { error: deleteError } = await supabase
+      .from('schedules')
+      .delete()
+      .eq('nurse_id', nurseId)
+      .in('shift_date', dates)
+
+    if (deleteError) {
+      console.error('Error deleting old shifts:', deleteError)
+      return { success: false, message: 'Erro ao limpar turnos antigos: ' + deleteError.message }
+    }
+
+    // 2. Insert new shifts (filtering out DELETE type)
+    const toInsert = nurseShifts
+      .filter(s => s.type !== 'DELETE')
+      .map(s => ({
+        nurse_id: s.nurseId,
+        shift_date: s.date,
+        shift_type: s.type,
+        updated_at: new Date().toISOString()
+      }))
+
+    if (toInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from('schedules')
+        .insert(toInsert)
+      
+      if (insertError) {
+        console.error('Error inserting new shifts:', insertError)
+        return { success: false, message: 'Erro ao salvar novos turnos: ' + insertError.message }
+      }
+    }
   }
   
   revalidatePath('/')

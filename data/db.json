@@ -19,7 +19,14 @@
       "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
       "shift_date": "2026-01-02",
       "shift_type": "night",
-      "updated_at": "2026-01-01T22:07:39.518Z"
+      "updated_at": "2026-01-01T22:12:47.054Z"
+    },
+    {
+      "id": "4084224b-ff1b-48a6-b3a3-0ed2c665340a",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "shift_date": "2026-01-01",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T22:11:56.799Z"
     }
   ],
   "time_off_requests": [
