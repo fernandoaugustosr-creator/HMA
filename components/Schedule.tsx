@@ -221,7 +221,7 @@ export default function Schedule() {
               const date = new Date(selectedYear, selectedMonth, day)
               const isWeekend = date.getDay() === 0 || date.getDay() === 6
               if (isWeekend && !timeOff) {
-                cellClass += " bg-gray-100"
+                cellClass += " bg-gray-300"
               }
 
               return (
@@ -325,7 +325,7 @@ export default function Schedule() {
               <th className="border border-gray-400 px-2 py-1 text-center text-xs w-24">VINCULO</th>
               <th className="border border-gray-400 px-2 py-1 text-center text-xs w-32">OBSERVAÇÕES</th>
               {daysArray.map(({ day, weekday }) => (
-                <th key={day} className={`border border-gray-400 px-0 py-1 text-center text-[10px] w-6 ${['S', 'D'].includes(weekday) ? 'bg-gray-200' : ''}`}>
+                <th key={day} className={`border border-gray-400 px-0 py-1 text-center text-[10px] w-6 ${['S', 'D'].includes(weekday) ? 'bg-gray-400' : ''}`}>
                   {weekday}
                 </th>
               ))}
@@ -390,7 +390,7 @@ export default function Schedule() {
                             </td>
                             <td colSpan={4} className="border border-gray-400 px-1 py-1"></td>
                             {daysArray.map(({ day, weekday }) => (
-                                <td key={day} className={`border border-gray-400 px-0 py-1 text-center text-[10px] ${['S', 'D'].includes(weekday) ? 'bg-gray-200' : ''}`}>
+                                <td key={day} className={`border border-gray-400 px-0 py-1 text-center text-[10px] ${['S', 'D'].includes(weekday) ? 'bg-gray-400' : ''}`}>
                                 {weekday}
                                 </td>
                             ))}

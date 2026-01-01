@@ -30,16 +30,6 @@
       "created_at": "2026-01-01T14:25:12.952Z"
     },
     {
-      "id": "e19ebe6e-c698-4e8b-b766-0d0fe735073d",
-      "nurse_id": "mock-1",
-      "start_date": "2026-01-01",
-      "end_date": "2026-01-31",
-      "reason": "Férias programadas",
-      "type": "ferias",
-      "status": "approved",
-      "created_at": "2026-01-01T14:33:07.499Z"
-    },
-    {
       "id": "b5c3ab9f-6fe6-4dbe-927f-9cecfe3d8627",
       "nurse_id": "mock-1",
       "start_date": "2026-01-26",
@@ -48,26 +38,6 @@
       "type": "ferias",
       "status": "approved",
       "created_at": "2026-01-01T14:44:03.169Z"
-    },
-    {
-      "id": "7b09f575-a615-4ffa-8528-5ffdf4f0610f",
-      "nurse_id": "mock-3",
-      "start_date": "2026-01-01",
-      "end_date": "2026-01-01",
-      "reason": "Licença Maternidade",
-      "type": "licenca_maternidade",
-      "status": "approved",
-      "created_at": "2026-01-01T14:44:15.921Z"
-    },
-    {
-      "id": "46b85bd9-e5fa-44b0-aea0-836dab3e721f",
-      "nurse_id": "mock-1",
-      "start_date": "2026-01-01",
-      "end_date": "2026-01-01",
-      "reason": "Licença Maternidade",
-      "type": "licenca_maternidade",
-      "status": "approved",
-      "created_at": "2026-01-01T14:49:02.897Z"
     }
   ],
   "schedule_sections": [
