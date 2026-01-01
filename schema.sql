@@ -39,11 +39,22 @@ create table if not exists schedule_sections (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- Tabela de Setores/Unidades
+create table if not exists units (
+  id uuid default gen_random_uuid() primary key,
+  title text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Adicionar coluna section_id em nurses se não existir
 do $$
 begin
     if not exists (select 1 from information_schema.columns where table_name = 'nurses' and column_name = 'section_id') then
         alter table nurses add column section_id uuid references schedule_sections(id);
+    end if;
+
+    if not exists (select 1 from information_schema.columns where table_name = 'nurses' and column_name = 'unit_id') then
+        alter table nurses add column unit_id uuid references units(id);
     end if;
 
     if not exists (select 1 from information_schema.columns where table_name = 'nurses' and column_name = 'role') then
@@ -72,6 +83,15 @@ where not exists (select 1 from schedule_sections where title = 'ENFERMEIROS');
 insert into schedule_sections (title, position)
 select 'TÉCNICOS DE ENFERMAGEM', 2
 where not exists (select 1 from schedule_sections where title = 'TÉCNICOS DE ENFERMAGEM');
+
+-- Inserir unidades padrão
+insert into units (title)
+select 'POSTO 1'
+where not exists (select 1 from units where title = 'POSTO 1');
+
+insert into units (title)
+select 'POSTO 2'
+where not exists (select 1 from units where title = 'POSTO 2');
 
 -- Atualizar enfermeiros existentes para a seção correta
 update nurses set section_id = (select id from schedule_sections where title = 'ENFERMEIROS')
