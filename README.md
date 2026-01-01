@@ -65,3 +65,18 @@ Este projeto é um sistema de escala de enfermagem construído com Next.js, Tail
     - Clique em "Deploy".
 
 Seu sistema estará online em instantes!
+
+## Como Atualizar o Site
+
+O sistema está configurado com **Integração Contínua (CI/CD)**. Isso significa que a sincronização é automática:
+
+1.  **Faça alterações no código local.**
+2.  **Envie para o GitHub:**
+    ```bash
+    git add .
+    git commit -m "Descrição da atualização"
+    git push origin main
+    ```
+3.  **Vercel detecta e atualiza:**
+    - Assim que o GitHub recebe o novo código, a Vercel inicia automaticamente um novo deploy.
+    - Em 1-2 minutos, o site online é atualizado sem você precisar fazer nada lá.
