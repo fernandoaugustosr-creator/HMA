@@ -22,7 +22,7 @@ export default async function FolgasPage() {
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold mb-4 text-gray-700">
+        <h2 className="text-lg font-semibold mb-4 text-black">
           {isAdmin ? 'Cadastrar Folga' : 'Nova Solicitação'}
         </h2>
         <RequestForm nurses={nurses} />
@@ -30,7 +30,7 @@ export default async function FolgasPage() {
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-700">
+            <h2 className="text-lg font-semibold text-black">
                 {isAdmin ? 'Solicitações Recebidas' : 'Minhas Solicitações'}
             </h2>
         </div>

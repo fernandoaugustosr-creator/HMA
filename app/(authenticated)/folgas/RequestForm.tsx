@@ -23,7 +23,7 @@ export default function RequestForm({ nurses }: { nurses?: any[] }) {
     <form ref={formRef} action={formAction} className="space-y-4">
       {nurses && nurses.length > 0 && (
         <div>
-          <label htmlFor="nurseId" className="block text-sm font-medium text-gray-700">Enfermeiro(a)</label>
+          <label htmlFor="nurseId" className="block text-sm font-medium text-black">Enfermeiro(a)</label>
           <select
             name="nurseId"
             id="nurseId"
@@ -42,7 +42,7 @@ export default function RequestForm({ nurses }: { nurses?: any[] }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">Data da Folga</label>
+          <label htmlFor="startDate" className="block text-sm font-medium text-black">Data da Folga</label>
           <input
             type="date"
             name="startDate"
@@ -54,7 +54,7 @@ export default function RequestForm({ nurses }: { nurses?: any[] }) {
       </div>
       
       <div>
-         <label htmlFor="reason" className="block text-sm font-medium text-gray-700">Motivo</label>
+         <label htmlFor="reason" className="block text-sm font-medium text-black">Motivo</label>
          <textarea
             name="reason"
             id="reason"
