@@ -152,7 +152,7 @@ export default function Schedule() {
                 s.shift_date === dateStr
               )
 
-              let cellClass = "border border-gray-400 px-0 py-0 h-6 w-6 text-center text-[10px] relative"
+              let cellClass = "border border-gray-400 px-0 py-0 h-6 w-6 text-center text-[10px] relative text-black"
               let content = null
 
               if (timeOff) {
@@ -262,10 +262,10 @@ export default function Schedule() {
 
       {/* Table Container */}
       <div className="overflow-x-auto border border-gray-300 rounded shadow-sm max-w-full relative">
-        <table className="min-w-[1200px] w-full border-collapse border border-gray-400">
+        <table className="min-w-[1200px] w-full border-collapse border border-gray-400 text-black">
           <thead>
             {/* Main Headers */}
-            <tr className="bg-gray-100">
+            <tr className="bg-gray-100 text-black">
               <th className="border border-gray-400 px-2 py-1 text-left text-xs w-8 sticky left-0 bg-gray-100 z-20">#</th>
               <th className="border border-gray-400 px-2 py-1 text-left text-xs min-w-[200px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">ENFERMEIROS</th>
               <th className="border border-gray-400 px-2 py-1 text-center text-xs w-20"></th>
@@ -280,7 +280,7 @@ export default function Schedule() {
               <th className="border border-gray-400 px-1 py-1 text-center text-xs w-12">TOTAL</th>
             </tr>
             {/* Days Numbers */}
-            <tr className="bg-gray-100">
+            <tr className="bg-gray-100 text-black">
               <th className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-0 bg-gray-100 z-20"></th>
               <th className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">DIAS DO MÊS →</th>
               <th colSpan={4} className="border border-gray-400 px-2 py-1"></th>
@@ -300,7 +300,7 @@ export default function Schedule() {
                 {renderGrid(nurses, 'ENFERMEIRO')}
                 
                 {/* Section Separator */}
-                <tr className="bg-gray-100">
+                <tr className="bg-gray-100 text-black">
                   <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium sticky left-0 bg-gray-100 z-20">#</td>
                   <td className="border border-gray-400 px-2 py-1 text-left text-xs font-bold sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300 flex justify-between items-center group">
                     <span>TÉCNICOS DE ENFERMAGEM</span>
@@ -320,7 +320,7 @@ export default function Schedule() {
                   ))}
                   <td className="border border-gray-400 px-1 py-1 text-center text-xs font-medium">TOTAL</td>
                 </tr>
-                 <tr className="bg-gray-100">
+                 <tr className="bg-gray-100 text-black">
                   <td className="border border-gray-400 px-2 py-1 sticky left-0 bg-gray-100 z-20"></td>
                   <td className="border border-gray-400 px-2 py-1 text-right text-[10px] sticky left-8 bg-gray-100 z-20 border-r-2 border-r-gray-300">DIAS DO MÊS →</td>
                   <td colSpan={4} className="border border-gray-400"></td>
