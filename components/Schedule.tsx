@@ -380,7 +380,9 @@ export default function Schedule() {
         </div>
         
         <div className="bg-gray-200 border border-black p-1 text-center mb-1">
-          <h3 className="font-bold text-lg uppercase text-black">OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO</h3>
+          <h3 className="font-bold text-lg uppercase text-black">
+            {data.units.find(u => u.id === selectedUnitId)?.title || 'OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO'}
+          </h3>
         </div>
         <div className="bg-gray-200 border border-black p-1 text-center">
            <h4 className="font-bold text-md uppercase text-black">ESCALA DE ENFERMEIROS E TÉCNICOS - {MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
