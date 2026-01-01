@@ -235,6 +235,38 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
   return { success: true, message: 'Solicitação enviada com sucesso' }
 }
 
+export async function assignVacation(prevState: any, formData: FormData) {
+  const nurseId = formData.get('nurseId') as string
+  const startDate = formData.get('startDate') as string
+  const endDate = formData.get('endDate') as string
+
+  if (!nurseId || !startDate || !endDate) {
+    return { success: false, message: 'Todos os campos são obrigatórios' }
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!supabaseUrl || supabaseUrl.includes('sua_url')) {
+    return { success: true, message: 'Férias cadastradas (Modo Mock)' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('time_off_requests').insert({
+    nurse_id: nurseId,
+    start_date: startDate,
+    end_date: endDate,
+    reason: 'Férias programadas',
+    type: 'ferias',
+    status: 'approved'
+  })
+
+  if (error) {
+    return { success: false, message: 'Erro ao cadastrar férias: ' + error.message }
+  }
+
+  revalidatePath('/')
+  return { success: true, message: 'Férias cadastradas com sucesso' }
+}
+
 export async function deleteNurse(id: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!supabaseUrl || supabaseUrl.includes('sua_url')) {

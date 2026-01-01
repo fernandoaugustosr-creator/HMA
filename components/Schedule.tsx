@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { getMonthlyScheduleData, deleteNurse, reassignNurse } from '@/app/actions'
 import { Trash2, Plus } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
+import VacationManagerModal from './VacationManagerModal'
 
 interface Nurse {
   id: string
@@ -48,6 +49,7 @@ export default function Schedule() {
   const [data, setData] = useState<ScheduleData>({ nurses: [], shifts: [], timeOffs: [] })
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isVacationModalOpen, setIsVacationModalOpen] = useState(false)
   const [modalRole, setModalRole] = useState('ENFERMEIRO')
 
   useEffect(() => {
@@ -245,9 +247,9 @@ export default function Schedule() {
 
       {/* Report Header */}
       <div className="mb-4">
-        <div className="flex justify-between items-start mb-2">
+        <div className="flex flex-col md:flex-row justify-between items-start mb-2 gap-2">
           <h1 className="text-xl font-bold text-blue-600">HMA</h1>
-          <div className="text-right">
+          <div className="text-left md:text-right">
             <h2 className="text-lg font-bold text-green-700">AÇAILÂNDIA</h2>
             <p className="text-xs text-gray-500 uppercase">Prefeitura Municipal</p>
           </div>
@@ -349,6 +351,16 @@ export default function Schedule() {
         defaultRole={modalRole}
       />
 
+      <VacationManagerModal
+        isOpen={isVacationModalOpen}
+        onClose={() => setIsVacationModalOpen(false)}
+        onSuccess={() => {
+            fetchData()
+            setIsVacationModalOpen(false)
+        }}
+        nurses={data.nurses}
+      />
+
       {/* Footer / Actions */}
       <div className="mt-4 flex justify-end gap-2 no-print">
         <button className="px-3 py-1 border border-blue-500 text-blue-500 text-xs rounded hover:bg-blue-50">
@@ -360,7 +372,12 @@ export default function Schedule() {
       <div className="mt-8 space-y-2">
         <div className="flex flex-wrap gap-2 justify-end mb-2 no-print">
             <button className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50">Editar texto do rodapé</button>
-            <button className="px-2 py-1 text-xs border rounded text-orange-600 border-orange-200 bg-orange-50">Gerenciar Férias</button>
+            <button 
+              onClick={() => setIsVacationModalOpen(true)}
+              className="px-2 py-1 text-xs border rounded text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100"
+            >
+              Gerenciar Férias
+            </button>
             <button className="px-2 py-1 text-xs border rounded text-red-600 border-red-200 bg-red-50">Licença Saúde</button>
             <button className="px-2 py-1 text-xs border rounded text-blue-600 border-blue-200 bg-blue-50">Licença Maternidade</button>
             <button className="px-2 py-1 text-xs border rounded text-cyan-600 border-cyan-200 bg-cyan-50">Cessão</button>
@@ -386,10 +403,12 @@ export default function Schedule() {
                 .filter(Boolean)
                 .join(', ')
             
+            if (!activeLeaves) return null
+
             return (
                 <div key={type} className={`${colorClass} text-white px-2 py-1 text-xs font-bold uppercase flex items-center`}>
                     <span className="mr-2 whitespace-nowrap">{label}:</span>
-                    <span className="font-normal truncate">{activeLeaves || '-'}</span>
+                    <span className="font-normal truncate">{activeLeaves}</span>
                 </div>
             )
         })}

@@ -26,54 +26,84 @@ export default function Sidebar({ user }: { user: any }) {
   ]
 
   return (
-    <div className="flex flex-col w-64 h-screen px-4 py-8 bg-white border-r border-gray-200">
-      <div className="flex items-center justify-center mb-8">
-        <h2 className="text-2xl font-bold text-indigo-600">ENF-HMA</h2>
-      </div>
-
-      <nav className="flex-1 space-y-2">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                isActive
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <span className="mr-3">{item.icon}</span>
-              {item.name}
-            </Link>
-          )
-        })}
-      </nav>
-
-      <div className="mt-auto pt-4 border-t border-gray-200">
-        <div className="flex items-center mb-4 px-2">
-          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-            {user?.name?.charAt(0) || 'U'}
-          </div>
-          <div className="ml-3">
-            <p className="text-sm font-medium text-gray-900">{user?.name || 'Usuário'}</p>
-            <p className="text-xs text-gray-500 truncate max-w-[140px]">{user?.cpf || ''}</p>
-          </div>
+  return (
+    <>
+      {/* Mobile Navbar */}
+      <div className="md:hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-30 flex justify-between items-center shadow-sm w-full">
+        <h2 className="text-xl font-bold text-indigo-600">ENF-HMA</h2>
+        <div className="flex items-center gap-2">
+          {navItems.map((item) => {
+             const isActive = pathname === item.href
+             return (
+               <Link 
+                 key={item.name} 
+                 href={item.href}
+                 className={`p-2 rounded-lg ${isActive ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600'}`}
+               >
+                 {item.icon}
+               </Link>
+             )
+          })}
+          <form action={logout}>
+            <button type="submit" className="text-red-600 p-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </form>
         </div>
-        
-        <form action={logout}>
-          <button
-            type="submit"
-            className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Sair
-          </button>
-        </form>
       </div>
-    </div>
+
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex flex-col w-64 h-screen px-4 py-8 bg-white border-r border-gray-200 sticky top-0">
+        <div className="flex items-center justify-center mb-8">
+          <h2 className="text-2xl font-bold text-indigo-600">ENF-HMA</h2>
+        </div>
+
+        <nav className="flex-1 space-y-2">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                  isActive
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <span className="mr-3">{item.icon}</span>
+                {item.name}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="mt-auto pt-4 border-t border-gray-200">
+          <div className="flex items-center mb-4 px-2">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+              {user?.name?.charAt(0) || 'U'}
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-900">{user?.name || 'Usuário'}</p>
+              <p className="text-xs text-gray-500 truncate max-w-[140px]">{user?.cpf || ''}</p>
+            </div>
+          </div>
+          
+          <form action={logout}>
+            <button
+              type="submit"
+              className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Sair
+            </button>
+          </form>
+        </div>
+      </div>
+    </>
   )
 }
