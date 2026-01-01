@@ -119,12 +119,17 @@ export async function logout() {
 
 export async function requestTimeOff(prevState: any, formData: FormData) {
   const startDate = formData.get('startDate') as string
-  const endDate = formData.get('endDate') as string
+  let endDate = formData.get('endDate') as string
   const reason = formData.get('reason') as string
   const nurseIdFromForm = formData.get('nurseId') as string
   
-  if (!startDate || !endDate) {
-    return { message: 'Datas de início e fim são obrigatórias' }
+  if (!startDate) {
+    return { message: 'Data da folga é obrigatória' }
+  }
+
+  // Se não tiver data de fim, assume que é apenas um dia (data de fim = data de início)
+  if (!endDate) {
+    endDate = startDate
   }
 
   const session = cookies().get('session_user')
