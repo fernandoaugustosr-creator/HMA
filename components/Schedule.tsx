@@ -254,13 +254,19 @@ export default function Schedule() {
              }
         }
 
-        await saveShifts(shiftsToSave)
+        const res = await saveShifts(shiftsToSave)
+
+        if (!res.success) {
+            alert('Erro ao salvar: ' + (res.message || 'Erro desconhecido'))
+            return
+        }
+
         setIsShiftModalOpen(false)
         await fetchData()
 
     } catch (error) {
         console.error("Error saving shifts:", error)
-        alert('Erro ao salvar plantões')
+        alert('Erro ao salvar turno. Verifique o console.')
     } finally {
         setLoading(false)
     }

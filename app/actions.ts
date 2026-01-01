@@ -532,6 +532,7 @@ export async function deleteSection(id: string) {
 }
 
 export async function saveShifts(shifts: { nurseId: string, date: string, type: string }[]) {
+  console.log('saveShifts called with:', JSON.stringify(shifts, null, 2))
   if (!shifts.length) return { success: true }
 
   if (isLocalMode()) {
