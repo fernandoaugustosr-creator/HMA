@@ -2,8 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { assignNurseToSection } from '@/app/actions'
-import { Search, UserPlus, Plus } from 'lucide-react'
-import NurseCreationModal from './NurseCreationModal'
+import { Search, Plus } from 'lucide-react'
 
 interface Nurse {
   id: string
@@ -26,7 +25,6 @@ interface NurseSelectionModalProps {
 export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses, sectionId, sectionTitle, unitId }: NurseSelectionModalProps) {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [isCreationModalOpen, setIsCreationModalOpen] = useState(false)
 
   const filteredNurses = useMemo(() => {
     return nurses
@@ -110,31 +108,9 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
                         </ul>
                     )}
                 </div>
-
-                <div className="pt-2 border-t">
-                    <button 
-                        onClick={() => setIsCreationModalOpen(true)}
-                        className="w-full flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-blue-600 py-2 hover:bg-gray-50 rounded transition-colors"
-                    >
-                        <UserPlus size={16} />
-                        Não encontrou? Cadastrar Novo
-                    </button>
-                </div>
             </div>
         </div>
         </div>
-
-        <NurseCreationModal 
-            isOpen={isCreationModalOpen}
-            onClose={() => setIsCreationModalOpen(false)}
-            onSuccess={() => {
-                onSuccess()
-                setIsCreationModalOpen(false)
-                onClose()
-            }}
-            defaultSectionId={sectionId}
-            defaultUnitId={unitId}
-        />
     </>
   )
 }
