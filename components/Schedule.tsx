@@ -1,11 +1,10 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, addSection, updateSection, deleteSection, saveShifts, Section, Unit } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, addSection, updateSection, deleteSection, saveShifts, Section, Unit } from '@/app/actions'
 import { addUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
-import NurseSelectionModal from './NurseSelectionModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
 
 interface Nurse {
@@ -55,7 +54,6 @@ export default function Schedule() {
   const [data, setData] = useState<ScheduleData>({ nurses: [], shifts: [], timeOffs: [], sections: [], units: [] })
   const [loading, setLoading] = useState(true)
   const [selectedUnitId, setSelectedUnitId] = useState<string>('')
-  const [isModalOpen, setIsModalOpen] = useState(false)
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
   
   // Section Management State
@@ -63,7 +61,6 @@ export default function Schedule() {
   const [newSectionTitle, setNewSectionTitle] = useState('')
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
   const [editingSectionTitle, setEditingSectionTitle] = useState('')
-  const [modalSectionId, setModalSectionId] = useState<string | null>(null)
   
   // Unit Management State
   const [isAddingUnit, setIsAddingUnit] = useState(false)
@@ -192,9 +189,22 @@ export default function Schedule() {
     await fetchData()
   }
 
-  const openNurseModal = (sectionId: string) => {
-    setModalSectionId(sectionId)
-    setIsModalOpen(true)
+  const handleAssignNurse = async (nurseId: string, sectionId: string) => {
+    if (!nurseId) return
+    setLoading(true)
+    try {
+        const res = await assignNurseToSection(nurseId, sectionId, selectedUnitId)
+        if (res.success) {
+            await fetchData()
+        } else {
+            alert('Erro ao adicionar: ' + res.message)
+        }
+    } catch (error) {
+        console.error(error)
+        alert('Erro ao adicionar')
+    } finally {
+        setLoading(false)
+    }
   }
 
   const handleCellClick = (nurse: Nurse, dateStr: string) => {
@@ -371,13 +381,22 @@ export default function Schedule() {
         <tr className="no-print">
           <td className="border border-black px-1 py-1 sticky left-0 bg-white z-10"></td>
           <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black">
-             <button 
-                onClick={() => openNurseModal(section.id)}
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 italic w-full text-left"
+             <select 
+                onChange={(e) => handleAssignNurse(e.target.value, section.id)}
+                className="flex items-center gap-1 text-xs text-blue-600 italic w-full bg-transparent border-none outline-none cursor-pointer hover:text-blue-800"
+                value=""
              >
-                <Plus size={14} />
-                Adicionar Profissional...
-             </button>
+                <option value="" disabled>+ Adicionar Profissional...</option>
+                {data.nurses
+                    .filter(n => n.section_id !== section.id)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(nurse => (
+                        <option key={nurse.id} value={nurse.id} className="text-black not-italic">
+                            {nurse.name} {nurse.coren ? `(${nurse.coren})` : ''}
+                        </option>
+                    ))
+                }
+             </select>
           </td>
           <td className="border border-black px-1 py-1"></td>
           <td className="border border-black px-1 py-1"></td>
@@ -594,18 +613,7 @@ export default function Schedule() {
         </div>
       </div>
 
-      <NurseSelectionModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => {
-            fetchData()
-            setIsModalOpen(false)
-        }}
-        nurses={data.nurses}
-        sectionId={modalSectionId || ''}
-        sectionTitle={data.sections.find(s => s.id === modalSectionId)?.title}
-        unitId={selectedUnitId}
-      />
+
 
       <LeaveManagerModal
         isOpen={!!leaveModalType}
