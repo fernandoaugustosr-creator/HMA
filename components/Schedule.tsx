@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, addSection, updateSection, deleteSection, saveShifts, Section, Unit } from '@/app/actions'
-import { addUnit } from '@/app/unit-actions'
-import { Trash2, Plus, Pencil, Save, X, Check } from 'lucide-react'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, Section, Unit } from '@/app/actions'
+import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
+import { Trash2, Plus, Pencil, Save, X, Check, Copy } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
 
@@ -15,6 +15,15 @@ interface Nurse {
   vinculo: string
   section_id?: string
   unit_id?: string
+}
+
+interface RosterItem {
+  id: string
+  nurse_id: string
+  section_id: string
+  unit_id: string | null
+  month: number
+  year: number
 }
 
 interface Shift {
@@ -34,6 +43,7 @@ interface TimeOff {
 
 interface ScheduleData {
   nurses: Nurse[]
+  roster: RosterItem[]
   shifts: Shift[]
   timeOffs: TimeOff[]
   sections: Section[]
@@ -51,7 +61,7 @@ export default function Schedule() {
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth())
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
-  const [data, setData] = useState<ScheduleData>({ nurses: [], shifts: [], timeOffs: [], sections: [], units: [] })
+  const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], sections: [], units: [] })
   const [loading, setLoading] = useState(true)
   const [selectedUnitId, setSelectedUnitId] = useState<string>('')
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
@@ -65,16 +75,42 @@ export default function Schedule() {
   // Unit Management State
   const [isAddingUnit, setIsAddingUnit] = useState(false)
   const [newUnitTitle, setNewUnitTitle] = useState('')
+  const [isEditingUnit, setIsEditingUnit] = useState(false)
+  const [editingUnitTitle, setEditingUnitTitle] = useState('')
 
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [shiftModalData, setShiftModalData] = useState<{nurseId: string, nurseName: string, date: string} | null>(null)
   const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'delete'>('day')
-  const [recurrence, setRecurrence] = useState<'none' | 'daily' | '12x36' | '24x72' | 'every3'>('none')
+  const [recurrence, setRecurrence] = useState<'none' | 'daily' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6'>('none')
+  const [limitShifts, setLimitShifts] = useState<string>('')
+  const [deleteWholeMonth, setDeleteWholeMonth] = useState(false)
+
+  const [visibleSectionIds, setVisibleSectionIds] = useState<string[]>([])
 
   useEffect(() => {
     fetchData()
   }, [selectedMonth, selectedYear])
+
+  // We need a separate state for "Manually Added" to survive re-renders until saved
+  const [manuallyAddedSections, setManuallyAddedSections] = useState<string[]>([])
+
+  // Reset manual sections when context changes
+  useEffect(() => {
+      setManuallyAddedSections([])
+  }, [selectedUnitId, selectedMonth, selectedYear])
+
+  const visibleSections = React.useMemo(() => {
+      const rosterSections = new Set<string>()
+      if (data.roster) {
+          data.roster.forEach(r => {
+              if ((!selectedUnitId || r.unit_id === selectedUnitId) && r.month === selectedMonth + 1 && r.year === selectedYear) {
+                  rosterSections.add(r.section_id)
+              }
+          })
+      }
+      return data.sections.filter(s => rosterSections.has(s.id) || manuallyAddedSections.includes(s.id))
+  }, [data.roster, data.sections, selectedUnitId, selectedMonth, selectedYear, manuallyAddedSections])
 
   async function fetchData() {
     setLoading(true)
@@ -87,6 +123,7 @@ export default function Schedule() {
       if (!selectedUnitId && result.units && result.units.length > 0) {
         setSelectedUnitId(result.units[0].id)
       }
+      
     } catch (error) {
       console.error('Error fetching schedule:', error)
     } finally {
@@ -126,27 +163,96 @@ export default function Schedule() {
     }
   }
 
+  const startEditingUnit = () => {
+      const unit = data.units.find(u => u.id === selectedUnitId)
+      if (unit) {
+          setEditingUnitTitle(unit.title)
+          setIsEditingUnit(true)
+      }
+  }
+
+  const saveUnitTitle = async () => {
+      if (!selectedUnitId || !editingUnitTitle.trim()) return
+      setLoading(true)
+      try {
+          const res = await updateUnit(selectedUnitId, editingUnitTitle)
+          if (res.success) {
+              setIsEditingUnit(false)
+              await fetchData()
+          } else {
+              alert('Erro ao atualizar setor: ' + res.message)
+          }
+      } catch (error) {
+          console.error(error)
+          alert('Erro ao atualizar setor')
+      } finally {
+          setLoading(false)
+      }
+  }
+
+  const handleDeleteUnit = async () => {
+      if (!selectedUnitId) return
+      if (!confirm('Tem certeza que deseja excluir este setor? Esta ação não pode ser desfeita.')) return
+      
+      setLoading(true)
+      try {
+          const res = await deleteUnit(selectedUnitId)
+          if (res.success) {
+              setSelectedUnitId('')
+              await fetchData()
+          } else {
+              alert('Erro ao excluir setor: ' + res.message)
+          }
+      } catch (error) {
+          console.error(error)
+          alert('Erro ao excluir setor')
+      } finally {
+          setLoading(false)
+      }
+  }
+
+
 
   const handlePrint = () => {
     window.print()
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Tem certeza que deseja remover este servidor? Isso apagará o cadastro e os dados associados.')) return
+  async function handleRemoveFromRoster(nurseId: string) {
+    if (!confirm('Tem certeza que deseja remover este servidor desta escala mensal?')) return
     setLoading(true)
-    const res = await deleteNurse(id)
+    const res = await removeNurseFromRoster(nurseId, selectedMonth + 1, selectedYear)
     if (!res.success) alert(res.message)
     await fetchData()
   }
 
   async function handleReassign(oldId: string, newId: string) {
+    // For roster, reassign implies changing the nurse assigned to this slot?
+    // Or just swapping? For simplicity, we can remove old and add new.
+    // But `reassignNurse` action was for global change. 
+    // Here we should probably just remove old from roster and add new to roster.
+    
     if (oldId === newId) return
-    if (!confirm('Tem certeza que deseja transferir os dados para outro servidor?')) return
+    if (!confirm('Tem certeza que deseja substituir o servidor nesta escala?')) return
+    
     setLoading(true)
-    const res = await reassignNurse(oldId, newId)
-    if (!res.success) alert(res.message)
+    // 1. Get current roster item
+    const rosterItem = data.roster.find(r => r.nurse_id === oldId && r.month === selectedMonth + 1 && r.year === selectedYear)
+    if (!rosterItem) {
+        alert('Erro: Servidor não encontrado na escala.')
+        setLoading(false)
+        return
+    }
+
+    // 2. Remove old
+    await removeNurseFromRoster(oldId, selectedMonth + 1, selectedYear)
+    
+    // 3. Add new (using same section and unit)
+    await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear)
+    
     await fetchData()
+    setLoading(false)
   }
+
 
   // Section Handlers
   const saveNewSection = async () => {
@@ -193,7 +299,7 @@ export default function Schedule() {
     if (!nurseId) return
     setLoading(true)
     try {
-        const res = await assignNurseToSection(nurseId, sectionId, selectedUnitId)
+        const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear)
         if (res.success) {
             await fetchData()
         } else {
@@ -215,6 +321,8 @@ export default function Schedule() {
     })
     setShiftType('day')
     setRecurrence('none')
+    setLimitShifts('')
+    setDeleteWholeMonth(false)
     setIsShiftModalOpen(true)
   }
 
@@ -224,34 +332,60 @@ export default function Schedule() {
     
     try {
         const shiftsToSave: { nurseId: string, date: string, type: string }[] = []
-        const startDate = new Date(shiftModalData.date + 'T12:00:00') // Avoid timezone issues
-        const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
-        const endOfMonthDate = new Date(selectedYear, selectedMonth, lastDayOfMonth) // Local time
         
-        // Calculate dates based on recurrence
-        let currentDateIter = new Date(startDate)
-        
-        while (currentDateIter.getMonth() === selectedMonth && currentDateIter.getFullYear() === selectedYear) {
-             const dateString = `${currentDateIter.getFullYear()}-${String(currentDateIter.getMonth() + 1).padStart(2, '0')}-${String(currentDateIter.getDate()).padStart(2, '0')}`
-             
-             shiftsToSave.push({
-                 nurseId: shiftModalData.nurseId,
-                 date: dateString,
-                 type: shiftType === 'delete' ? 'DELETE' : shiftType
-             })
+        if (shiftType === 'delete' && deleteWholeMonth) {
+            // Delete whole month logic
+            const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+            for (let day = 1; day <= lastDayOfMonth; day++) {
+                const dateString = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                shiftsToSave.push({
+                    nurseId: shiftModalData.nurseId,
+                    date: dateString,
+                    type: 'DELETE'
+                })
+            }
+        } else {
+            // Standard logic
+            const startDate = new Date(shiftModalData.date + 'T12:00:00') // Avoid timezone issues
+            const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+            
+            // Calculate dates based on recurrence
+            let currentDateIter = new Date(startDate)
+            let count = 0
+            const limit = limitShifts ? parseInt(limitShifts) : Infinity
 
-             if (recurrence === 'none') break
-             
-             // Increment based on recurrence
-             if (recurrence === 'daily') {
-                 currentDateIter.setDate(currentDateIter.getDate() + 1)
-             } else if (recurrence === '12x36') {
-                 currentDateIter.setDate(currentDateIter.getDate() + 2)
-             } else if (recurrence === 'every3') {
-                 currentDateIter.setDate(currentDateIter.getDate() + 3)
-             } else if (recurrence === '24x72') {
-                 currentDateIter.setDate(currentDateIter.getDate() + 4)
-             }
+            while (currentDateIter.getMonth() === selectedMonth && currentDateIter.getFullYear() === selectedYear) {
+                if (count >= limit) break
+
+                const dateString = `${currentDateIter.getFullYear()}-${String(currentDateIter.getMonth() + 1).padStart(2, '0')}-${String(currentDateIter.getDate()).padStart(2, '0')}`
+                
+                shiftsToSave.push({
+                    nurseId: shiftModalData.nurseId,
+                    date: dateString,
+                    type: shiftType === 'delete' ? 'DELETE' : shiftType
+                })
+
+                count++
+
+                if (recurrence === 'none') break
+                
+                // Increment based on recurrence
+                if (recurrence === 'daily') {
+                    currentDateIter.setDate(currentDateIter.getDate() + 1)
+                } else if (recurrence === '12x36') {
+                    currentDateIter.setDate(currentDateIter.getDate() + 2)
+                } else if (recurrence === 'every3') {
+                    currentDateIter.setDate(currentDateIter.getDate() + 3)
+                } else if (recurrence === '24x72') {
+                    currentDateIter.setDate(currentDateIter.getDate() + 4)
+                } else if (recurrence === 'off4') {
+                    currentDateIter.setDate(currentDateIter.getDate() + 5)
+                } else if (recurrence === 'off5') {
+                    currentDateIter.setDate(currentDateIter.getDate() + 6)
+                } else if (recurrence === 'off6') {
+                    currentDateIter.setDate(currentDateIter.getDate() + 7)
+                }
+            }
         }
 
         const res = await saveShifts(shiftsToSave)
@@ -282,15 +416,66 @@ export default function Schedule() {
     }
   })
 
+  const activeNurses = React.useMemo(() => {
+      return data.nurses.map(nurse => {
+          const rosterEntry = data.roster?.find(r => r.nurse_id === nurse.id && r.month === selectedMonth + 1 && r.year === selectedYear)
+          if (rosterEntry) {
+              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id }
+          }
+          return nurse
+      })
+  }, [data.nurses, data.roster, selectedMonth, selectedYear])
+
+  // Optimize data access with lookups
+  const shiftsLookup = React.useMemo(() => {
+      const lookup: Record<string, Shift> = {} // Key: "nurseId_date"
+      const countLookup: Record<string, number> = {} // Key: nurseId
+      
+      const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`
+      
+      if (data.shifts) {
+          data.shifts.forEach(s => {
+              if (s.shift_date.startsWith(monthPrefix)) {
+                  lookup[`${s.nurse_id}_${s.shift_date}`] = s
+                  countLookup[s.nurse_id] = (countLookup[s.nurse_id] || 0) + 1
+              }
+          })
+      }
+      return { lookup, countLookup }
+  }, [data.shifts, selectedMonth, selectedYear])
+
+  const timeOffsLookup = React.useMemo(() => {
+      const lookup: Record<string, TimeOff> = {}
+      if (data.timeOffs) {
+        const monthStart = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
+        const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+        const monthEnd = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+        data.timeOffs.forEach(t => {
+            if (t.end_date < monthStart || t.start_date > monthEnd) return
+
+            const startStr = t.start_date < monthStart ? monthStart : t.start_date
+            const endStr = t.end_date > monthEnd ? monthEnd : t.end_date
+            
+            // Use T12:00:00 to avoid timezone issues when iterating
+            const start = new Date(startStr + 'T12:00:00')
+            const end = new Date(endStr + 'T12:00:00')
+
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                 const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                 lookup[`${t.nurse_id}_${dateStr}`] = t
+            }
+        })
+      }
+      return lookup
+  }, [data.timeOffs, selectedMonth, selectedYear])
+
   const renderGrid = (professionals: Nurse[], section: Section) => {
     return (
       <>
         {professionals.map((nurse, index) => {
           // Calculate Total Shifts
-          const totalShifts = data.shifts.filter(s => 
-            s.nurse_id === nurse.id && 
-            s.shift_date.startsWith(`${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`)
-          ).length
+          const totalShifts = shiftsLookup.countLookup[nurse.id] || 0
 
           return (
             <tr key={nurse.id} className="hover:bg-gray-50">
@@ -298,9 +483,9 @@ export default function Schedule() {
               <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 min-w-[250px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
                   <button 
-                    onClick={() => handleDelete(nurse.id)} 
+                    onClick={() => handleRemoveFromRoster(nurse.id)} 
                     className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors no-print"
-                    title="Apagar linha"
+                    title="Remover desta escala mensal"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -323,17 +508,10 @@ export default function Schedule() {
                 const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                 
                 // Find time off
-                const timeOff = data.timeOffs.find(t => 
-                  t.nurse_id === nurse.id && 
-                  t.start_date <= dateStr && 
-                  t.end_date >= dateStr
-                )
+                const timeOff = timeOffsLookup[`${nurse.id}_${dateStr}`]
 
                 // Find shift
-                const shift = data.shifts.find(s => 
-                  s.nurse_id === nurse.id && 
-                  s.shift_date === dateStr
-                )
+                const shift = shiftsLookup.lookup[`${nurse.id}_${dateStr}`]
 
                 let cellClass = "border border-black px-0 py-0 h-5 w-6 text-center text-[10px] relative text-black font-bold"
                 let content = null
@@ -393,7 +571,7 @@ export default function Schedule() {
                 value=""
              >
                 <option value="" disabled>+ Adicionar Profissional...</option>
-                {data.nurses
+                {activeNurses
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .map(nurse => {
                         const isInCurrentContext = nurse.section_id === section.id && (!selectedUnitId || nurse.unit_id === selectedUnitId);
@@ -446,18 +624,55 @@ export default function Schedule() {
       <div className="flex flex-col md:flex-row gap-4 mb-6 items-start md:items-end no-print">
         <div className="w-full md:w-auto">
           <label className="block text-sm font-medium text-black mb-1">Setor</label>
-          <select 
-            value={selectedUnitId} 
-            onChange={handleUnitChange}
-            className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
-          >
-            <option value="">Selecione um setor...</option>
-            {data.units.map(unit => (
-              <option key={unit.id} value={unit.id}>{unit.title}</option>
-            ))}
-            <option disabled>──────────</option>
-            <option value="new_unit_action">+ Adicionar novo setor...</option>
-          </select>
+          {isEditingUnit ? (
+              <div className="flex items-center gap-2">
+                  <input 
+                      value={editingUnitTitle}
+                      onChange={e => setEditingUnitTitle(e.target.value)}
+                      className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
+                      autoFocus
+                  />
+                  <button onClick={saveUnitTitle} className="text-green-600 p-2 hover:bg-gray-100 rounded" title="Salvar">
+                      <Save size={18} />
+                  </button>
+                  <button onClick={() => setIsEditingUnit(false)} className="text-red-600 p-2 hover:bg-gray-100 rounded" title="Cancelar">
+                      <X size={18} />
+                  </button>
+              </div>
+          ) : (
+            <div className="flex items-center gap-2">
+                <select 
+                    value={selectedUnitId} 
+                    onChange={handleUnitChange}
+                    className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
+                >
+                    <option value="">Selecione um setor...</option>
+                    {data.units.map(unit => (
+                    <option key={unit.id} value={unit.id}>{unit.title}</option>
+                    ))}
+                    <option disabled>──────────</option>
+                    <option value="new_unit_action">+ Adicionar novo setor...</option>
+                </select>
+                {selectedUnitId && selectedUnitId !== 'new_unit_action' && (
+                    <div className="flex items-center">
+                        <button 
+                            onClick={startEditingUnit}
+                            className="text-blue-600 p-2 hover:bg-gray-100 rounded"
+                            title="Editar nome do setor"
+                        >
+                            <Pencil size={16} />
+                        </button>
+                        <button 
+                            onClick={handleDeleteUnit}
+                            className="text-red-600 p-2 hover:bg-gray-100 rounded"
+                            title="Excluir setor"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                )}
+            </div>
+          )}
         </div>
         <div className="w-full md:w-auto">
           <label className="block text-sm font-medium text-black mb-1">Mês</label>
@@ -484,13 +699,15 @@ export default function Schedule() {
           </select>
         </div>
         {!loading && (
-          <button 
-            onClick={handlePrint}
-            className="w-full md:w-auto md:ml-auto bg-blue-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-600 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-            Imprimir
-          </button>
+          <div className="flex gap-2 w-full md:w-auto md:ml-auto">
+             <button 
+                 onClick={handlePrint}
+                 className="bg-blue-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-600 transition-colors"
+             >
+                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                 Imprimir
+             </button>
+          </div>
         )}
       </div>
 
@@ -542,7 +759,7 @@ export default function Schedule() {
              <div className="text-center py-4">Carregando...</div>
         ) : (
              <>
-             {data.sections.map(section => (
+             {visibleSections.map(section => (
                  <div key={section.id} className="mb-8 border border-black">
                      <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
                          <thead>
@@ -605,11 +822,34 @@ export default function Schedule() {
                             </tr>
                         </thead>
                         <tbody>
-                            {renderGrid(data.nurses.filter(n => n.section_id === section.id && (!selectedUnitId || n.unit_id === selectedUnitId)), section)}
+                            {renderGrid(activeNurses.filter(n => n.section_id === section.id && (!selectedUnitId || n.unit_id === selectedUnitId)), section)}
                         </tbody>
                     </table>
                  </div>
              ))}
+             
+             {/* Add Section Button */}
+             <div className="mb-8 p-4 border border-dashed border-gray-400 rounded bg-gray-50 text-center no-print">
+                 <p className="text-sm text-gray-600 mb-2">Adicionar grupo à escala deste setor:</p>
+                 <select 
+                     className="border border-blue-300 text-blue-600 rounded px-2 py-1 text-sm bg-white"
+                     onChange={(e) => {
+                         if (e.target.value) {
+                             setManuallyAddedSections(prev => [...prev, e.target.value])
+                             e.target.value = "" // Reset select
+                         }
+                     }}
+                     defaultValue=""
+                 >
+                     <option value="" disabled>+ Selecionar Grupo...</option>
+                     {data.sections
+                        .filter(s => !visibleSections.find(vs => vs.id === s.id))
+                        .map(s => (
+                            <option key={s.id} value={s.id}>{s.title}</option>
+                        ))
+                     }
+                 </select>
+             </div>
              </>
         )}
       </div>
@@ -826,7 +1066,10 @@ export default function Schedule() {
                             Tarde (T)
                         </button>
                         <button 
-                            onClick={() => setShiftType('delete')}
+                            onClick={() => {
+                                setShiftType('delete')
+                                setDeleteWholeMonth(false)
+                            }}
                             className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'delete' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
                         >
                             Limpar
@@ -834,7 +1077,24 @@ export default function Schedule() {
                     </div>
                 </div>
 
-                {shiftModalData.date.endsWith('-01') && (
+                {shiftType === 'delete' && (
+                    <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                                type="checkbox"
+                                checked={deleteWholeMonth}
+                                onChange={e => setDeleteWholeMonth(e.target.checked)}
+                                className="w-4 h-4 text-red-600"
+                            />
+                            <span className="text-sm font-bold text-red-700">LIMPAR TODA A LINHA (MÊS INTEIRO)</span>
+                        </label>
+                        <p className="text-xs text-red-600 mt-1 ml-6">
+                            Se marcado, removerá TODOS os plantões deste profissional neste mês, independente da data selecionada.
+                        </p>
+                    </div>
+                )}
+
+                {shiftModalData.date && shiftType !== 'delete' && (
                     <div className="mb-6">
                         <label className="block text-sm font-medium text-black mb-2">Frequência (Preenchimento Automático)</label>
                         <select 
@@ -847,10 +1107,24 @@ export default function Schedule() {
                             <option value="12x36">A cada 2 dias (12x36 - Dia sim, dia não)</option>
                             <option value="every3">A cada 3 dias</option>
                             <option value="24x72">A cada 4 dias (24x72)</option>
+                            <option value="off4">Folga de 4 dias (Trabalha 1, Folga 4)</option>
+                            <option value="off5">Folga de 5 dias (Trabalha 1, Folga 5)</option>
+                            <option value="off6">Folga de 6 dias (Trabalha 1, Folga 6)</option>
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                            O preenchimento será aplicado desta data até o final do mês.
-                        </p>
+                        
+                        <div className="mt-4">
+                             <label className="block text-sm font-medium text-black mb-1">Limitar preenchimento (Opcional)</label>
+                             <input 
+                                type="number"
+                                value={limitShifts}
+                                onChange={e => setLimitShifts(e.target.value)}
+                                placeholder="Ex: 10 primeiros plantões"
+                                className="w-full border p-2 rounded text-black bg-white text-sm"
+                             />
+                             <p className="text-xs text-gray-500 mt-1">
+                                Se preenchido, aplicará apenas para a quantidade de plantões informada. Caso contrário, preencherá até o final do mês.
+                             </p>
+                        </div>
                     </div>
                 )}
 

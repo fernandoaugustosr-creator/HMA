@@ -9,6 +9,7 @@ interface DB {
   time_off_requests: any[]
   schedule_sections: any[]
   units: any[]
+  monthly_rosters: any[]
 }
 
 const INITIAL_DB: DB = {
@@ -26,7 +27,8 @@ const INITIAL_DB: DB = {
   units: [
     { id: 'unit-1', title: 'POSTO 1' },
     { id: 'unit-2', title: 'POSTO 2' }
-  ]
+  ],
+  monthly_rosters: []
 }
 
 export function readDb(): DB {

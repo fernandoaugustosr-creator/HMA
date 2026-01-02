@@ -8,7 +8,7 @@
       "coren": "",
       "vinculo": "02170025367",
       "role": "ENFERMEIRO",
-      "section_id": "706c6177-efec-46a9-aae5-d66248f7e33b",
+      "section_id": null,
       "unit_id": "unit-1",
       "created_at": "2026-01-01T21:50:33.684Z"
     },
@@ -20,8 +20,8 @@
       "coren": "267164",
       "vinculo": "CONCURSO",
       "role": "ENFERMEIRO",
-      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
-      "unit_id": null,
+      "section_id": null,
+      "unit_id": "unit-1",
       "created_at": "2026-01-01T22:14:51.575Z"
     },
     {
@@ -32,8 +32,8 @@
       "coren": "423076",
       "vinculo": "CONCURSO",
       "role": "ENFERMEIRO",
-      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
-      "unit_id": null,
+      "section_id": null,
+      "unit_id": "unit-1",
       "created_at": "2026-01-01T22:14:51.580Z"
     },
     {
@@ -44,8 +44,8 @@
       "coren": "449788",
       "vinculo": "CONCURSO",
       "role": "ENFERMEIRO",
-      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
-      "unit_id": null,
+      "section_id": null,
+      "unit_id": "unit-1",
       "created_at": "2026-01-01T22:14:51.580Z"
     },
     {
@@ -56,80 +56,199 @@
       "coren": "544909",
       "vinculo": "CONCURSO",
       "role": "ENFERMEIRO",
-      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
-      "unit_id": null,
+      "section_id": null,
+      "unit_id": "unit-1",
       "created_at": "2026-01-01T22:14:51.580Z"
     }
   ],
   "shifts": [
     {
       "id": "a71cf088-16d3-4a3d-86c1-5f6996382e32",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-02",
-      "shift_type": "night",
-      "updated_at": "2026-01-01T22:12:47.054Z"
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:22:13.973Z"
     },
     {
       "id": "4084224b-ff1b-48a6-b3a3-0ed2c665340a",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-01",
       "shift_type": "night",
       "updated_at": "2026-01-01T22:13:38.438Z"
     },
     {
       "id": "e338a896-02c1-429b-84a9-0c01096cd857",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-05",
       "shift_type": "night",
       "updated_at": "2026-01-01T22:13:28.692Z"
     },
     {
       "id": "ef39e5e5-1f28-4259-af08-a76ffdbc90a3",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-09",
       "shift_type": "night",
       "updated_at": "2026-01-01T22:13:28.692Z"
     },
     {
       "id": "590b2d50-4984-4df9-bd69-b4332ffb1f73",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-13",
       "shift_type": "night",
       "updated_at": "2026-01-01T22:13:28.692Z"
     },
     {
       "id": "18a42fdb-4c62-4d32-aeea-74f700366237",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-17",
-      "shift_type": "night",
-      "updated_at": "2026-01-01T22:13:28.692Z"
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:22:13.973Z"
     },
     {
       "id": "dde4109f-cac2-4f08-a585-1c0b4483a759",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-21",
       "shift_type": "night",
       "updated_at": "2026-01-01T22:13:28.692Z"
     },
     {
       "id": "f95ea402-d574-4dad-8fc1-603929ebaab2",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-25",
       "shift_type": "night",
       "updated_at": "2026-01-01T22:13:28.692Z"
     },
     {
       "id": "e51fa55c-f21e-46ba-bbbe-726c136eb393",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "shift_date": "2026-01-29",
       "shift_type": "night",
       "updated_at": "2026-01-01T22:13:28.692Z"
+    },
+    {
+      "id": "c0f55783-677d-4a89-8c8c-d1ed0cc2df41",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-01",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T23:21:20.150Z"
+    },
+    {
+      "id": "bd19f429-1500-4103-80b9-183da5756b9e",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-06",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T23:21:20.150Z"
+    },
+    {
+      "id": "a197ddbb-d108-4d77-a718-100cd289ae20",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-11",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T23:21:20.150Z"
+    },
+    {
+      "id": "4227b566-545f-4f40-81fa-4ab5e44c06ff",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-16",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T23:21:20.150Z"
+    },
+    {
+      "id": "f886b7ad-c25f-49ab-9f41-304a9fd1d13a",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-21",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T23:21:20.150Z"
+    },
+    {
+      "id": "554425a0-1aca-4e3a-a665-022eb64d9cec",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-26",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T23:21:20.150Z"
+    },
+    {
+      "id": "6992a74b-d5c5-4366-9bf0-bafa548f8e62",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-31",
+      "shift_type": "night",
+      "updated_at": "2026-01-01T23:21:20.150Z"
+    },
+    {
+      "id": "7b8bc345-0e78-4246-9a16-0450283a0540",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-02",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:21:28.685Z"
+    },
+    {
+      "id": "e341bfde-430e-40a9-b37a-bd635c555599",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-07",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:21:28.685Z"
+    },
+    {
+      "id": "8cd79e33-eebf-4a02-a1a6-99781fe3c005",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-12",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:21:28.685Z"
+    },
+    {
+      "id": "d6c87da9-dc2c-475c-a88c-21e2035bb24e",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-17",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:21:28.685Z"
+    },
+    {
+      "id": "25911727-168c-4b5d-b76c-de7d5b837ed4",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-22",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:21:28.685Z"
+    },
+    {
+      "id": "fafdda0f-e29a-4fd1-86f5-c76df6e4b38b",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "shift_date": "2026-01-27",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:21:28.685Z"
+    },
+    {
+      "id": "e9470a3f-15ae-4db9-b195-e74cc8c525c6",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "shift_date": "2026-01-07",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:22:13.973Z"
+    },
+    {
+      "id": "b4fdc9ed-f6f0-40a1-a03a-63b54693ae43",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "shift_date": "2026-01-12",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:22:13.973Z"
+    },
+    {
+      "id": "94233e00-9495-4bf6-a9b9-513f59a63eec",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "shift_date": "2026-01-22",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:22:13.973Z"
+    },
+    {
+      "id": "6341ee83-aa3b-4ac4-b633-0a0bc965518b",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "shift_date": "2026-01-27",
+      "shift_type": "day",
+      "updated_at": "2026-01-01T23:22:13.973Z"
     }
   ],
   "time_off_requests": [
     {
       "id": "79b14ba7-9377-47b1-8993-a7bab1171389",
-      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
       "start_date": "2026-01-01",
       "end_date": "2026-01-31",
       "reason": "Férias programadas",
@@ -140,16 +259,22 @@
   ],
   "schedule_sections": [
     {
-      "id": "6420971d-8d0d-4925-ba7c-9804b7011332",
-      "title": "ENFERMEIROS",
-      "position": 3,
-      "created_at": "2026-01-01T20:48:54.357Z"
+      "id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "title": "TÉCNICOS DE ENFERMAGEM",
+      "position": 4,
+      "created_at": "2026-01-01T23:03:54.650Z"
     },
     {
-      "id": "706c6177-efec-46a9-aae5-d66248f7e33b",
-      "title": "TÉCNICOS DE ENFERMAGEM",
-      "position": 2,
-      "created_at": "2026-01-01T21:01:07.210Z"
+      "id": "7b74fab6-0ee2-4a37-9f99-d3a397a2a8b3",
+      "title": "TÉCNICOS DE ENFERMAGEM-DIURNO",
+      "position": 4,
+      "created_at": "2026-01-01T23:16:52.352Z"
+    },
+    {
+      "id": "e3852ff2-5425-42e1-9281-7fed9d6c4709",
+      "title": "TÉCNICOS DE ENFERMAGEM-NEONATOLOGIA",
+      "position": 4,
+      "created_at": "2026-01-01T23:17:33.633Z"
     }
   ],
   "units": [
@@ -163,7 +288,7 @@
     },
     {
       "id": "fa7e1afb-f9e7-4ed2-8afd-8d3b99faca0b",
-      "title": "DSD"
+      "title": "NEONATOLOGIA E PEDIATRIA"
     },
     {
       "id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
@@ -172,6 +297,521 @@
     {
       "id": "d395a651-aacf-49da-bd95-3fa28c7d2d5d",
       "title": "SD"
+    }
+  ],
+  "monthly_rosters": [
+    {
+      "id": "5d62c117-dd76-4754-883a-02ee28e8735c",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 2,
+      "year": 2026,
+      "created_at": "2026-01-01T22:41:42.454Z"
+    },
+    {
+      "id": "837d19c2-d6fd-47be-a652-40d00cd8c0b7",
+      "nurse_id": "0c22564d-5419-466f-8294-6ad1a36f6863",
+      "section_id": "6420971d-8d0d-4925-ba7c-9804b7011332",
+      "unit_id": null,
+      "month": 2,
+      "year": 2026,
+      "created_at": "2026-01-01T22:41:42.454Z"
+    },
+    {
+      "id": "c9d057a2-10a5-46af-a87e-3bdc68710491",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 2,
+      "year": 2026,
+      "created_at": "2026-01-01T22:41:42.454Z"
+    },
+    {
+      "id": "a8fefd74-2a64-4e80-8a61-36c44c83ad3e",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 2,
+      "year": 2026,
+      "created_at": "2026-01-01T22:41:42.454Z"
+    },
+    {
+      "id": "61157245-9bad-41bd-95e3-3a874e697fd2",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 2,
+      "year": 2026,
+      "created_at": "2026-01-01T22:41:42.454Z"
+    },
+    {
+      "id": "4fd7c275-8cb4-4377-a49f-ddcf81ee95a2",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 3,
+      "year": 2026,
+      "created_at": "2026-01-01T22:44:59.668Z"
+    },
+    {
+      "id": "7eb0f75a-a9fe-4503-8186-3237022db0ce",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 3,
+      "year": 2026,
+      "created_at": "2026-01-01T22:44:59.668Z"
+    },
+    {
+      "id": "e32edd02-fce5-4a1c-83e1-b9f1d9e5314f",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 3,
+      "year": 2026,
+      "created_at": "2026-01-01T22:44:59.668Z"
+    },
+    {
+      "id": "a0d66b17-8513-454e-80e2-d6b4b72a8ff9",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 1,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "22389edd-c177-4748-b8fc-79fe1f3c0ef7",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 4,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "2610d4e5-9005-43b7-8248-48dd505c3156",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 5,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "e1c4cac4-2e2e-4901-ab84-cb609dfcdfd3",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 6,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "4b101afa-24cf-4896-a849-6a021f6dbf1f",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 7,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "81381e2c-2a2f-4798-a34f-6450b9fb05e7",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 8,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "188e1c95-7289-4ed1-b486-d36d5e80937e",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 9,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "967763cd-3535-4065-974c-bfdcfc3ca394",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 10,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "ba045558-163b-43af-aabe-e97c4f596c40",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 11,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "4bae1dfd-a65e-42fe-804e-3111ce5a7bb6",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 12,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:41.054Z"
+    },
+    {
+      "id": "4ad8a39f-8f94-4e90-a47a-541aac8d13ca",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 1,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "232dbca5-8f7f-49c2-a072-0dd56cd62edb",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 4,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "34beecad-964c-44b4-ab1a-b62643b9ea12",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 5,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "b3913ca6-0cc4-4230-a986-fb309e523c49",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 6,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "048f7b4f-ec28-4b15-bcaf-9ba4c796e524",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 7,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "dbdf3fdf-b58a-44ba-9592-2f795dca04e2",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 8,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "de63aa12-ce15-4468-a099-bdfe1264d61a",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 9,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "30d3ba27-7282-439a-ac7c-74a39b367e4c",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 10,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "970033d6-0572-4beb-98ba-738f935631ea",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 11,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "f1cbedd3-60e6-468a-b645-04ef5e2e9ab3",
+      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 12,
+      "year": 2026,
+      "created_at": "2026-01-01T22:50:44.214Z"
+    },
+    {
+      "id": "077f457d-8a35-4841-a6bd-4951beffa2cf",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 1,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "cfe72e3b-8fb3-482c-a285-0272af4319a3",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 3,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "02044452-c399-4a4f-b376-8b40622f197b",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 4,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "a2d861d8-d8f1-4e50-ae21-fead40b53454",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 5,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "1c3458e0-2b94-4a34-9f67-14b7396bb63e",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 6,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "e132dbe6-76c0-402e-a3e2-1d36a77091bb",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 7,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "17c7da95-3187-4809-9ce7-510c50ce3ffd",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 8,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "b288c082-9766-4323-bf0b-b1d74c22acee",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 9,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "8ad1f157-7344-4e3b-8fa7-467d256f8cd1",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 10,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "83089ebf-e8d8-42e7-b553-fcdb8a559fd6",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 11,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "e5ab41c4-1008-473d-9709-9a16b98168ca",
+      "nurse_id": "d9e98696-b718-4bb3-ae1f-4f72bba112b4",
+      "section_id": "52474914-9a41-46f3-ba79-8f11033d993e",
+      "unit_id": "unit-1",
+      "month": 12,
+      "year": 2026,
+      "created_at": "2026-01-01T22:53:40.470Z"
+    },
+    {
+      "id": "688bca6e-934e-40d9-a960-d2ca271353cc",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "49c317d3-7077-4d0c-a766-14a3c538be23",
+      "unit_id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
+      "month": 5,
+      "year": 2027,
+      "created_at": "2026-01-01T22:54:51.618Z"
+    },
+    {
+      "id": "96c1300c-1c6e-413f-8c1c-d824261b9370",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "49c317d3-7077-4d0c-a766-14a3c538be23",
+      "unit_id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
+      "month": 6,
+      "year": 2027,
+      "created_at": "2026-01-01T22:54:51.618Z"
+    },
+    {
+      "id": "19abecad-56a3-48ec-a9fe-ef1880337653",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "49c317d3-7077-4d0c-a766-14a3c538be23",
+      "unit_id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
+      "month": 7,
+      "year": 2027,
+      "created_at": "2026-01-01T22:54:51.618Z"
+    },
+    {
+      "id": "6536647b-5bf5-42b6-b420-460a58f55af7",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "49c317d3-7077-4d0c-a766-14a3c538be23",
+      "unit_id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
+      "month": 8,
+      "year": 2027,
+      "created_at": "2026-01-01T22:54:51.618Z"
+    },
+    {
+      "id": "d3c4b5d6-2259-4ee5-9347-ce03f59028fb",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "49c317d3-7077-4d0c-a766-14a3c538be23",
+      "unit_id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
+      "month": 9,
+      "year": 2027,
+      "created_at": "2026-01-01T22:54:51.618Z"
+    },
+    {
+      "id": "6fe5d395-c5d1-4c50-be6d-5b91b342316c",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "49c317d3-7077-4d0c-a766-14a3c538be23",
+      "unit_id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
+      "month": 10,
+      "year": 2027,
+      "created_at": "2026-01-01T22:54:51.618Z"
+    },
+    {
+      "id": "86473b3e-65c5-449e-8242-4ac4a092aaec",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "49c317d3-7077-4d0c-a766-14a3c538be23",
+      "unit_id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
+      "month": 11,
+      "year": 2027,
+      "created_at": "2026-01-01T22:54:51.618Z"
+    },
+    {
+      "id": "9d811c2f-cbbd-41e1-b1ce-75173722084d",
+      "nurse_id": "fbd7a2dd-fa42-4af2-ab72-34e7c94c9785",
+      "section_id": "49c317d3-7077-4d0c-a766-14a3c538be23",
+      "unit_id": "ba008c95-8834-4f9b-8c9b-458a0f3f2a51",
+      "month": 12,
+      "year": 2027,
+      "created_at": "2026-01-01T22:54:51.618Z"
+    },
+    {
+      "id": "aff42f63-a615-45d5-805f-000e22ca98f8",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 1,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "e2dd7433-abd9-4156-a25e-01bdcb94727e",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 4,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "d90b3769-2773-4d97-8f07-f1c1571f0143",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 5,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "6c6bc7c5-6f2f-42e1-81c4-aa8b57a66c58",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 6,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "a46cb65f-29b5-4183-83ac-15cc2c772da9",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 7,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "2a3d2b31-0257-4a46-8fc4-e476d323c880",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 8,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "2b5aebd7-604d-462f-a083-d457dfc9c66a",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 9,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "b4d920c8-fb43-4b65-956f-6a7a183681f7",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 10,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "c03764a5-456b-41a9-bbd1-8e05c2fcd01d",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 11,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
+    },
+    {
+      "id": "d0884fbb-9feb-4c0e-a3a5-7c2e82ec7307",
+      "nurse_id": "8a2e6a32-d575-46c1-9774-c0e27c8a21e3",
+      "section_id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
+      "unit_id": "unit-1",
+      "month": 12,
+      "year": 2026,
+      "created_at": "2026-01-01T22:58:44.055Z"
     }
   ]
 }

@@ -184,6 +184,39 @@ export async function getMonthlyScheduleData(month: number, year: number) {
     if (isLocalMode()) {
       const db = readDb()
       
+      // Initialize monthly_rosters if missing
+      if (!db.monthly_rosters) db.monthly_rosters = []
+
+      // AUTO-MIGRATION: If roster is empty for this month/year, and it's Jan 2026 (or generally if roster is empty but nurses exist with static assignments), 
+      // populate it to preserve existing view.
+      const rosterForMonth = db.monthly_rosters.filter(r => r.month === month && r.year === year)
+      
+      if (rosterForMonth.length === 0 && db.nurses.length > 0) {
+          // Check if we should migrate. Only if this is the first time usage or specific month.
+          // For safety, let's migrate if *no* rosters exist at all (first run after update)
+          const totalRosters = db.monthly_rosters.length
+          if (totalRosters === 0) {
+              console.log('Migrating static assignments to monthly roster...')
+              db.nurses.forEach(n => {
+                  if (n.section_id) {
+                      db.monthly_rosters.push({
+                          id: randomUUID(),
+                          nurse_id: n.id,
+                          section_id: n.section_id,
+                          unit_id: n.unit_id || null,
+                          month: month,
+                          year: year,
+                          created_at: new Date().toISOString()
+                      })
+                  }
+              })
+              writeDb(db)
+          }
+      }
+
+      // Re-read roster after potential migration
+      const finalRoster = db.monthly_rosters.filter(r => r.month === month && r.year === year)
+      
       // Filter shifts
       const shifts = db.shifts.filter(s => s.shift_date >= startDate && s.shift_date <= endDate)
       
@@ -195,6 +228,7 @@ export async function getMonthlyScheduleData(month: number, year: number) {
 
       return {
         nurses: db.nurses || [],
+        roster: finalRoster || [],
         shifts: shifts || [],
         timeOffs: timeOffs || [],
         sections: db.schedule_sections || [],
@@ -211,6 +245,18 @@ export async function getMonthlyScheduleData(month: number, year: number) {
     const { data: nurses, error: nursesError } = await supabase.from('nurses').select('*').order('name')
     if (nursesError) console.error('Error fetching nurses:', nursesError)
     
+    // Fetch Roster
+    // Note: If table doesn't exist, this might fail. We assume migration applied.
+    const { data: roster, error: rosterError } = await supabase
+        .from('monthly_rosters')
+        .select('*')
+        .eq('month', month)
+        .eq('year', year)
+    
+    if (rosterError && rosterError.code !== 'PGRST116') { // Ignore if table missing (simulated)
+         console.error('Error fetching roster:', rosterError)
+    }
+
     const { data: shifts, error: shiftsError } = await supabase
       .from('schedules')
       .select('*')
@@ -227,6 +273,7 @@ export async function getMonthlyScheduleData(month: number, year: number) {
 
     return {
       nurses: nurses || [],
+      roster: roster || [],
       shifts: shifts || [],
       timeOffs: timeOffs || [],
       sections: sections || [],
@@ -237,12 +284,153 @@ export async function getMonthlyScheduleData(month: number, year: number) {
     // Return empty structure to prevent page crash
     return {
       nurses: [],
+      roster: [],
       shifts: [],
       timeOffs: [],
       sections: [],
       units: []
     }
   }
+}
+
+export async function assignNurseToRoster(nurseId: string, sectionId: string, unitId: string | null, month: number, year: number) {
+  // Propagate to future months of the current year
+  const monthsToUpdate = []
+  for (let m = month; m <= 12; m++) {
+    monthsToUpdate.push(m)
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    if (!db.monthly_rosters) db.monthly_rosters = []
+    
+    monthsToUpdate.forEach(m => {
+        // Check if already in roster for this month (update or insert)
+        const existingIndex = db.monthly_rosters.findIndex(r => r.nurse_id === nurseId && r.month === m && r.year === year)
+        
+        if (existingIndex !== -1) {
+          db.monthly_rosters[existingIndex].section_id = sectionId
+          db.monthly_rosters[existingIndex].unit_id = unitId
+        } else {
+          db.monthly_rosters.push({
+            id: randomUUID(),
+            nurse_id: nurseId,
+            section_id: sectionId,
+            unit_id: unitId,
+            month: m,
+            year,
+            created_at: new Date().toISOString()
+          })
+        }
+    })
+
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  
+  const upserts = monthsToUpdate.map(m => ({
+    nurse_id: nurseId, 
+    section_id: sectionId, 
+    unit_id: unitId, 
+    month: m, 
+    year 
+  }))
+
+  const { error } = await supabase
+    .from('monthly_rosters')
+    .upsert(upserts, { onConflict: 'nurse_id, month, year' })
+
+  if (error) return { success: false, message: error.message }
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function removeNurseFromRoster(nurseId: string, month: number, year: number) {
+  if (isLocalMode()) {
+    const db = readDb()
+    if (db.monthly_rosters) {
+        // Remove from current month AND future months of the same year
+        db.monthly_rosters = db.monthly_rosters.filter(r => !(r.nurse_id === nurseId && r.year === year && r.month >= month))
+        writeDb(db)
+    }
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('monthly_rosters')
+    .delete()
+    .eq('nurse_id', nurseId)
+    .eq('year', year)
+    .gte('month', month)
+
+  if (error) return { success: false, message: error.message }
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number, targetMonth: number, targetYear: number, unitId?: string) {
+  if (isLocalMode()) {
+    const db = readDb()
+    if (!db.monthly_rosters) db.monthly_rosters = []
+
+    const sourceRoster = db.monthly_rosters.filter(r => r.month === sourceMonth && r.year === sourceYear && (!unitId || r.unit_id === unitId))
+    
+    let addedCount = 0
+    sourceRoster.forEach(item => {
+        // Check if exists in target
+        const exists = db.monthly_rosters.some(r => r.nurse_id === item.nurse_id && r.month === targetMonth && r.year === targetYear)
+        if (!exists) {
+            db.monthly_rosters.push({
+                id: randomUUID(),
+                nurse_id: item.nurse_id,
+                section_id: item.section_id,
+                unit_id: item.unit_id,
+                month: targetMonth,
+                year: targetYear,
+                created_at: new Date().toISOString()
+            })
+            addedCount++
+        }
+    })
+    
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true, message: `${addedCount} servidores copiados.` }
+  }
+
+  const supabase = createClient()
+  
+  // Fetch source
+  let query = supabase.from('monthly_rosters').select('*').eq('month', sourceMonth).eq('year', sourceYear)
+  if (unitId) query = query.eq('unit_id', unitId)
+  
+  const { data: sourceRoster, error: fetchError } = await query
+  
+  if (fetchError) return { success: false, message: fetchError.message }
+  if (!sourceRoster || sourceRoster.length === 0) return { success: true, message: 'Nenhum servidor encontrado no mês de origem.' }
+
+  const toInsert = sourceRoster.map(item => ({
+      nurse_id: item.nurse_id,
+      section_id: item.section_id,
+      unit_id: item.unit_id,
+      month: targetMonth,
+      year: targetYear
+  }))
+
+  // Insert ignoring duplicates (onConflict do nothing)
+  const { error: insertError } = await supabase
+    .from('monthly_rosters')
+    .upsert(toInsert, { onConflict: 'nurse_id, month, year', ignoreDuplicates: true })
+
+  if (insertError) return { success: false, message: insertError.message }
+  
+  revalidatePath('/')
+  return { success: true, message: 'Cópia realizada com sucesso.' }
 }
 
 export async function logout() {

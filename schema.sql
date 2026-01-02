@@ -10,12 +10,12 @@ create table if not exists nurses (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Tabela de Escalas
+-- Tabela de Escalas (Turnos Diários)
 create table if not exists schedules (
   id uuid default gen_random_uuid() primary key,
   nurse_id uuid references nurses(id) not null,
   shift_date date not null,
-  shift_type text check (shift_type in ('day', 'night', 'morning', 'afternoon')) not null, -- Pode ser expandido para outros códigos
+  shift_type text check (shift_type in ('day', 'night', 'morning', 'afternoon')) not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -46,7 +46,20 @@ create table if not exists units (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Adicionar coluna section_id em nurses se não existir
+-- Tabela de Lotação Mensal (Monthly Roster)
+-- Define quais enfermeiros estão em qual setor/seção num mês específico
+create table if not exists monthly_rosters (
+  id uuid default gen_random_uuid() primary key,
+  nurse_id uuid references nurses(id) not null,
+  unit_id uuid references units(id),
+  section_id uuid references schedule_sections(id) not null,
+  month integer not null,
+  year integer not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(nurse_id, month, year) -- Um enfermeiro só pode estar em um lugar por mês (regra simplificada)
+);
+
+-- Adicionar colunas legadas em nurses (mantidas para compatibilidade ou default)
 do $$
 begin
     if not exists (select 1 from information_schema.columns where table_name = 'nurses' and column_name = 'section_id') then
@@ -93,18 +106,9 @@ insert into units (title)
 select 'POSTO 2'
 where not exists (select 1 from units where title = 'POSTO 2');
 
--- Atualizar enfermeiros existentes para a seção correta
+-- Atualizar enfermeiros existentes para a seção correta (apenas defaults)
 update nurses set section_id = (select id from schedule_sections where title = 'ENFERMEIROS')
 where role = 'ENFERMEIRO' and section_id is null;
 
 update nurses set section_id = (select id from schedule_sections where title = 'TÉCNICOS DE ENFERMAGEM')
 where role = 'TECNICO' and section_id is null;
-
--- Inserir usuários de teste (se necessário)
-insert into nurses (name, cpf, password, role, section_id)
-select 'Maria Silva', '111.111.111-11', '123456', 'ENFERMEIRO', (select id from schedule_sections where title = 'ENFERMEIROS')
-where not exists (select 1 from nurses where cpf = '111.111.111-11');
-
-insert into nurses (name, cpf, password, role, section_id)
-select 'João Santos', '222.222.222-22', '123456', 'TECNICO', (select id from schedule_sections where title = 'TÉCNICOS DE ENFERMAGEM')
-where not exists (select 1 from nurses where cpf = '222.222.222-22');
