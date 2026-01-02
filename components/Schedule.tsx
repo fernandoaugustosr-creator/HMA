@@ -86,8 +86,6 @@ export default function Schedule() {
   const [limitShifts, setLimitShifts] = useState<string>('')
   const [deleteWholeMonth, setDeleteWholeMonth] = useState(false)
 
-  const [visibleSectionIds, setVisibleSectionIds] = useState<string[]>([])
-
   useEffect(() => {
     fetchData()
   }, [selectedMonth, selectedYear])
@@ -100,17 +98,21 @@ export default function Schedule() {
       setManuallyAddedSections([])
   }, [selectedUnitId, selectedMonth, selectedYear])
 
-  const visibleSections = React.useMemo(() => {
-      const rosterSections = new Set<string>()
+  const rosterSections = React.useMemo(() => {
+      const sections = new Set<string>()
       if (data.roster) {
           data.roster.forEach(r => {
               if ((!selectedUnitId || r.unit_id === selectedUnitId) && r.month === selectedMonth + 1 && r.year === selectedYear) {
-                  rosterSections.add(r.section_id)
+                  sections.add(r.section_id)
               }
           })
       }
+      return sections
+  }, [data.roster, selectedUnitId, selectedMonth, selectedYear])
+
+  const visibleSections = React.useMemo(() => {
       return data.sections.filter(s => rosterSections.has(s.id) || manuallyAddedSections.includes(s.id))
-  }, [data.roster, data.sections, selectedUnitId, selectedMonth, selectedYear, manuallyAddedSections])
+  }, [data.sections, rosterSections, manuallyAddedSections])
 
   async function fetchData() {
     setLoading(true)
@@ -406,25 +408,53 @@ export default function Schedule() {
     }
   }
 
-  const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
-  const daysArray = Array.from({ length: daysInMonth }, (_, i) => {
+  const daysInMonth = React.useMemo(() => new Date(selectedYear, selectedMonth + 1, 0).getDate(), [selectedYear, selectedMonth])
+  const daysArray = React.useMemo(() => Array.from({ length: daysInMonth }, (_, i) => {
     const date = new Date(selectedYear, selectedMonth, i + 1)
     return {
       day: i + 1,
       weekday: date.toLocaleDateString('pt-BR', { weekday: 'narrow' }).toUpperCase(),
       isWeekend: date.getDay() === 0 || date.getDay() === 6
     }
-  })
+  }), [daysInMonth, selectedYear, selectedMonth])
+
+  // Optimize roster lookup for O(1) access
+  const rosterLookup = React.useMemo(() => {
+      const lookup: Record<string, any> = {}
+      if (data.roster) {
+          data.roster.forEach(r => {
+              if (r.month === selectedMonth + 1 && r.year === selectedYear) {
+                  lookup[r.nurse_id] = r
+              }
+          })
+      }
+      return lookup
+  }, [data.roster, selectedMonth, selectedYear])
 
   const activeNurses = React.useMemo(() => {
       return data.nurses.map(nurse => {
-          const rosterEntry = data.roster?.find(r => r.nurse_id === nurse.id && r.month === selectedMonth + 1 && r.year === selectedYear)
+          const rosterEntry = rosterLookup[nurse.id]
           if (rosterEntry) {
               return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id }
           }
           return nurse
       })
-  }, [data.nurses, data.roster, selectedMonth, selectedYear])
+  }, [data.nurses, rosterLookup])
+
+  // Optimize: Pre-sort nurses to avoid sorting on every render in the dropdown
+  const sortedActiveNurses = React.useMemo(() => {
+      return [...activeNurses].sort((a, b) => a.name.localeCompare(b.name))
+  }, [activeNurses])
+
+  // Optimize: Group nurses by section to avoid filtering on every render
+  const nursesBySection = React.useMemo(() => {
+      const grouped: Record<string, Nurse[]> = {}
+      activeNurses.forEach(n => {
+          if (!grouped[n.section_id]) grouped[n.section_id] = []
+          grouped[n.section_id].push(n)
+      })
+      return grouped
+  }, [activeNurses])
 
   // Optimize data access with lookups
   const shiftsLookup = React.useMemo(() => {
@@ -571,8 +601,7 @@ export default function Schedule() {
                 value=""
              >
                 <option value="" disabled>+ Adicionar Profissional...</option>
-                {activeNurses
-                    .sort((a, b) => a.name.localeCompare(b.name))
+                {sortedActiveNurses
                     .map(nurse => {
                         const isInCurrentContext = nurse.section_id === section.id && (!selectedUnitId || nurse.unit_id === selectedUnitId);
                         
@@ -822,7 +851,10 @@ export default function Schedule() {
                             </tr>
                         </thead>
                         <tbody>
-                            {renderGrid(activeNurses.filter(n => n.section_id === section.id && (!selectedUnitId || n.unit_id === selectedUnitId)), section)}
+                            {renderGrid(
+                                (nursesBySection[section.id] || []).filter(n => !selectedUnitId || n.unit_id === selectedUnitId),
+                                section
+                            )}
                         </tbody>
                     </table>
                  </div>
@@ -832,15 +864,15 @@ export default function Schedule() {
              <div className="mb-8 p-4 border border-dashed border-gray-400 rounded bg-gray-50 text-center no-print">
                  <p className="text-sm text-gray-600 mb-2">Adicionar grupo à escala deste setor:</p>
                  <select 
-                     className="border border-blue-300 text-blue-600 rounded px-2 py-1 text-sm bg-white"
-                     onChange={(e) => {
-                         if (e.target.value) {
-                             setManuallyAddedSections(prev => [...prev, e.target.value])
-                             e.target.value = "" // Reset select
+                    className="border border-blue-300 text-blue-600 rounded px-2 py-1 text-sm bg-white"
+                    onChange={(e) => {
+                         const val = e.target.value
+                         if (val) {
+                             setManuallyAddedSections(prev => prev.includes(val) ? prev : [...prev, val])
                          }
                      }}
-                     defaultValue=""
-                 >
+                    value=""
+                >
                      <option value="" disabled>+ Selecionar Grupo...</option>
                      {data.sections
                         .filter(s => !visibleSections.find(vs => vs.id === s.id))

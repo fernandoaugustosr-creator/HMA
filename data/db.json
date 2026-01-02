@@ -245,18 +245,7 @@
       "updated_at": "2026-01-01T23:22:13.973Z"
     }
   ],
-  "time_off_requests": [
-    {
-      "id": "79b14ba7-9377-47b1-8993-a7bab1171389",
-      "nurse_id": "534b050e-3c1d-45cb-9488-17816efa1558",
-      "start_date": "2026-01-01",
-      "end_date": "2026-01-31",
-      "reason": "Férias programadas",
-      "type": "ferias",
-      "status": "approved",
-      "created_at": "2026-01-01T20:42:49.816Z"
-    }
-  ],
+  "time_off_requests": [],
   "schedule_sections": [
     {
       "id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
