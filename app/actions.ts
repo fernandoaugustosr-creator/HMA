@@ -560,6 +560,64 @@ export async function deleteNurse(id: string) {
   return { success: true, message: 'Servidor removido com sucesso' }
 }
 
+export async function updateNurse(id: string, prevState: any, formData: FormData) {
+  const name = formData.get('name') as string
+  const cpf = formData.get('cpf') as string
+  const coren = formData.get('coren') as string
+  const vinculo = formData.get('vinculo') as string
+  const role = formData.get('role') as string
+  const sectionId = formData.get('sectionId') as string
+  const unitId = formData.get('unitId') as string
+
+  if (!name) return { success: false, message: 'Nome é obrigatório' }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const nurse = db.nurses.find(n => n.id === id)
+    if (!nurse) return { success: false, message: 'Servidor não encontrado (Local)' }
+
+    // Check duplicate CPF only if changed
+    if (cpf && cpf !== nurse.cpf && db.nurses.some(n => n.cpf === cpf)) {
+        return { success: false, message: 'CPF já cadastrado' }
+    }
+
+    nurse.name = name
+    if (cpf) nurse.cpf = cpf
+    nurse.coren = coren
+    nurse.vinculo = vinculo
+    nurse.role = role
+    
+    // Only update location if provided (optional)
+    if (sectionId) nurse.section_id = sectionId
+    if (unitId) nurse.unit_id = unitId
+
+    writeDb(db)
+    revalidatePath('/')
+    revalidatePath('/servidores')
+    return { success: true, message: 'Servidor atualizado com sucesso (Local)' }
+  }
+
+  const supabase = createClient()
+  
+  const updateData: any = {
+      name,
+      coren,
+      vinculo,
+      role
+  }
+  if (cpf) updateData.cpf = cpf
+  if (sectionId) updateData.section_id = sectionId
+  if (unitId) updateData.unit_id = unitId
+
+  const { error } = await supabase.from('nurses').update(updateData).eq('id', id)
+
+  if (error) return { success: false, message: 'Erro ao atualizar: ' + error.message }
+  
+  revalidatePath('/')
+  revalidatePath('/servidores')
+  return { success: true, message: 'Servidor atualizado com sucesso' }
+}
+
 export async function reassignNurse(oldId: string, newId: string) {
   if (isLocalMode()) {
     const db = readDb()

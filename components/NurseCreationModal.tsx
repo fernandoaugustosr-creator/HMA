@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { createNurse } from '@/app/actions'
+import { useState, useEffect } from 'react'
+import { createNurse, updateNurse } from '@/app/actions'
 
 interface NurseCreationModalProps {
   isOpen: boolean
@@ -10,9 +10,10 @@ interface NurseCreationModalProps {
   defaultRole?: string
   defaultSectionId?: string
   defaultUnitId?: string
+  nurseToEdit?: any
 }
 
-export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId, defaultUnitId }: NurseCreationModalProps) {
+export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId, defaultUnitId, nurseToEdit }: NurseCreationModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,13 +36,18 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
         formData.set('unitId', defaultUnitId)
     }
 
-    const result = await createNurse(null, formData)
+    let result
+    if (nurseToEdit) {
+        result = await updateNurse(nurseToEdit.id, null, formData)
+    } else {
+        result = await createNurse(null, formData)
+    }
 
     if (result.success) {
       onSuccess()
       onClose()
     } else {
-      setError(result.message || 'Erro ao criar servidor')
+      setError(result.message || 'Erro ao salvar servidor')
     }
     setLoading(false)
   }
@@ -49,7 +55,9 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4 text-black">Adicionar Novo Profissional</h2>
+        <h2 className="text-xl font-bold mb-4 text-black">
+            {nurseToEdit ? 'Editar Profissional' : 'Adicionar Novo Profissional'}
+        </h2>
         
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">
@@ -63,6 +71,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
             <input 
               type="text" 
               name="name" 
+              defaultValue={nurseToEdit?.name}
               required 
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
             />
@@ -74,12 +83,17 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                 <input 
                 type="text" 
                 name="coren" 
+                defaultValue={nurseToEdit?.coren}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 />
             </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700">Vínculo</label>
-                <select name="vinculo" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black">
+                <select 
+                    name="vinculo" 
+                    defaultValue={nurseToEdit?.vinculo}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                >
                     <option value="CONCURSO">CONCURSO</option>
                     <option value="SELETIVO">SELETIVO</option>
                     <option value="COOPERATIVA">COOPERATIVA</option>
@@ -91,7 +105,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
             <label className="block text-sm font-medium text-gray-700">Cargo</label>
             <select 
                 name="role" 
-                defaultValue={defaultRole}
+                defaultValue={nurseToEdit?.role || defaultRole}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
             >
                 <option value="ENFERMEIRO">ENFERMEIRO</option>
@@ -104,6 +118,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
             <input 
               type="text" 
               name="cpf" 
+              defaultValue={nurseToEdit?.cpf}
               placeholder="Apenas números"
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
             />
