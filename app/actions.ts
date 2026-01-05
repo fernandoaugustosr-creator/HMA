@@ -545,6 +545,9 @@ export async function deleteNurse(id: string) {
     db.nurses = db.nurses.filter(n => n.id !== id)
     db.shifts = db.shifts.filter(s => s.nurse_id !== id)
     db.time_off_requests = db.time_off_requests.filter(t => t.nurse_id !== id)
+    if (db.monthly_rosters) {
+        db.monthly_rosters = db.monthly_rosters.filter(r => r.nurse_id !== id)
+    }
     writeDb(db)
     revalidatePath('/')
     return { success: true, message: 'Servidor removido com sucesso (Local)' }
@@ -553,6 +556,8 @@ export async function deleteNurse(id: string) {
   const supabase = createClient()
   await supabase.from('schedules').delete().eq('nurse_id', id)
   await supabase.from('time_off_requests').delete().eq('nurse_id', id)
+  await supabase.from('monthly_rosters').delete().eq('nurse_id', id)
+  
   const { error } = await supabase.from('nurses').delete().eq('id', id)
 
   if (error) return { success: false, message: 'Erro ao remover servidor: ' + error.message }
