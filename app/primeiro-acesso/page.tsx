@@ -2,7 +2,7 @@
 
 import { useFormState } from 'react-dom'
 import { checkCpf, updateRegistration } from './actions'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
 const initialState = {
@@ -20,9 +20,11 @@ export default function PrimeiroAcessoPage() {
   const [updateState, updateAction] = useFormState(updateRegistration, initialState)
 
   // Avança para o passo 2 se o CPF for encontrado
-  if (step === 1 && checkState?.success) {
-    setStep(2)
-  }
+  useEffect(() => {
+    if (step === 1 && checkState?.success) {
+      setStep(2)
+    }
+  }, [step, checkState])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
