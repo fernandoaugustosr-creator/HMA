@@ -10,6 +10,7 @@ const initialState = {
   message: '',
   cpf: '',
   name: '',
+  coren: '',
   id: ''
 }
 
@@ -28,12 +29,12 @@ export default function PrimeiroAcessoPage() {
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-md">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            {step === 1 ? 'Primeiro Acesso' : 'Atualização Cadastral'}
+            {step === 1 ? 'Primeiro Acesso' : 'Completar Cadastro'}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             {step === 1 
               ? 'Informe seu CPF para localizar seu cadastro' 
-              : `Olá, ${checkState?.name || 'Enfermeiro(a)'}. Defina sua senha de acesso.`}
+              : `Olá, ${checkState?.name || 'Enfermeiro(a)'}. Confirme seus dados e defina sua senha.`}
           </p>
         </div>
 
@@ -83,6 +84,34 @@ export default function PrimeiroAcessoPage() {
                 <input type="hidden" name="id" value={checkState?.id || ''} />
                 
                 <div className="rounded-md shadow-sm space-y-4">
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                      Nome Completo
+                    </label>
+                    <input
+                      id="name"
+                      name="name"
+                      type="text"
+                      defaultValue={checkState?.name || ''}
+                      required
+                      className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-black bg-white rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="coren" className="block text-sm font-medium text-gray-700">
+                      COREN
+                    </label>
+                    <input
+                      id="coren"
+                      name="coren"
+                      type="text"
+                      defaultValue={checkState?.coren || ''}
+                      required
+                      className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-black bg-white rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    />
+                  </div>
+
                   <div>
                     <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                       Nova Senha
