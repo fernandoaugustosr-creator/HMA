@@ -1,8 +1,27 @@
 {
-  "nurses": [],
+  "nurses": [
+    {
+      "id": "mock-admin",
+      "name": "Administrador",
+      "cpf": "02170025367",
+      "password": "123456",
+      "coren": "000000",
+      "vinculo": "Estatutário",
+      "role": "ENFERMEIRO",
+      "section_id": "sec-enfermeiros",
+      "unit_id": "unit-1",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    }
+  ],
   "shifts": [],
   "time_off_requests": [],
   "schedule_sections": [
+    {
+      "id": "sec-enfermeiros",
+      "title": "ENFERMEIROS",
+      "position": 1,
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
     {
       "id": "6e0b0b8c-b41b-4101-9980-0314c8b1a4aa",
       "title": "TÉCNICOS DE ENFERMAGEM",

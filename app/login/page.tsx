@@ -65,6 +65,14 @@ export default function LoginPage() {
               Entrar
             </button>
           </div>
+          <div className="text-center mt-4">
+            <a
+              href="/primeiro-acesso"
+              className="font-medium text-indigo-600 hover:text-indigo-500"
+            >
+              Primeiro Acesso / Atualização Cadastral
+            </a>
+          </div>
         </form>
       </div>
     </div>
