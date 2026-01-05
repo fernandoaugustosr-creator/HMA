@@ -5,15 +5,19 @@ import { isLocalMode, readDb, writeDb } from '@/lib/local-db'
 import { revalidatePath } from 'next/cache'
 
 export async function checkCpf(prevState: any, formData: FormData) {
-  const cpf = formData.get('cpf') as string
+  const rawCpf = formData.get('cpf') as string
 
-  if (!cpf) {
+  if (!rawCpf) {
     return { success: false, message: 'CPF é obrigatório' }
   }
 
+  // Remove caracteres não numéricos para comparação
+  const cleanCpf = rawCpf.replace(/\D/g, '')
+
   if (isLocalMode()) {
     const db = readDb()
-    const nurse = db.nurses.find(n => n.cpf === cpf)
+    // Compara apenas os números do CPF
+    const nurse = db.nurses.find(n => n.cpf.replace(/\D/g, '') === cleanCpf)
 
     if (!nurse) {
       return { success: false, message: 'CPF não encontrado no sistema' }
@@ -23,13 +27,42 @@ export async function checkCpf(prevState: any, formData: FormData) {
   }
 
   const supabase = createClient()
-  const { data: nurse, error } = await supabase
+  // Tenta buscar exato primeiro (caso esteja salvo formatado) ou faz busca manual se precisar
+  // Supabase não tem replace direto no select simples, então buscamos e filtramos ou assumimos padronização.
+  // Idealmente o banco teria CPFs limpos. Vamos tentar buscar direto o cleanCpf ou o rawCpf.
+  // Como não sabemos como está no banco, vamos tentar buscar ambas as formas ou usar uma function RPC se existisse.
+  // Simplificação: Assumindo que no Supabase pode estar limpo ou formatado igual o input.
+  
+  // Estratégia melhor: Trazer enfermeiros e filtrar no código (se forem poucos) ou tentar match exato.
+  // Para produção com muitos dados, o ideal é ter coluna cpf_clean.
+  // Vamos tentar buscar match exato com o que o usuário digitou, e se falhar, tentar o limpo.
+  
+  let { data: nurse, error } = await supabase
     .from('nurses')
     .select('id, name, cpf, coren')
-    .eq('cpf', cpf)
+    .eq('cpf', rawCpf)
     .single()
 
-  if (error || !nurse) {
+  if (!nurse) {
+     // Tenta buscar pelo limpo
+     const { data: nurseClean } = await supabase
+      .from('nurses')
+      .select('id, name, cpf, coren')
+      .eq('cpf', cleanCpf)
+      .single()
+     nurse = nurseClean
+  }
+  
+  // Se ainda não achou, e se estivermos lidando com banco inconsistente, última tentativa:
+  // (Isso é pesado se tiver muitos registros, use com cautela)
+  if (!nurse) {
+      const { data: allNurses } = await supabase.from('nurses').select('id, name, cpf, coren')
+      if (allNurses) {
+          nurse = allNurses.find(n => n.cpf.replace(/\D/g, '') === cleanCpf)
+      }
+  }
+
+  if (!nurse) {
     return { success: false, message: 'CPF não encontrado no sistema' }
   }
 

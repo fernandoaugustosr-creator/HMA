@@ -54,3 +54,8 @@ export function writeDb(data: DB) {
     console.error('Error writing DB:', error)
   }
 }
+
+export function isLocalMode() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  return !supabaseUrl || supabaseUrl.includes('sua_url')
+}
