@@ -8,7 +8,7 @@ export async function checkCpf(prevState: any, formData: FormData) {
   const rawCpf = formData.get('cpf') as string
 
   if (!rawCpf) {
-    return { success: false, message: 'CPF é obrigatório' }
+    return { success: false, message: 'CPF é obrigatório', cpf: '', name: '', id: '', coren: '' }
   }
 
   // Remove caracteres não numéricos para comparação
@@ -20,10 +20,10 @@ export async function checkCpf(prevState: any, formData: FormData) {
     const nurse = db.nurses.find(n => n.cpf.replace(/\D/g, '') === cleanCpf)
 
     if (!nurse) {
-      return { success: false, message: 'CPF não encontrado no sistema' }
+      return { success: false, message: 'CPF não encontrado no sistema', cpf: '', name: '', id: '', coren: '' }
     }
 
-    return { success: true, cpf: nurse.cpf, name: nurse.name, id: nurse.id, coren: nurse.coren }
+    return { success: true, message: '', cpf: nurse.cpf, name: nurse.name, id: nurse.id, coren: nurse.coren }
   }
 
   const supabase = createClient()
@@ -63,10 +63,10 @@ export async function checkCpf(prevState: any, formData: FormData) {
   }
 
   if (!nurse) {
-    return { success: false, message: 'CPF não encontrado no sistema' }
+    return { success: false, message: 'CPF não encontrado no sistema', cpf: '', name: '', id: '', coren: '' }
   }
 
-  return { success: true, cpf: nurse.cpf, name: nurse.name, id: nurse.id, coren: nurse.coren }
+  return { success: true, message: '', cpf: nurse.cpf, name: nurse.name, id: nurse.id, coren: nurse.coren }
 }
 
 export async function updateRegistration(prevState: any, formData: FormData) {

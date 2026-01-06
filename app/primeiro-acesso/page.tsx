@@ -13,9 +13,14 @@ const initialState = {
   id: ''
 }
 
+const initialUpdateState = {
+  success: false,
+  message: ''
+}
+
 export default function PrimeiroAcessoPage() {
   const [checkState, checkAction] = useFormState(checkCpf, initialState)
-  const [updateState, updateAction] = useFormState(updateRegistration, initialState)
+  const [updateState, updateAction] = useFormState(updateRegistration, initialUpdateState)
 
   const isStep2 = checkState?.success
   const isFinished = updateState?.success
