@@ -1,14 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { readDb, writeDb } from '@/lib/local-db'
+import { readDb, writeDb, isLocalMode } from '@/lib/local-db'
 import { createClient } from '@/lib/supabase'
 import { randomUUID } from 'crypto'
-
-function isLocalMode() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  return !supabaseUrl || supabaseUrl.includes('sua_url')
-}
 
 export async function addUnit(title: string) {
   if (isLocalMode()) {

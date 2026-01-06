@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase'
-import { readDb, writeDb } from '@/lib/local-db'
+import { readDb, writeDb, isLocalMode } from '@/lib/local-db'
 import { randomUUID } from 'crypto'
 
 // Types
@@ -17,12 +17,6 @@ export interface Section {
 export interface Unit {
   id: string
   title: string
-}
-
-// Helper para verificar se usa DB Local
-function isLocalMode() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  return !supabaseUrl || supabaseUrl.includes('sua_url')
 }
 
 export async function getNurses() {
@@ -122,16 +116,18 @@ export async function createNurse(prevState: any, formData: FormData) {
 }
 
 export async function login(prevState: any, formData: FormData) {
-  const cpf = formData.get('cpf') as string
+  const rawCpf = formData.get('cpf') as string
   const password = formData.get('password') as string
 
-  if (!cpf || !password) {
+  if (!rawCpf || !password) {
     return { message: 'CPF e Senha são obrigatórios' }
   }
 
+  const cleanCpf = rawCpf.replace(/\D/g, '')
+
   if (isLocalMode()) {
     const db = readDb()
-    const nurse = db.nurses.find(n => n.cpf === cpf)
+    const nurse = db.nurses.find(n => n.cpf.replace(/\D/g, '') === cleanCpf)
 
     if (!nurse) {
       return { message: 'CPF não encontrado (Local)' }
@@ -151,11 +147,23 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   const supabase = createClient()
-  const { data: nurse, error } = await supabase
+  
+  // Tenta buscar exato primeiro
+  let { data: nurse, error } = await supabase
     .from('nurses')
     .select('*')
-    .eq('cpf', cpf)
+    .eq('cpf', rawCpf)
     .single()
+
+  if (!nurse) {
+      // Tenta buscar pelo limpo
+      const { data: nurseClean } = await supabase
+        .from('nurses')
+        .select('*')
+        .eq('cpf', cleanCpf)
+        .single()
+      nurse = nurseClean
+  }
 
   if (error || !nurse) {
     return { message: 'CPF não encontrado' }
