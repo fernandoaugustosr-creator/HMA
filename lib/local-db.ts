@@ -9,6 +9,7 @@ export function isLocalMode() {
 // Dummy implementation to satisfy build requirements since isLocalMode is false
 // These are needed because other files import them, even if the code path is unreachable
 export function readDb() {
+  // Return structure matching the expected DB schema for build time type checking
   return {
     nurses: [] as any[],
     schedule_sections: [] as any[],
