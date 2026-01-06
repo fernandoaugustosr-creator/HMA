@@ -19,6 +19,15 @@ export interface Unit {
   title: string
 }
 
+async function checkAdmin() {
+  const session = cookies().get('session_user')
+  if (!session) throw new Error('Unauthorized')
+  const user = JSON.parse(session.value)
+  const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
+  if (!isAdmin) throw new Error('Forbidden: Admin access required')
+  return user
+}
+
 export async function getNurses() {
   if (isLocalMode()) {
     const db = readDb()
@@ -31,6 +40,12 @@ export async function getNurses() {
 }
 
 export async function createNurse(prevState: any, formData: FormData) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado: Apenas administradores podem cadastrar servidores.' }
+  }
+
   const name = formData.get('name') as string
   const cpf = formData.get('cpf') as string
   const password = formData.get('password') as string || '123456'
@@ -467,6 +482,12 @@ export async function getMonthlyScheduleData(month: number, year: number) {
 }
 
 export async function assignNurseToRoster(nurseId: string, sectionId: string, unitId: string | null, month: number, year: number) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   // Only update the specific month (no propagation)
   const monthsToUpdate = [month]
 
@@ -519,6 +540,12 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
 }
 
 export async function removeNurseFromRoster(nurseId: string, month: number, year: number) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     if (db.monthly_rosters) {
@@ -544,6 +571,12 @@ export async function removeNurseFromRoster(nurseId: string, month: number, year
 }
 
 export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number, targetMonth: number, targetYear: number, unitId?: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     if (!db.monthly_rosters) db.monthly_rosters = []
@@ -658,6 +691,12 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
 }
 
 export async function assignLeave(prevState: any, formData: FormData) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   const nurseId = formData.get('nurseId') as string
   const startDate = formData.get('startDate') as string
   const endDate = formData.get('endDate') as string
@@ -710,6 +749,12 @@ export async function assignLeave(prevState: any, formData: FormData) {
 }
 
 export async function deleteNurse(id: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     db.nurses = db.nurses.filter(n => n.id !== id)
@@ -736,6 +781,12 @@ export async function deleteNurse(id: string) {
 }
 
 export async function updateNurse(id: string, prevState: any, formData: FormData) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   const name = formData.get('name') as string
   const cpf = formData.get('cpf') as string
   const coren = formData.get('coren') as string
@@ -794,6 +845,12 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
 }
 
 export async function reassignNurse(oldId: string, newId: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     db.shifts.forEach(s => { if (s.nurse_id === oldId) s.nurse_id = newId })
@@ -813,6 +870,12 @@ export async function reassignNurse(oldId: string, newId: string) {
 }
 
 export async function assignNurseToSection(nurseId: string, sectionId: string, unitId?: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   const finalUnitId = unitId === '' ? null : unitId
 
   if (isLocalMode()) {
@@ -874,6 +937,12 @@ export async function getTimeOffRequests() {
 }
 
 export async function updateTimeOffStatus(requestId: string, newStatus: 'approved' | 'rejected') {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    throw new Error('Acesso negado.')
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     const request = db.time_off_requests.find(r => r.id === requestId)
@@ -912,6 +981,12 @@ export async function deleteTimeOff(id: string) {
 // SECTION MANAGEMENT
 
 export async function addSection(title: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     db.schedule_sections.push({
@@ -933,6 +1008,12 @@ export async function addSection(title: string) {
 }
 
 export async function updateSection(id: string, title: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     const section = db.schedule_sections.find(s => s.id === id)
@@ -952,6 +1033,12 @@ export async function updateSection(id: string, title: string) {
 }
 
 export async function deleteSection(id: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     db.schedule_sections = db.schedule_sections.filter(s => s.id !== id)
@@ -972,6 +1059,12 @@ export async function deleteSection(id: string) {
 }
 
 export async function saveShifts(shifts: { nurseId: string, date: string, type: string }[]) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   console.log('saveShifts called with:', JSON.stringify(shifts, null, 2))
   
   if (!shifts || !Array.isArray(shifts) || !shifts.length) {

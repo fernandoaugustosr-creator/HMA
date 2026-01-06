@@ -45,7 +45,13 @@ export async function updateUnit(id: string, title: string) {
 }
 
 export async function deleteUnit(id: string) {
-    if (isLocalMode()) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
         const db = readDb()
         db.units = db.units.filter(u => u.id !== id)
         // Reset nurses unit_id?

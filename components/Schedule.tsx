@@ -58,7 +58,7 @@ const MONTHS = [
 
 const YEARS = [2024, 2025, 2026, 2027]
 
-export default function Schedule() {
+export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth())
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
@@ -86,12 +86,33 @@ export default function Schedule() {
   const [recurrence, setRecurrence] = useState<'none' | 'daily' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6'>('none')
   const [limitShifts, setLimitShifts] = useState<string>('')
   const [deleteWholeMonth, setDeleteWholeMonth] = useState(false)
+  
+  // Cache to store fetched data by month-year key
+  const scheduleCache = React.useRef<Record<string, ScheduleData>>({})
 
-  const fetchData = React.useCallback(async () => {
+  const clearCache = () => {
+    scheduleCache.current = {}
+  }
+
+  const fetchData = React.useCallback(async (forceRefresh = false) => {
     setLoading(true)
+    const cacheKey = `${selectedMonth}-${selectedYear}`
+
+    if (!forceRefresh && scheduleCache.current[cacheKey]) {
+        const cachedData = scheduleCache.current[cacheKey]
+        setData(cachedData)
+        if (!selectedUnitId && cachedData.units && cachedData.units.length > 0) {
+            setSelectedUnitId(cachedData.units[0].id)
+        }
+        setLoading(false)
+        return
+    }
+
     try {
       const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear)
-      setData(result as ScheduleData)
+      const newData = result as ScheduleData
+      scheduleCache.current[cacheKey] = newData
+      setData(newData)
       if (!selectedUnitId && result.units && result.units.length > 0) {
         setSelectedUnitId(result.units[0].id)
       }
@@ -148,7 +169,8 @@ export default function Schedule() {
         if (res.success) {
             setNewUnitTitle('')
             setIsAddingUnit(false)
-            await fetchData()
+            clearCache()
+            await fetchData(true)
             // Try to set the new unit as selected? 
             // Since we don't get the ID back easily without fetching, we rely on user selecting it or auto-select logic.
             // But we can rely on user selecting it from the list after reload.
@@ -178,7 +200,8 @@ export default function Schedule() {
           const res = await updateUnit(selectedUnitId, editingUnitTitle)
           if (res.success) {
               setIsEditingUnit(false)
-              await fetchData()
+              clearCache()
+              await fetchData(true)
           } else {
               alert('Erro ao atualizar setor: ' + res.message)
           }
@@ -199,7 +222,8 @@ export default function Schedule() {
           const res = await deleteUnit(selectedUnitId)
           if (res.success) {
               setSelectedUnitId('')
-              await fetchData()
+              clearCache()
+              await fetchData(true)
           } else {
               alert('Erro ao excluir setor: ' + res.message)
           }
@@ -222,7 +246,8 @@ export default function Schedule() {
     setLoading(true)
     const res = await removeNurseFromRoster(nurseId, selectedMonth + 1, selectedYear)
     if (!res.success) alert(res.message)
-    await fetchData()
+    clearCache()
+    await fetchData(true)
   }
 
   async function handleReassign(oldId: string, newId: string) {
@@ -249,7 +274,8 @@ export default function Schedule() {
     // 3. Add new (using same section and unit)
     await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear)
     
-    await fetchData()
+    clearCache()
+    await fetchData(true)
     setLoading(false)
   }
 
@@ -265,7 +291,8 @@ export default function Schedule() {
         } else {
             setNewSectionTitle('')
             setIsAddingSection(false)
-            await fetchData()
+            clearCache()
+            await fetchData(true)
         }
     } catch (error) {
         console.error(error)
@@ -279,7 +306,8 @@ export default function Schedule() {
     if (!confirm('Tem certeza que deseja remover este bloco? Os profissionais associados não serão excluídos, mas ficarão sem bloco.')) return
     setLoading(true)
     await deleteSection(id)
-    await fetchData()
+    clearCache()
+    await fetchData(true)
   }
 
   const startEditingSection = (section: Section) => {
@@ -396,7 +424,8 @@ export default function Schedule() {
         }
 
         setIsShiftModalOpen(false)
-        await fetchData()
+        clearCache()
+        await fetchData(true)
 
     } catch (error) {
         console.error("Error saving shifts:", error)
@@ -516,6 +545,7 @@ export default function Schedule() {
               <td className="border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8">{index + 1}</td>
               <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 min-w-[250px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
+                  {isAdmin && (
                   <button 
                     onClick={() => handleRemoveFromRoster(nurse.id)} 
                     className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors no-print"
@@ -523,10 +553,12 @@ export default function Schedule() {
                   >
                     <Trash2 size={12} />
                   </button>
+                  )}
                   <select 
                     value={nurse.id} 
                     onChange={(e) => handleReassign(nurse.id, e.target.value)}
-                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-black cursor-pointer outline-none uppercase"
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-black cursor-pointer outline-none uppercase disabled:cursor-default"
+                    disabled={!isAdmin}
                   >
                     {data.nurses.map(n => (
                       <option key={n.id} value={n.id}>{n.name}</option>
@@ -583,9 +615,9 @@ export default function Schedule() {
                 return (
                   <td 
                     key={day} 
-                    className={`${cellClass} cursor-pointer hover:bg-yellow-100 transition-colors`}
-                    onClick={() => handleCellClick(nurse, dateStr)}
-                    title="Clique para gerenciar plantão"
+                    className={`${cellClass} ${isAdmin ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`}
+                    onClick={isAdmin ? () => handleCellClick(nurse, dateStr) : undefined}
+                    title={isAdmin ? "Clique para gerenciar plantão" : undefined}
                   >
                     {content}
                   </td>
@@ -596,6 +628,7 @@ export default function Schedule() {
           )
         })}
         {/* Add Professional Row Placeholder */}
+        {isAdmin && (
         <tr className="no-print">
           <td className="border border-black px-1 py-1 sticky left-0 bg-white z-10"></td>
           <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black">
@@ -647,6 +680,7 @@ export default function Schedule() {
           ))}
           <td className="border border-black px-1 py-1"></td>
         </tr>
+        )}
       </>
     )
   }
@@ -683,10 +717,14 @@ export default function Schedule() {
                     {data.units.map(unit => (
                     <option key={unit.id} value={unit.id}>{unit.title}</option>
                     ))}
+                    {isAdmin && (
+                    <>
                     <option disabled>──────────</option>
                     <option value="new_unit_action">+ Adicionar novo setor...</option>
+                    </>
+                    )}
                 </select>
-                {selectedUnitId && selectedUnitId !== 'new_unit_action' && (
+                {selectedUnitId && selectedUnitId !== 'new_unit_action' && isAdmin && (
                     <div className="flex items-center">
                         <button 
                             onClick={startEditingUnit}
@@ -814,6 +852,7 @@ export default function Schedule() {
                                     ) : (
                                         <div className="flex justify-between items-center w-full">
                                             <span className="flex-1 text-center">{section.title}</span>
+                                            {isAdmin && (
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
                                                 <button 
                                                     onClick={() => startEditingSection(section)} 
@@ -830,6 +869,7 @@ export default function Schedule() {
                                                     <Trash2 size={12} />
                                                 </button>
                                             </div>
+                                            )}
                                         </div>
                                     )}
                                 </th>
@@ -865,6 +905,7 @@ export default function Schedule() {
              ))}
              
              {/* Add Section Button */}
+             {isAdmin && (
              <div className="mb-8 p-4 border border-dashed border-gray-400 rounded bg-gray-50 text-center no-print">
                  <p className="text-sm text-gray-600 mb-2">Adicionar grupo à escala deste setor:</p>
                  <select 
@@ -886,6 +927,7 @@ export default function Schedule() {
                      }
                  </select>
              </div>
+             )}
              </>
         )}
       </div>
