@@ -14,6 +14,7 @@ export function readDb() {
     schedule_sections: [] as any[],
     units: [] as any[],
     schedules: [] as any[],
+    monthly_rosters: [] as any[],
     users: [] as any[],
     settings: {} as any
   }
