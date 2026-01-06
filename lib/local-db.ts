@@ -5,3 +5,20 @@ export function isLocalMode() {
   // preventing the automatic detection from working perfectly in the UI.
   return false
 }
+
+// Dummy implementation to satisfy build requirements since isLocalMode is false
+// These are needed because other files import them, even if the code path is unreachable
+export function readDb() {
+  return {
+    nurses: [] as any[],
+    schedule_sections: [] as any[],
+    units: [] as any[],
+    schedules: [] as any[],
+    users: [] as any[],
+    settings: {} as any
+  }
+}
+
+export function writeDb(data: any) {
+  // no-op
+}
