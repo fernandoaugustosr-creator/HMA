@@ -975,6 +975,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
       />
 
       {/* Footer / Actions */}
+      {isAdmin && (
       <div className="mt-4 flex justify-end gap-2 no-print">
          {isAddingSection ? (
             <div className="flex items-center gap-2">
@@ -998,9 +999,11 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
             </button>
          )}
       </div>
+      )}
 
       {/* Footer Legends */}
       <div className="mt-8 space-y-2">
+        {isAdmin && (
         <div className="flex flex-wrap gap-2 justify-end mb-2 no-print">
             <button className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50">Editar texto do rodapé</button>
             <button 
@@ -1028,6 +1031,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
               Cessão
             </button>
         </div>
+        )}
 
         {/* Dynamic Legend List - Shows who is on leave */}
         {['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'].map(type => {
