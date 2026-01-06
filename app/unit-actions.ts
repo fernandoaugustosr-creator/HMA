@@ -4,8 +4,15 @@ import { revalidatePath } from 'next/cache'
 import { readDb, writeDb, isLocalMode } from '@/lib/local-db'
 import { createClient } from '@/lib/supabase'
 import { randomUUID } from 'crypto'
+import { checkAdmin } from '@/app/actions'
 
 export async function addUnit(title: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     db.units = db.units || []
