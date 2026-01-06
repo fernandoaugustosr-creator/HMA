@@ -267,14 +267,16 @@ export async function getUserDashboardData() {
   const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
 
   const today = new Date()
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
+  const cutoffDate = new Date(today)
+  cutoffDate.setDate(today.getDate() - 2)
+  const cutoffDateStr = cutoffDate.toISOString().split('T')[0]
   
   if (isLocalMode()) {
     const db = readDb()
     
-    // Shifts (from current month onwards)
+    // Shifts (from cutoff date onwards)
     const shifts = db.shifts
-      .filter(s => s.nurse_id === userId && s.shift_date >= startOfMonth)
+      .filter(s => s.nurse_id === userId && s.shift_date >= cutoffDateStr)
       .sort((a, b) => a.shift_date.localeCompare(b.shift_date))
 
     // Time off requests (Folgas/Trocas/Licenças)
@@ -301,8 +303,8 @@ export async function getUserDashboardData() {
     .from('shifts')
     .select('*')
     .eq('nurse_id', userId)
-    .gte('shift_date', startOfMonth)
-    .order('shift_date', { ascending: true })
+    .gte('date', cutoffDateStr)
+    .order('date', { ascending: true })
 
   // Time off
   let query = supabase
