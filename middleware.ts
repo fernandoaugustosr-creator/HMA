@@ -9,9 +9,25 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
   
-  // Se estiver logado e tentar acessar a página de login, redirecionar para home
-  if (currentUser && request.nextUrl.pathname.startsWith('/login')) {
+  // Se estiver logado
+  if (currentUser) {
+    // Se tentar acessar a página de login, redirecionar para home
+    if (request.nextUrl.pathname.startsWith('/login')) {
       return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    try {
+      const user = JSON.parse(currentUser)
+      // Se precisar trocar a senha e não estiver na página de alterar senha
+      if (user.mustChangePassword && !request.nextUrl.pathname.startsWith('/alterar-senha')) {
+        return NextResponse.redirect(new URL('/alterar-senha', request.url))
+      }
+    } catch (e) {
+      // Erro no cookie, força logout
+      const response = NextResponse.redirect(new URL('/login', request.url))
+      response.cookies.delete('session_user')
+      return response
+    }
   }
 
   return NextResponse.next()

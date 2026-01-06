@@ -1,9 +1,19 @@
 import { getNurses } from '@/app/actions'
 import NurseList from '@/components/NurseList'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ServidoresPage() {
+  const session = cookies().get('session_user')
+  const user = session ? JSON.parse(session.value) : null
+  const isAdmin = user?.role === 'ADMIN' || user?.cpf === '02170025367'
+
+  if (!isAdmin) {
+    redirect('/')
+  }
+
   const nurses = await getNurses()
 
   return (

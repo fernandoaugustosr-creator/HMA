@@ -10,7 +10,7 @@ export default async function FolgasPage() {
   
   const session = cookies().get('session_user')
   const user = session ? JSON.parse(session.value) : null
-  const isAdmin = user?.cpf === '02170025367'
+  const isAdmin = user?.role === 'ADMIN' || user?.cpf === '02170025367'
 
   const nurses = isAdmin ? await getNurses() : []
 

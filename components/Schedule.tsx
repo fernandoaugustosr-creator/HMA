@@ -15,6 +15,7 @@ interface Nurse {
   vinculo: string
   section_id?: string
   unit_id?: string
+  is_rostered?: boolean
 }
 
 interface RosterItem {
@@ -432,9 +433,9 @@ export default function Schedule() {
       return data.nurses.map(nurse => {
           const rosterEntry = rosterLookup[nurse.id]
           if (rosterEntry) {
-              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id }
+              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id, is_rostered: true }
           }
-          return nurse
+          return { ...nurse, is_rostered: false }
       })
   }, [data.nurses, rosterLookup])
 
@@ -447,8 +448,14 @@ export default function Schedule() {
   const nursesBySection = React.useMemo(() => {
       const grouped: Record<string, Nurse[]> = {}
       activeNurses.forEach(n => {
-          if (!grouped[n.section_id]) grouped[n.section_id] = []
-          grouped[n.section_id].push(n)
+          if (n.section_id && n.is_rostered) {
+              if (!grouped[n.section_id]) grouped[n.section_id] = []
+              grouped[n.section_id].push(n)
+          }
+      })
+      // Sort nurses by name in each section
+      Object.keys(grouped).forEach(key => {
+          grouped[key].sort((a, b) => a.name.localeCompare(b.name))
       })
       return grouped
   }, [activeNurses])
@@ -600,7 +607,7 @@ export default function Schedule() {
                 <option value="" disabled>+ Adicionar Profissional...</option>
                 {sortedActiveNurses
                     .map(nurse => {
-                        const isInCurrentContext = nurse.section_id === section.id && (!selectedUnitId || nurse.unit_id === selectedUnitId);
+                        const isInCurrentContext = nurse.is_rostered && nurse.section_id === section.id && (!selectedUnitId || nurse.unit_id === selectedUnitId);
                         
                         // Find location info
                         const nurseSection = data.sections.find(s => s.id === nurse.section_id)?.title

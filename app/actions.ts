@@ -76,6 +76,27 @@ export async function createNurse(prevState: any, formData: FormData) {
     }
 
     db.nurses.push(newNurse)
+
+    // Add to current month roster automatically
+    if (finalSectionId) {
+        const now = new Date()
+        const currentMonth = now.getMonth() + 1
+        const currentYear = now.getFullYear()
+        
+        // Ensure monthly_rosters exists
+        if (!db.monthly_rosters) db.monthly_rosters = []
+
+        db.monthly_rosters.push({
+            id: randomUUID(),
+            nurse_id: newNurse.id,
+            section_id: finalSectionId,
+            unit_id: unitId,
+            month: currentMonth,
+            year: currentYear,
+            created_at: new Date().toISOString()
+        })
+    }
+
     writeDb(db)
 
     revalidatePath('/')
@@ -94,7 +115,7 @@ export async function createNurse(prevState: any, formData: FormData) {
       }
   }
 
-  const { error } = await supabase.from('nurses').insert({ 
+  const { data: insertedNurse, error } = await supabase.from('nurses').insert({ 
     name, 
     cpf: finalCpf, 
     password,
@@ -103,12 +124,27 @@ export async function createNurse(prevState: any, formData: FormData) {
     role,
     section_id: finalSectionId,
     unit_id: unitId
-  })
+  }).select().single()
 
   if (error) {
     console.error('Supabase Error:', error)
     if (error.code === '23505') return { success: false, message: 'CPF já cadastrado' }
     return { success: false, message: 'Erro ao cadastrar servidor (Supabase): ' + error.message }
+  }
+
+  // Add to current month roster automatically
+  if (insertedNurse && finalSectionId) {
+      const now = new Date()
+      const currentMonth = now.getMonth() + 1
+      const currentYear = now.getFullYear()
+      
+      await supabase.from('monthly_rosters').insert({
+          nurse_id: insertedNurse.id,
+          section_id: finalSectionId,
+          unit_id: unitId,
+          month: currentMonth,
+          year: currentYear
+      })
   }
 
   revalidatePath('/')
@@ -138,12 +174,24 @@ export async function login(prevState: any, formData: FormData) {
       return { message: 'Senha incorreta (Local)' }
     }
 
-    cookies().set('session_user', JSON.stringify({ name: nurse.name, id: nurse.id, cpf: nurse.cpf }), {
+    const mustChangePassword = password === '123456'
+
+    cookies().set('session_user', JSON.stringify({ 
+      name: nurse.name, 
+      id: nurse.id, 
+      cpf: nurse.cpf,
+      role: nurse.role,
+      mustChangePassword
+    }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 7,
       path: '/',
     })
+
+    if (mustChangePassword) {
+      redirect('/alterar-senha')
+    }
     redirect('/')
   }
 
@@ -174,14 +222,91 @@ export async function login(prevState: any, formData: FormData) {
     return { message: 'Senha incorreta' }
   }
 
-  cookies().set('session_user', JSON.stringify({ name: nurse.name, id: nurse.id, cpf: nurse.cpf }), {
+  const mustChangePassword = password === '123456'
+
+  cookies().set('session_user', JSON.stringify({ 
+    name: nurse.name, 
+    id: nurse.id, 
+    cpf: nurse.cpf,
+    role: nurse.role,
+    mustChangePassword
+  }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 24 * 7,
     path: '/',
   })
 
+  if (mustChangePassword) {
+    redirect('/alterar-senha')
+  }
+
   redirect('/')
+}
+
+export async function getUserDashboardData() {
+  const session = cookies().get('session_user')
+  if (!session) return null
+  const user = JSON.parse(session.value)
+  const userId = user.id
+  const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
+
+  const today = new Date()
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
+  
+  if (isLocalMode()) {
+    const db = readDb()
+    
+    // Shifts (from current month onwards)
+    const shifts = db.shifts
+      .filter(s => s.nurse_id === userId && s.shift_date >= startOfMonth)
+      .sort((a, b) => a.shift_date.localeCompare(b.shift_date))
+
+    // Time off requests (Folgas/Trocas/Licenças)
+    let timeOffs = db.time_off_requests
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+    if (!isAdmin) {
+      timeOffs = timeOffs.filter(r => r.nurse_id === userId)
+    }
+
+    // Enrich with nurse name for admin
+    const enrichedTimeOffs = timeOffs.map(r => {
+        const nurse = db.nurses.find(n => n.id === r.nurse_id)
+        return { ...r, nurse_name: nurse ? nurse.name : 'Desconhecido' }
+    })
+
+    return { shifts, timeOffs: enrichedTimeOffs, user: { ...user, isAdmin } }
+  }
+
+  const supabase = createClient()
+  
+  // Shifts
+  const { data: shifts } = await supabase
+    .from('shifts')
+    .select('*')
+    .eq('nurse_id', userId)
+    .gte('shift_date', startOfMonth)
+    .order('shift_date', { ascending: true })
+
+  // Time off
+  let query = supabase
+    .from('time_off_requests')
+    .select('*, nurses (name)')
+    .order('created_at', { ascending: false })
+
+  if (!isAdmin) {
+    query = query.eq('nurse_id', userId)
+  }
+
+  const { data: timeOffs } = await query
+
+  const enrichedTimeOffs = timeOffs?.map(t => ({
+      ...t,
+      nurse_name: t.nurses?.name || 'Desconhecido'
+  })) || []
+
+  return { shifts: shifts || [], timeOffs: enrichedTimeOffs, user: { ...user, isAdmin } }
 }
 
 export async function getMonthlyScheduleData(month: number, year: number) {
@@ -196,31 +321,35 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       // Initialize monthly_rosters if missing
       if (!db.monthly_rosters) db.monthly_rosters = []
 
-      // AUTO-MIGRATION: If roster is empty for this month/year, and it's Jan 2026 (or generally if roster is empty but nurses exist with static assignments), 
-      // populate it to preserve existing view.
+      // AUTO-MIGRATION: If roster is empty for this month/year, and it's current or past month
+      // populate it to preserve existing view. Future months start empty.
+      const now = new Date()
+      const currentMonth = now.getMonth() + 1
+      const currentYear = now.getFullYear()
+      const isCurrentOrPast = year < currentYear || (year === currentYear && month <= currentMonth)
+
       const rosterForMonth = db.monthly_rosters.filter(r => r.month === month && r.year === year)
       
-      if (rosterForMonth.length === 0 && db.nurses.length > 0) {
+      if (rosterForMonth.length === 0 && db.nurses.length > 0 && isCurrentOrPast) {
           // Check if we should migrate. Only if this is the first time usage or specific month.
           // For safety, let's migrate if *no* rosters exist at all (first run after update)
-          const totalRosters = db.monthly_rosters.length
-          if (totalRosters === 0) {
-              console.log('Migrating static assignments to monthly roster...')
-              db.nurses.forEach(n => {
-                  if (n.section_id) {
-                      db.monthly_rosters.push({
-                          id: randomUUID(),
-                          nurse_id: n.id,
-                          section_id: n.section_id,
-                          unit_id: n.unit_id || null,
-                          month: month,
-                          year: year,
-                          created_at: new Date().toISOString()
-                      })
-                  }
-              })
-              writeDb(db)
-          }
+          // OR if it's a past/current month that happens to be empty (maybe cleared manually? no, we want to default populate)
+          
+          console.log('Migrating static assignments to monthly roster (Local)...')
+          db.nurses.forEach(n => {
+              if (n.section_id) {
+                  db.monthly_rosters.push({
+                      id: randomUUID(),
+                      nurse_id: n.id,
+                      section_id: n.section_id,
+                      unit_id: n.unit_id || null,
+                      month: month,
+                      year: year,
+                      created_at: new Date().toISOString()
+                  })
+              }
+          })
+          writeDb(db)
       }
 
       // Re-read roster after potential migration
@@ -247,31 +376,67 @@ export async function getMonthlyScheduleData(month: number, year: number) {
 
     const supabase = createClient()
     
-    const { data: sections, error: sectionsError } = await supabase.from('schedule_sections').select('*').order('position')
+    // Parallel fetching for performance optimization
+    const [
+        { data: sections, error: sectionsError },
+        { data: units },
+        { data: nurses, error: nursesError },
+        { data: rosterData, error: rosterError },
+        { data: rawShifts, error: shiftsError },
+        { data: timeOffsData, error: timeOffsError }
+    ] = await Promise.all([
+        supabase.from('schedule_sections').select('*').order('position'),
+        supabase.from('units').select('*'),
+        supabase.from('nurses').select('*').order('name'),
+        supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year),
+        supabase.from('shifts').select('*').gte('date', startDate).lte('date', endDate),
+        supabase.from('time_off_requests').select('*').eq('status', 'approved').or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`)
+    ])
+
     if (sectionsError) console.error('Error fetching sections:', sectionsError)
-
-    const { data: units } = await supabase.from('units').select('*')
-    const { data: nurses, error: nursesError } = await supabase.from('nurses').select('*').order('name')
     if (nursesError) console.error('Error fetching nurses:', nursesError)
-    
-    // Fetch Roster
-    // Note: If table doesn't exist, this might fail. We assume migration applied.
-    const { data: roster, error: rosterError } = await supabase
-        .from('monthly_rosters')
-        .select('*')
-        .eq('month', month)
-        .eq('year', year)
-    
-    if (rosterError && rosterError.code !== 'PGRST116') { // Ignore if table missing (simulated)
-         console.error('Error fetching roster:', rosterError)
-    }
-
-    const { data: rawShifts, error: shiftsError } = await supabase
-      .from('shifts')
-      .select('*')
-      .gte('date', startDate)
-      .lte('date', endDate)
     if (shiftsError) console.error('Error fetching shifts:', shiftsError)
+    if (timeOffsError) console.error('Error fetching timeOffs:', timeOffsError)
+    if (rosterError && rosterError.code !== 'PGRST116') console.error('Error fetching roster:', rosterError)
+
+    let roster = rosterData || []
+
+    // AUTO-MIGRATION (Supabase)
+    const now = new Date()
+    const currentMonth = now.getMonth() + 1
+    const currentYear = now.getFullYear()
+    const isCurrentOrPast = year < currentYear || (year === currentYear && month <= currentMonth)
+
+    if ((!roster || roster.length === 0) && isCurrentOrPast && nurses && nurses.length > 0) {
+        console.log('Migrating static assignments to monthly roster (Supabase)...')
+        const toInsert = nurses
+            .filter(n => n.section_id)
+            .map(n => ({
+                nurse_id: n.id,
+                section_id: n.section_id,
+                unit_id: n.unit_id,
+                month,
+                year
+            }))
+        
+        if (toInsert.length > 0) {
+            const { error: insertError } = await supabase
+                .from('monthly_rosters')
+                .upsert(toInsert, { onConflict: 'nurse_id, month, year' })
+            
+            if (!insertError) {
+                 // Fetch the newly created roster to ensure we have the IDs and correct data
+                 const { data: newRoster } = await supabase
+                    .from('monthly_rosters')
+                    .select('*')
+                    .eq('month', month)
+                    .eq('year', year)
+                 roster = newRoster || []
+            } else {
+                console.error('Error migrating roster:', insertError)
+            }
+        }
+    }
 
     const shifts = rawShifts?.map(s => ({
       ...s,
@@ -279,18 +444,11 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       shift_type: s.type
     })) || []
 
-    const { data: timeOffs, error: timeOffsError } = await supabase
-      .from('time_off_requests')
-      .select('*')
-      .eq('status', 'approved')
-      .or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`)
-    if (timeOffsError) console.error('Error fetching timeOffs:', timeOffsError)
-
     return {
       nurses: nurses || [],
       roster: roster || [],
       shifts: shifts || [],
-      timeOffs: timeOffs || [],
+      timeOffs: timeOffsData || [],
       sections: sections || [],
       units: units || []
     }
@@ -309,11 +467,8 @@ export async function getMonthlyScheduleData(month: number, year: number) {
 }
 
 export async function assignNurseToRoster(nurseId: string, sectionId: string, unitId: string | null, month: number, year: number) {
-  // Propagate to future months of the current year
-  const monthsToUpdate = []
-  for (let m = month; m <= 12; m++) {
-    monthsToUpdate.push(m)
-  }
+  // Only update the specific month (no propagation)
+  const monthsToUpdate = [month]
 
   if (isLocalMode()) {
     const db = readDb()
@@ -367,8 +522,8 @@ export async function removeNurseFromRoster(nurseId: string, month: number, year
   if (isLocalMode()) {
     const db = readDb()
     if (db.monthly_rosters) {
-        // Remove from current month AND future months of the same year
-        db.monthly_rosters = db.monthly_rosters.filter(r => !(r.nurse_id === nurseId && r.year === year && r.month >= month))
+        // Remove only from current month
+        db.monthly_rosters = db.monthly_rosters.filter(r => !(r.nurse_id === nurseId && r.year === year && r.month === month))
         writeDb(db)
     }
     revalidatePath('/')
@@ -381,7 +536,7 @@ export async function removeNurseFromRoster(nurseId: string, month: number, year
     .delete()
     .eq('nurse_id', nurseId)
     .eq('year', year)
-    .gte('month', month)
+    .eq('month', month)
 
   if (error) return { success: false, message: error.message }
   revalidatePath('/')
@@ -465,7 +620,7 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
   const session = cookies().get('session_user')
   if (!session) return { message: 'Usuário não autenticado' }
   const user = JSON.parse(session.value)
-  const isAdmin = user.cpf === '02170025367'
+  const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
 
   const targetNurseId = (isAdmin && nurseIdFromForm) ? nurseIdFromForm : user.id
   const initialStatus = (isAdmin && nurseIdFromForm) ? 'approved' : 'pending'
@@ -691,7 +846,7 @@ export async function getTimeOffRequests() {
   const session = cookies().get('session_user')
   if (!session) return []
   const user = JSON.parse(session.value)
-  const isAdmin = user.cpf === '02170025367'
+  const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
     const db = readDb()
@@ -906,4 +1061,56 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
   
   revalidatePath('/')
   return { success: true }
+}
+
+export async function changePassword(prevState: any, formData: FormData) {
+  const newPassword = formData.get('newPassword') as string
+  const confirmPassword = formData.get('confirmPassword') as string
+
+  if (!newPassword || !confirmPassword) {
+    return { success: false, message: 'Todos os campos são obrigatórios' }
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { success: false, message: 'As senhas não conferem' }
+  }
+
+  if (newPassword === '123456') {
+    return { success: false, message: 'A nova senha não pode ser a padrão' }
+  }
+
+  if (newPassword.length < 6) {
+    return { success: false, message: 'A senha deve ter pelo menos 6 caracteres' }
+  }
+
+  const sessionCookie = cookies().get('session_user')
+  if (!sessionCookie) {
+    return { success: false, message: 'Sessão inválida' }
+  }
+
+  const user = JSON.parse(sessionCookie.value)
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const nurse = db.nurses.find(n => n.id === user.id)
+    if (!nurse) return { success: false, message: 'Usuário não encontrado (Local)' }
+
+    nurse.password = newPassword
+    writeDb(db)
+  } else {
+    const supabase = createClient()
+    const { error } = await supabase.from('nurses').update({ password: newPassword }).eq('id', user.id)
+    if (error) return { success: false, message: 'Erro ao atualizar senha: ' + error.message }
+  }
+
+  // Update session cookie to remove mustChangePassword
+  const updatedUser = { ...user, mustChangePassword: false }
+  cookies().set('session_user', JSON.stringify(updatedUser), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24 * 7,
+    path: '/',
+  })
+
+  redirect('/')
 }
