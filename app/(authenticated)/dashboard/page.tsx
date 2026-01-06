@@ -2,6 +2,7 @@ import { getUserDashboardData, getNurses } from '@/app/actions'
 import { getSwapRequests } from '@/app/swap-actions'
 import { redirect } from 'next/navigation'
 import SwapSection from './SwapSection'
+import AdminDailySchedule from './AdminDailySchedule'
 
 export default async function DashboardPage() {
   const data = await getUserDashboardData()
