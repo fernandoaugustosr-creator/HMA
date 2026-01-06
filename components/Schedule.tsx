@@ -65,6 +65,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
   const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], sections: [], units: [] })
   const [loading, setLoading] = useState(true)
   const [selectedUnitId, setSelectedUnitId] = useState<string>('')
+  const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
   
   // Section Management State
