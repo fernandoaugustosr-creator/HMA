@@ -58,7 +58,7 @@ export async function checkCpf(prevState: any, formData: FormData) {
   if (!nurse) {
       const { data: allNurses } = await supabase.from('nurses').select('id, name, cpf, coren')
       if (allNurses) {
-          nurse = allNurses.find(n => n.cpf.replace(/\D/g, '') === cleanCpf)
+          nurse = allNurses.find(n => n.cpf.replace(/\D/g, '') === cleanCpf) || null
       }
   }
 
