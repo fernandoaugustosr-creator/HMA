@@ -19,9 +19,9 @@ export default function RootLayout({
   
   return (
     <html lang="pt-BR">
-      <body className={inter.className}>
+      <body className={`${inter.className} pb-10`}>
         {children}
-        <footer className="fixed bottom-0 w-full bg-gray-100 text-xs text-center py-1 opacity-75 pointer-events-none">
+        <footer className="fixed bottom-0 w-full bg-gray-100 text-xs text-center py-1 opacity-75 pointer-events-none z-50">
           {isLocal ? (
             <span className="text-amber-600 font-bold">⚠️ MODO LOCAL (Dados temporários) - Configure o Supabase para produção</span>
           ) : (
