@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS time_off_requests (
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     reason TEXT,
+    type TEXT, -- 'ferias', 'licenca_saude', etc.
     status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );

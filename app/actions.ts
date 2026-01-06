@@ -266,12 +266,18 @@ export async function getMonthlyScheduleData(month: number, year: number) {
          console.error('Error fetching roster:', rosterError)
     }
 
-    const { data: shifts, error: shiftsError } = await supabase
-      .from('schedules')
+    const { data: rawShifts, error: shiftsError } = await supabase
+      .from('shifts')
       .select('*')
-      .gte('shift_date', startDate)
-      .lte('shift_date', endDate)
+      .gte('date', startDate)
+      .lte('date', endDate)
     if (shiftsError) console.error('Error fetching shifts:', shiftsError)
+
+    const shifts = rawShifts?.map(s => ({
+      ...s,
+      shift_date: s.date,
+      shift_type: s.type
+    })) || []
 
     const { data: timeOffs, error: timeOffsError } = await supabase
       .from('time_off_requests')
@@ -563,7 +569,7 @@ export async function deleteNurse(id: string) {
   }
 
   const supabase = createClient()
-  await supabase.from('schedules').delete().eq('nurse_id', id)
+  await supabase.from('shifts').delete().eq('nurse_id', id)
   await supabase.from('time_off_requests').delete().eq('nurse_id', id)
   await supabase.from('monthly_rosters').delete().eq('nurse_id', id)
   
@@ -867,10 +873,10 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
 
     // 1. Delete existing shifts for these dates (prevents duplicates if constraint is missing)
     const { error: deleteError } = await supabase
-      .from('schedules')
+      .from('shifts')
       .delete()
       .eq('nurse_id', nurseId)
-      .in('shift_date', dates)
+      .in('date', dates)
 
     if (deleteError) {
       console.error('Error deleting old shifts:', deleteError)
@@ -882,13 +888,13 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
       .filter(s => s.type !== 'DELETE')
       .map(s => ({
         nurse_id: s.nurseId,
-        shift_date: s.date,
-        shift_type: s.type
+        date: s.date,
+        type: s.type
       }))
 
     if (toInsert.length > 0) {
       const { error: insertError } = await supabase
-        .from('schedules')
+        .from('shifts')
         .insert(toInsert)
       
       if (insertError) {
