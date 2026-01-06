@@ -55,7 +55,7 @@ export default function RequestList({ requests, isAdmin }: { requests: any[], is
                   </div>
                 </div>
                 <div className="mt-2">
-                    <p className="text-sm text-gray-600 italic">"{request.reason}"</p>
+                    <p className="text-sm text-gray-600 italic">&quot;{request.reason}&quot;</p>
                 </div>
                 
                 {isAdmin && request.status === 'pending' && (

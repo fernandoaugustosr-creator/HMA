@@ -18,6 +18,10 @@ export default function GlobalError({
       <body>
         <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-50 p-4 text-center">
           <h2 className="mb-4 text-2xl font-bold text-red-600">Erro Crítico</h2>
+          <div className="mb-6 max-w-lg overflow-auto rounded bg-gray-100 p-4 text-left text-xs text-red-800">
+            <p className="font-mono">{error.message}</p>
+            {error.digest && <p className="mt-2 font-mono text-gray-500">Digest: {error.digest}</p>}
+          </div>
           <p className="mb-6 text-gray-600">Um erro impediu o carregamento da aplicação.</p>
           <button
             onClick={() => reset()}

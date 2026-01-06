@@ -86,9 +86,24 @@ export default function Schedule() {
   const [limitShifts, setLimitShifts] = useState<string>('')
   const [deleteWholeMonth, setDeleteWholeMonth] = useState(false)
 
+  const fetchData = React.useCallback(async () => {
+    setLoading(true)
+    try {
+      const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear)
+      setData(result as ScheduleData)
+      if (!selectedUnitId && result.units && result.units.length > 0) {
+        setSelectedUnitId(result.units[0].id)
+      }
+    } catch (error) {
+      console.error('Error fetching schedule:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedMonth, selectedYear, selectedUnitId])
+
   useEffect(() => {
     fetchData()
-  }, [selectedMonth, selectedYear])
+  }, [fetchData])
 
   // We need a separate state for "Manually Added" to survive re-renders until saved
   const [manuallyAddedSections, setManuallyAddedSections] = useState<string[]>([])
@@ -114,24 +129,6 @@ export default function Schedule() {
       return data.sections.filter(s => rosterSections.has(s.id) || manuallyAddedSections.includes(s.id))
   }, [data.sections, rosterSections, manuallyAddedSections])
 
-  async function fetchData() {
-    setLoading(true)
-    try {
-      // Month is 0-indexed for Date, but action expects 1-indexed (1-12)
-      const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear)
-      setData(result as ScheduleData)
-      
-      // Set default unit if none selected and units exist
-      if (!selectedUnitId && result.units && result.units.length > 0) {
-        setSelectedUnitId(result.units[0].id)
-      }
-      
-    } catch (error) {
-      console.error('Error fetching schedule:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleUnitChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value
