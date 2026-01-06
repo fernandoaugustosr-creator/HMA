@@ -106,13 +106,14 @@ export async function createNurse(prevState: any, formData: FormData) {
   })
 
   if (error) {
+    console.error('Supabase Error:', error)
     if (error.code === '23505') return { success: false, message: 'CPF já cadastrado' }
-    return { success: false, message: 'Erro ao cadastrar servidor: ' + error.message }
+    return { success: false, message: 'Erro ao cadastrar servidor (Supabase): ' + error.message }
   }
 
   revalidatePath('/')
   revalidatePath('/servidores')
-  return { success: true, message: 'Servidor cadastrado com sucesso' }
+  return { success: true, message: 'Servidor cadastrado com sucesso (Supabase)' }
 }
 
 export async function login(prevState: any, formData: FormData) {

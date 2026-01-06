@@ -113,8 +113,9 @@ export async function updateRegistration(prevState: any, formData: FormData) {
     .eq('id', id)
 
   if (error) {
-    return { success: false, message: 'Erro ao atualizar cadastro: ' + error.message }
+    console.error('Supabase Update Error:', error)
+    return { success: false, message: 'Erro ao atualizar cadastro (Supabase): ' + error.message }
   }
 
-  return { success: true, message: 'Cadastro atualizado com sucesso!' }
+  return { success: true, message: 'Cadastro atualizado com sucesso (Supabase)!' }
 }
