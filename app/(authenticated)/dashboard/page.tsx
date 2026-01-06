@@ -1,5 +1,7 @@
-import { getUserDashboardData } from '@/app/actions'
+import { getUserDashboardData, getNurses } from '@/app/actions'
+import { getSwapRequests } from '@/app/swap-actions'
 import { redirect } from 'next/navigation'
+import SwapSection from './SwapSection'
 
 export default async function DashboardPage() {
   const data = await getUserDashboardData()
@@ -9,6 +11,8 @@ export default async function DashboardPage() {
   }
 
   const { shifts, timeOffs, user } = data
+  const swaps = await getSwapRequests()
+  const nurses = await getNurses()
 
   const formatDate = (dateString: string) => {
     const [year, month, day] = dateString.split('-')
@@ -39,7 +43,10 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Meus Plantões */}
+        {/* Meus Plantões (ou Visão Admin) */}
+        {user.isAdmin ? (
+            <AdminDailySchedule />
+        ) : (
         <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -68,24 +75,15 @@ export default async function DashboardPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Minhas Trocas */}
-        <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-              <svg className="w-5 h-5 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              Minhas Trocas
-            </h2>
-            <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full">0</span>
-          </div>
-          
-          <div className="flex-1">
-             {/* Placeholder for now as Trocas logic is not fully defined/implemented */}
-            <p className="text-gray-500 text-sm text-center py-4">Funcionalidade em breve.</p>
-          </div>
-        </div>
+        <SwapSection 
+            swaps={swaps} 
+            nurses={nurses} 
+            userShifts={shifts} 
+            currentUserId={user.id} 
+        />
 
         {/* Minhas Folgas */}
         <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">

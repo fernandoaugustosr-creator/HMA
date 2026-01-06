@@ -787,11 +787,88 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
         {/* Logos Header */}
         <div className="flex justify-between items-center mb-4 border-b pb-2">
             <div className="flex flex-col items-start">
-                {/* HMA Logo Placeholder */}
-                <div className="flex items-center gap-2">
-                    <div className="bg-blue-900 text-white p-2 rounded font-bold text-2xl flex items-center justify-center h-12 w-12">
-                        <Plus size={32} />
+                {/* Section Manager Dropdown (Replacing Logo) */}
+                <div className="flex items-center gap-2 relative">
+                    <div className="relative">
+                        <button 
+                            onClick={() => setIsSectionMenuOpen(!isSectionMenuOpen)}
+                            className="bg-blue-900 text-white p-2 rounded font-bold text-2xl flex items-center justify-center h-12 w-12 hover:bg-blue-800 transition-colors"
+                            title="Gerenciar Grupos/Blocos"
+                        >
+                            <Plus size={32} />
+                        </button>
+                        
+                        {isSectionMenuOpen && (
+                            <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-gray-300 shadow-xl rounded z-50 p-3 flex flex-col gap-2">
+                                <div className="flex justify-between items-center border-b pb-2">
+                                    <h4 className="text-sm font-bold text-gray-800">Gerenciar Blocos</h4>
+                                    <button onClick={() => setIsSectionMenuOpen(false)} className="text-gray-500 hover:text-black"><X size={16} /></button>
+                                </div>
+                                <div className="max-h-60 overflow-y-auto space-y-1 custom-scrollbar">
+                                    {data.sections.length === 0 && <p className="text-xs text-gray-500 text-center py-2">Nenhum bloco cadastrado.</p>}
+                                    {data.sections.map(section => (
+                                        <div key={section.id} className="flex items-center justify-between p-2 hover:bg-blue-50 rounded group transition-colors border border-transparent hover:border-blue-100">
+                                            <span className="text-xs text-black font-medium truncate flex-1" title={section.title}>{section.title}</span>
+                                            <div className="flex gap-1 items-center">
+                                                {/* Add to View Toggle */}
+                                                {!visibleSections.find(vs => vs.id === section.id) ? (
+                                                    <button 
+                                                        onClick={() => {
+                                                            setManuallyAddedSections(prev => [...prev, section.id])
+                                                        }}
+                                                        className="text-green-600 hover:bg-green-200 p-1.5 rounded transition-colors"
+                                                        title="Adicionar à visualização atual"
+                                                    >
+                                                        <Plus size={14} />
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-[10px] text-green-600 font-bold px-1">VISÍVEL</span>
+                                                )}
+                                                
+                                                {/* Edit Actions */}
+                                                {isAdmin && (
+                                                    <>
+                                                    <div className="w-px h-3 bg-gray-300 mx-1"></div>
+                                                    <button 
+                                                        onClick={() => {
+                                                            startEditingSection(section)
+                                                            setIsSectionMenuOpen(false)
+                                                        }}
+                                                        className="text-blue-600 hover:bg-blue-200 p-1.5 rounded transition-colors"
+                                                        title="Renomear"
+                                                    >
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleDeleteSection(section.id)}
+                                                        className="text-red-600 hover:bg-red-200 p-1.5 rounded transition-colors"
+                                                        title="Excluir"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {isAdmin && (
+                                    <div className="pt-2 border-t mt-1">
+                                        <button 
+                                            onClick={() => {
+                                                setIsAddingSection(true)
+                                                setIsSectionMenuOpen(false)
+                                            }}
+                                            className="w-full text-xs bg-blue-600 text-white py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2 font-bold transition-colors shadow-sm"
+                                        >
+                                            <Plus size={14} /> NOVO BLOCO
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
+
                     <div className="flex flex-col">
                          <h1 className="text-3xl font-black text-blue-900 leading-none">HMA</h1>
                          <span className="text-[10px] text-blue-900 font-bold tracking-wider">HOSPITAL MUNICIPAL DE AÇAILÂNDIA</span>

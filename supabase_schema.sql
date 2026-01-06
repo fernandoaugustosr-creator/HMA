@@ -62,6 +62,17 @@ CREATE TABLE IF NOT EXISTS time_off_requests (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
+-- Table: shift_swaps
+CREATE TABLE IF NOT EXISTS shift_swaps (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    requester_id UUID REFERENCES nurses(id) ON DELETE CASCADE,
+    requested_id UUID REFERENCES nurses(id) ON DELETE CASCADE,
+    requester_shift_date DATE NOT NULL,
+    requested_shift_date DATE,
+    status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
 -- Insert default sections
 INSERT INTO schedule_sections (title, position) VALUES
 ('ENFERMEIROS', 1),
@@ -107,3 +118,8 @@ CREATE POLICY "Public access monthly_rosters" ON monthly_rosters FOR ALL USING (
 ALTER TABLE time_off_requests ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public access time_off_requests" ON time_off_requests;
 CREATE POLICY "Public access time_off_requests" ON time_off_requests FOR ALL USING (true) WITH CHECK (true);
+
+-- Shift Swaps
+ALTER TABLE shift_swaps ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access shift_swaps" ON shift_swaps;
+CREATE POLICY "Public access shift_swaps" ON shift_swaps FOR ALL USING (true) WITH CHECK (true);

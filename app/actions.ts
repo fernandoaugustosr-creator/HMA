@@ -298,32 +298,104 @@ export async function getUserDashboardData() {
 
   const supabase = createClient()
   
-  // Shifts
-  const { data: shifts } = await supabase
+  const { data: userData, error: userError } = await supabase
+    .from('nurses')
+    .select('*')
+    .eq('id', userId)
+    .single()
+
+  if (userError || !userData) return null
+
+  // Shifts (from cutoff date onwards)
+  let shiftsQuery = supabase
     .from('shifts')
     .select('*')
-    .eq('nurse_id', userId)
     .gte('date', cutoffDateStr)
     .order('date', { ascending: true })
 
-  // Time off
-  let query = supabase
+  if (!isAdmin) {
+    shiftsQuery = shiftsQuery.eq('nurse_id', userId)
+  }
+
+  const { data: shifts } = await shiftsQuery
+
+  // Time off requests
+  let timeOffsQuery = supabase
     .from('time_off_requests')
-    .select('*, nurses (name)')
+    .select('*, nurses(name)')
     .order('created_at', { ascending: false })
 
   if (!isAdmin) {
-    query = query.eq('nurse_id', userId)
+    timeOffsQuery = timeOffsQuery.eq('nurse_id', userId)
   }
 
-  const { data: timeOffs } = await query
+  const { data: timeOffs } = await timeOffsQuery
 
-  const enrichedTimeOffs = timeOffs?.map(t => ({
-      ...t,
-      nurse_name: t.nurses?.name || 'Desconhecido'
+  const enrichedTimeOffs = timeOffs?.map((r: any) => ({
+    ...r,
+    nurse_name: r.nurses?.name || 'Desconhecido'
   })) || []
 
-  return { shifts: shifts || [], timeOffs: enrichedTimeOffs, user: { ...user, isAdmin } }
+  return { shifts: shifts || [], timeOffs: enrichedTimeOffs, user: { ...userData, isAdmin, role: userData.role } }
+}
+
+export async function getDailyShifts(date: string) {
+  try {
+    const user = await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const shifts = db.shifts.filter(s => s.date === date) // Assuming date in shifts is stored as YYYY-MM-DD
+    
+    const enrichedShifts = shifts.map(s => {
+        const nurse = db.nurses.find(n => n.id === s.nurse_id)
+        const unit = nurse?.unit_id ? db.units.find(u => u.id === nurse.unit_id)?.title : null
+        const section = nurse?.section_id ? db.schedule_sections.find(sec => sec.id === nurse.section_id)?.title : null
+        
+        return {
+            ...s,
+            nurse_name: nurse?.name || 'Desconhecido',
+            nurse_role: nurse?.role || 'Desconhecido',
+            unit_name: unit,
+            section_name: section
+        }
+    })
+    
+    return { success: true, data: enrichedShifts }
+  }
+
+  const supabase = createClient()
+  
+  const { data: shifts, error } = await supabase
+    .from('shifts')
+    .select(`
+        *,
+        nurses (
+            name,
+            role,
+            units (title),
+            schedule_sections (title)
+        )
+    `)
+    .eq('date', date)
+
+  if (error) {
+      console.error('Error fetching daily shifts:', error)
+      return { success: false, message: 'Erro ao buscar plantões' }
+  }
+
+  const enrichedShifts = shifts.map((s: any) => ({
+      ...s,
+      nurse_name: s.nurses?.name,
+      nurse_role: s.nurses?.role,
+      unit_name: s.nurses?.units?.title,
+      section_name: s.nurses?.schedule_sections?.title
+  }))
+
+  return { success: true, data: enrichedShifts }
 }
 
 export async function getMonthlyScheduleData(month: number, year: number) {
