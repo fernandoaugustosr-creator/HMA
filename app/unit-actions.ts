@@ -26,6 +26,12 @@ export async function addUnit(title: string) {
 }
 
 export async function updateUnit(id: string, title: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     const unit = db.units.find(u => u.id === id)

@@ -19,7 +19,7 @@ export interface Unit {
   title: string
 }
 
-async function checkAdmin() {
+export async function checkAdmin() {
   const session = cookies().get('session_user')
   if (!session) throw new Error('Unauthorized')
   const user = JSON.parse(session.value)
