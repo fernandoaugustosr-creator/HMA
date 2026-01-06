@@ -649,7 +649,7 @@ export async function reassignNurse(oldId: string, newId: string) {
   }
 
   const supabase = createClient()
-  const { error: sError } = await supabase.from('schedules').update({ nurse_id: newId }).eq('nurse_id', oldId)
+  const { error: sError } = await supabase.from('shifts').update({ nurse_id: newId }).eq('nurse_id', oldId)
   const { error: tError } = await supabase.from('time_off_requests').update({ nurse_id: newId }).eq('nurse_id', oldId)
 
   if (sError || tError) return { success: false, message: 'Erro ao reatribuir dados' }
