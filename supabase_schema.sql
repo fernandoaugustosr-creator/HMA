@@ -76,3 +76,34 @@ INSERT INTO units (title) VALUES
 ('POSTO 2'),
 ('NEONATOLOGIA E PEDIATRIA')
 ON CONFLICT DO NOTHING;
+
+-- Enable RLS and Create Policies (Public Access for now to ensure functionality)
+-- Schedule Sections
+ALTER TABLE schedule_sections ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access schedule_sections" ON schedule_sections;
+CREATE POLICY "Public access schedule_sections" ON schedule_sections FOR ALL USING (true) WITH CHECK (true);
+
+-- Units
+ALTER TABLE units ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access units" ON units;
+CREATE POLICY "Public access units" ON units FOR ALL USING (true) WITH CHECK (true);
+
+-- Nurses
+ALTER TABLE nurses ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access nurses" ON nurses;
+CREATE POLICY "Public access nurses" ON nurses FOR ALL USING (true) WITH CHECK (true);
+
+-- Shifts
+ALTER TABLE shifts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access shifts" ON shifts;
+CREATE POLICY "Public access shifts" ON shifts FOR ALL USING (true) WITH CHECK (true);
+
+-- Monthly Rosters
+ALTER TABLE monthly_rosters ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access monthly_rosters" ON monthly_rosters;
+CREATE POLICY "Public access monthly_rosters" ON monthly_rosters FOR ALL USING (true) WITH CHECK (true);
+
+-- Time Off Requests
+ALTER TABLE time_off_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access time_off_requests" ON time_off_requests;
+CREATE POLICY "Public access time_off_requests" ON time_off_requests FOR ALL USING (true) WITH CHECK (true);
