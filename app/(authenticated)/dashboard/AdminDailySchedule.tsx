@@ -37,6 +37,19 @@ export default function AdminDailySchedule() {
         }
     }
 
+    // Agrupar plantões por setor (Unit)
+    const groupedShifts = shifts.reduce((acc: any, shift: any) => {
+        const unit = shift.unit_name || 'Sem Setor'
+        if (!acc[unit]) {
+            acc[unit] = []
+        }
+        acc[unit].push(shift)
+        return acc
+    }, {})
+
+    // Ordenar setores alfabeticamente
+    const sortedUnits = Object.keys(groupedShifts).sort()
+
     return (
         <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
             <div className="flex items-center justify-between mb-4">
@@ -60,21 +73,30 @@ export default function AdminDailySchedule() {
                 ) : shifts.length === 0 ? (
                     <p className="text-gray-500 text-sm text-center py-4">Nenhum profissional escalado para esta data.</p>
                 ) : (
-                    <ul className="space-y-3">
-                        {shifts.map((shift, index) => (
-                            <li key={shift.id || index} className="border-b border-gray-100 pb-2 last:border-0">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="font-bold text-gray-800">{shift.nurse_name}</p>
-                                        <p className="text-xs text-gray-500">{shift.nurse_role} • {shift.unit_name || 'Sem Setor'} • {shift.section_name || 'Sem Bloco'}</p>
-                                    </div>
-                                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${shift.shift_type === 'night' ? 'bg-indigo-100 text-indigo-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                        {shift.shift_type === 'day' ? 'DIA' : shift.shift_type === 'night' ? 'NOITE' : shift.shift_type.toUpperCase()}
-                                    </span>
-                                </div>
-                            </li>
+                    <div className="space-y-6">
+                        {sortedUnits.map((unit) => (
+                            <div key={unit}>
+                                <h3 className="text-sm font-bold text-gray-700 bg-gray-50 px-3 py-2 rounded mb-2 border-l-4 border-indigo-500">
+                                    {unit}
+                                </h3>
+                                <ul className="space-y-3 pl-2">
+                                    {groupedShifts[unit].map((shift: any, index: number) => (
+                                        <li key={shift.id || index} className="border-b border-gray-100 pb-2 last:border-0">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-bold text-gray-800">{shift.nurse_name}</p>
+                                                    <p className="text-xs text-gray-500">{shift.nurse_role} • {shift.section_name || 'Sem Bloco'}</p>
+                                                </div>
+                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${shift.shift_type === 'night' ? 'bg-indigo-100 text-indigo-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                    {shift.shift_type === 'day' ? 'DIA' : shift.shift_type === 'night' ? 'NOITE' : shift.shift_type.toUpperCase()}
+                                                </span>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
                         ))}
-                    </ul>
+                    </div>
                 )}
             </div>
         </div>
