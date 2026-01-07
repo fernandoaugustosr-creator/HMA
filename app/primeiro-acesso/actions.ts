@@ -52,6 +52,19 @@ export async function checkCpf(prevState: any, formData: FormData) {
       .single()
      nurse = nurseClean
   }
+
+  if (!nurse) {
+     // Tenta buscar pelo formatado (XXX.XXX.XXX-XX)
+     if (cleanCpf.length === 11) {
+         const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+         const { data: nurseFormatted } = await supabase
+           .from('nurses')
+           .select('id, name, cpf, coren')
+           .eq('cpf', formattedCpf)
+           .single()
+         nurse = nurseFormatted
+     }
+  }
   
   // Se ainda não achou, e se estivermos lidando com banco inconsistente, última tentativa:
   // (Isso é pesado se tiver muitos registros, use com cautela)

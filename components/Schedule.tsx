@@ -593,7 +593,10 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                   }
                   else if (timeOff.type === 'licenca_maternidade') cellClass += " bg-blue-400"
                   else if (timeOff.type === 'cessao') cellClass += " bg-cyan-400"
-                  else cellClass += " bg-gray-200" 
+                  else {
+                      // Generic Folga - let it inherit background (white or weekend gray)
+                      content = "F"
+                  }
                 } else if (shift) {
                    if (shift.shift_type === 'day') content = 'D'
                    else if (shift.shift_type === 'night') content = 'N'
@@ -604,12 +607,11 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                 // Highlight weekends (Gray background for entire column, overridden by specific statuses if needed, but image shows gray prevails or mixes)
                 // In image, weekend cells are gray. If there is a shift, it's just text on gray.
                 if (isWeekend) {
-                   if (!timeOff) {
+                   // Apply gray if it's NOT a special colored leave
+                   const hasSpecialColor = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'].includes(timeOff.type)
+                   
+                   if (!hasSpecialColor) {
                        cellClass += " bg-gray-400"
-                   } else if (timeOff.type === 'ferias') {
-                       // Keep gray for weekends even in vacation? Usually vacation overrides.
-                       // But user said "OS FINAIS DE SEMANS FICARA COM A COR CINZA MAIS ESCULRA".
-                       // I'll prioritize weekend gray unless it's a special colored leave like Health License.
                    }
                 }
 
@@ -930,24 +932,6 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                                     ) : (
                                         <div className="flex justify-between items-center w-full">
                                             <span className="flex-1 text-center">{section.title}</span>
-                                            {isAdmin && (
-                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
-                                                <button 
-                                                    onClick={() => startEditingSection(section)} 
-                                                    className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-gray-200"
-                                                    title="Editar nome do bloco"
-                                                >
-                                                    <Pencil size={12} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDeleteSection(section.id)} 
-                                                    className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-gray-200"
-                                                    title="Excluir bloco"
-                                                >
-                                                    <Trash2 size={12} />
-                                                </button>
-                                            </div>
-                                            )}
                                         </div>
                                     )}
                                 </th>

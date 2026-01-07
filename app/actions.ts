@@ -212,24 +212,47 @@ export async function login(prevState: any, formData: FormData) {
 
   const supabase = createClient()
   
+  let nurse = null
+  
   // Tenta buscar exato primeiro
-  let { data: nurse, error } = await supabase
+  const { data: nursesRaw } = await supabase
     .from('nurses')
     .select('*')
     .eq('cpf', rawCpf)
-    .single()
+    
+  if (nursesRaw && nursesRaw.length > 0) {
+      nurse = nursesRaw[0]
+  }
 
   if (!nurse) {
       // Tenta buscar pelo limpo
-      const { data: nurseClean } = await supabase
+      const { data: nursesClean } = await supabase
         .from('nurses')
         .select('*')
         .eq('cpf', cleanCpf)
-        .single()
-      nurse = nurseClean
+      
+      if (nursesClean && nursesClean.length > 0) {
+          nurse = nursesClean[0]
+      }
   }
 
-  if (error || !nurse) {
+  if (!nurse) {
+      // Tenta buscar pelo formatado (XXX.XXX.XXX-XX)
+      // Garante que tem 11 dígitos para formatar corretamente
+      if (cleanCpf.length === 11) {
+          const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+          const { data: nursesFormatted } = await supabase
+            .from('nurses')
+            .select('*')
+            .eq('cpf', formattedCpf)
+          
+          if (nursesFormatted && nursesFormatted.length > 0) {
+              nurse = nursesFormatted[0]
+          }
+      }
+  }
+
+  if (!nurse) {
     return { message: 'CPF não encontrado' }
   }
 
@@ -313,9 +336,7 @@ export async function getUserDashboardData() {
     .gte('date', cutoffDateStr)
     .order('date', { ascending: true })
 
-  if (!isAdmin) {
-    shiftsQuery = shiftsQuery.eq('nurse_id', userId)
-  }
+  shiftsQuery = shiftsQuery.eq('nurse_id', userId)
 
   const { data: shifts } = await shiftsQuery
 
@@ -389,6 +410,8 @@ export async function getDailyShifts(date: string) {
 
   const enrichedShifts = shifts.map((s: any) => ({
       ...s,
+      shift_type: s.type,
+      shift_date: s.date,
       nurse_name: s.nurses?.name,
       nurse_role: s.nurses?.role,
       unit_name: s.nurses?.units?.title,
@@ -820,6 +843,64 @@ export async function assignLeave(prevState: any, formData: FormData) {
   if (error) return { success: false, message: 'Erro ao cadastrar ausência: ' + error.message }
   revalidatePath('/')
   return { success: true, message: 'Ausência cadastrada com sucesso' }
+}
+
+export async function deleteTimeOffRequest(id: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.time_off_requests = db.time_off_requests.filter(r => r.id !== id)
+    writeDb(db)
+    revalidatePath('/folgas')
+    revalidatePath('/dashboard')
+    return { success: true, message: 'Solicitação removida com sucesso (Local)' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('time_off_requests').delete().eq('id', id)
+
+  if (error) return { success: false, message: 'Erro ao remover solicitação: ' + error.message }
+  revalidatePath('/folgas')
+  revalidatePath('/dashboard')
+  return { success: true, message: 'Solicitação removida com sucesso' }
+}
+
+export async function updateTimeOffRequest(id: string, data: { startDate: string, endDate: string, reason: string }) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const index = db.time_off_requests.findIndex(r => r.id === id)
+    if (index !== -1) {
+      db.time_off_requests[index] = { ...db.time_off_requests[index], start_date: data.startDate, end_date: data.endDate, reason: data.reason }
+      writeDb(db)
+      revalidatePath('/folgas')
+      revalidatePath('/dashboard')
+      return { success: true, message: 'Solicitação atualizada com sucesso (Local)' }
+    }
+    return { success: false, message: 'Solicitação não encontrada (Local)' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('time_off_requests').update({
+    start_date: data.startDate,
+    end_date: data.endDate,
+    reason: data.reason
+  }).eq('id', id)
+
+  if (error) return { success: false, message: 'Erro ao atualizar solicitação: ' + error.message }
+  revalidatePath('/folgas')
+  revalidatePath('/dashboard')
+  return { success: true, message: 'Solicitação atualizada com sucesso' }
 }
 
 export async function deleteNurse(id: string) {

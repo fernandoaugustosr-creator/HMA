@@ -78,8 +78,27 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
     else alert(result.message)
   }
 
+  const openModalForShift = (date: string) => {
+    setMyShiftDate(date)
+    setSelectedNurseId('')
+    setTargetDate('')
+    setIsModalOpen(true)
+  }
+
   const pendingSwaps = swaps.filter(s => s.status === 'pending')
   const historySwaps = swaps.filter(s => s.status !== 'pending')
+  
+  // Filter future shifts
+  const futureShifts = userShifts
+    .filter(s => {
+        const d = s.date || s.shift_date
+        return d && new Date(d) >= new Date(new Date().setHours(0,0,0,0))
+    })
+    .sort((a, b) => {
+        const da = a.date || a.shift_date
+        const db = b.date || b.shift_date
+        return da.localeCompare(db)
+    })
 
   return (
     <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
@@ -94,80 +113,133 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
       </div>
       
       <div className="flex-1 overflow-y-auto max-h-96">
-        <div className="mb-4">
-            <button 
-                onClick={() => setIsModalOpen(true)}
-                className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-            >
-                Nova Solicitação
-            </button>
+        
+        {/* Pending Swaps Section */}
+        {pendingSwaps.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">Solicitações Pendentes</h3>
+            <ul className="space-y-3">
+                {pendingSwaps.map((swap) => {
+                const isIncoming = swap.requested_id === currentUserId
+                const otherName = isIncoming ? swap.requester_name : swap.requested_name
+                
+                return (
+                <li key={swap.id} className="bg-orange-50 border border-orange-100 rounded-md p-3">
+                    <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-800">
+                        {isIncoming ? 'Solicitação de: ' : 'Enviado para: '}
+                        <span className="font-bold">{otherName}</span>
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                        Trocar meu dia: <strong>{formatDate(isIncoming ? swap.requested_shift_date || '?' : swap.requester_shift_date)}</strong>
+                        </p>
+                        <p className="text-xs text-gray-600">
+                        Pelo dia: <strong>{formatDate(isIncoming ? swap.requester_shift_date : swap.requested_shift_date || '?')}</strong>
+                        </p>
+                    </div>
+                    
+                    <div className="flex flex-col items-end space-y-1">
+                        {isIncoming ? (
+                            <div className="flex space-x-1 mt-1">
+                                <button 
+                                    onClick={() => handleApprove(swap.id)}
+                                    className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                                >
+                                    Aceitar
+                                </button>
+                                <button 
+                                    onClick={() => handleReject(swap.id)}
+                                    className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+                                >
+                                    Recusar
+                                </button>
+                            </div>
+                        ) : (
+                            <span className="text-xs text-orange-600 font-medium italic">Aguardando aprovação</span>
+                        )}
+                    </div>
+                    </div>
+                </li>
+                )})}
+            </ul>
+          </div>
+        )}
+
+        {/* My Shifts List */}
+        <div>
+            <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Meus Plantões</h3>
+                <button 
+                    onClick={() => {
+                        setMyShiftDate('')
+                        setIsModalOpen(true)
+                    }}
+                    className="text-xs text-orange-600 hover:text-orange-800 underline"
+                >
+                    Nova Solicitação Avulsa
+                </button>
+            </div>
+            
+            {futureShifts.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-4">Nenhum plantão futuro agendado.</p>
+            ) : (
+                <ul className="space-y-2">
+                    {futureShifts.map((shift: any) => {
+                        const date = shift.date || shift.shift_date
+                        // Check if involved in any pending swap
+                        const activeSwap = swaps.find(s => 
+                            s.status === 'pending' && (
+                                (s.requester_id === currentUserId && s.requester_shift_date === date) ||
+                                (s.requested_id === currentUserId && s.requested_shift_date === date)
+                            )
+                        )
+
+                        return (
+                            <li key={shift.id || `${date}_${shift.nurse_id}`} className="border border-gray-100 rounded-md p-3 hover:bg-gray-50 transition-colors">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <div className="font-medium text-gray-800">{formatDate(date)}</div>
+                                        <div className="text-xs text-gray-500 capitalize">{shift.type === 'day' ? 'Diurno' : 'Noturno'}</div>
+                                        {activeSwap && (
+                                            <div className="mt-1 text-xs text-orange-600 flex items-center">
+                                                <span className="w-2 h-2 bg-orange-500 rounded-full mr-1"></span>
+                                                {activeSwap.requester_id === currentUserId 
+                                                    ? `Solicitado a ${activeSwap.requested_name}`
+                                                    : `Interesse de ${activeSwap.requester_name}`
+                                                }
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {!activeSwap && (
+                                        <button 
+                                            onClick={() => openModalForShift(date)}
+                                            className="text-xs border border-orange-500 text-orange-500 px-3 py-1 rounded hover:bg-orange-50"
+                                        >
+                                            Permutar
+                                        </button>
+                                    )}
+                                </div>
+                            </li>
+                        )
+                    })}
+                </ul>
+            )}
         </div>
 
-        {swaps.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center py-4">Nenhuma troca registrada.</p>
-        ) : (
-          <ul className="space-y-3">
-            {swaps.map((swap) => {
-               const isIncoming = swap.requested_id === currentUserId
-               const otherName = isIncoming ? swap.requester_name : swap.requested_name
-               
-               return (
-              <li key={swap.id} className="border-b border-gray-100 pb-2 last:border-0">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800">
-                      {isIncoming ? 'Solicitação de: ' : 'Enviado para: '}
-                      <span className="font-bold">{otherName}</span>
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">
-                       Trocar meu dia: <strong>{formatDate(isIncoming ? swap.requested_shift_date || '?' : swap.requester_shift_date)}</strong>
-                    </p>
-                    <p className="text-xs text-gray-600">
-                       Pelo dia: <strong>{formatDate(isIncoming ? swap.requester_shift_date : swap.requested_shift_date || '?')}</strong>
-                    </p>
-                  </div>
-                  
-                  <div className="flex flex-col items-end space-y-1">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium 
-                        ${swap.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                          swap.status === 'rejected' ? 'bg-red-100 text-red-800' : 
-                          'bg-yellow-100 text-yellow-800'}`}>
-                      {swap.status === 'approved' ? 'Aprovado' : 
-                       swap.status === 'rejected' ? 'Rejeitado' : 'Pendente'}
-                    </span>
-                    
-                    {swap.status === 'pending' && isIncoming && (
-                        <div className="flex space-x-1 mt-1">
-                            <button 
-                                onClick={() => handleApprove(swap.id)}
-                                className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
-                            >
-                                Aceitar
-                            </button>
-                            <button 
-                                onClick={() => handleReject(swap.id)}
-                                className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                            >
-                                Recusar
-                            </button>
-                        </div>
-                    )}
-                     {swap.status === 'pending' && !isIncoming && (
-                         <span className="text-xs text-gray-400 italic">Aguardando</span>
-                     )}
-                  </div>
-                </div>
-              </li>
-            )})}
-          </ul>
-        )}
       </div>
 
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
             <div className="bg-white p-5 rounded-lg shadow-xl w-96">
-                <h3 className="text-lg font-bold mb-4">Nova Troca</h3>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold">Nova Troca</h3>
+                    <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
                 
                 {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
@@ -177,7 +249,7 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                         <select 
                             value={selectedNurseId}
                             onChange={(e) => setSelectedNurseId(e.target.value)}
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm border p-2"
                             required
                         >
                             <option value="">Selecione...</option>
@@ -192,42 +264,41 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                         <select 
                             value={myShiftDate}
                             onChange={(e) => setMyShiftDate(e.target.value)}
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm border p-2"
                             required
                         >
                             <option value="">Selecione...</option>
-                            {userShifts.filter(s => new Date(s.date || s.shift_date) >= new Date()).map(s => (
-                                <option key={s.id || s.date} value={s.date || s.shift_date}>
-                                    {formatDate(s.date || s.shift_date)} ({s.type === 'day' ? 'D' : 'N'})
+                            {futureShifts.map(s => (
+                                <option key={s.date || s.shift_date} value={s.date || s.shift_date}>
+                                    {formatDate(s.date || s.shift_date)} - {s.type === 'day' ? 'Dia' : 'Noite'}
                                 </option>
                             ))}
                         </select>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Plantão Desejado (Receber)</label>
+                        <label className="block text-sm font-medium text-gray-700">Dia Desejado (Receber)</label>
                         <input 
                             type="date"
                             value={targetDate}
                             onChange={(e) => setTargetDate(e.target.value)}
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border p-2"
-                            required
+                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm border p-2"
                         />
-                        <p className="text-xs text-gray-500 mt-1">Data que você quer trabalhar no lugar do colega.</p>
+                        <p className="text-xs text-gray-500 mt-1">Opcional. Se vazio, será apenas uma doação de plantão.</p>
                     </div>
 
-                    <div className="flex justify-end space-x-2 mt-4">
-                        <button 
+                    <div className="flex justify-end pt-2">
+                        <button
                             type="button"
                             onClick={() => setIsModalOpen(false)}
-                            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                            className="mr-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none"
                         >
                             Cancelar
                         </button>
-                        <button 
+                        <button
                             type="submit"
                             disabled={isLoading}
-                            className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
+                            className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
                         >
                             {isLoading ? 'Enviando...' : 'Solicitar'}
                         </button>
