@@ -16,6 +16,7 @@ interface Nurse {
   section_id?: string
   unit_id?: string
   is_rostered?: boolean
+  roster_created_at?: string
 }
 
 interface RosterItem {
@@ -73,6 +74,9 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
   const [newSectionTitle, setNewSectionTitle] = useState('')
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
   const [editingSectionTitle, setEditingSectionTitle] = useState('')
+  const [selectedHiddenSectionId, setSelectedHiddenSectionId] = useState<string>('')
+  const [isRenamingHiddenSection, setIsRenamingHiddenSection] = useState(false)
+  const [renameHiddenSectionTitle, setRenameHiddenSectionTitle] = useState('')
   
   // Unit Management State
   const [isAddingUnit, setIsAddingUnit] = useState(false)
@@ -127,6 +131,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
 
   // We need a separate state for "Manually Added" to survive re-renders until saved
   const [manuallyAddedSections, setManuallyAddedSections] = useState<string[]>([])
@@ -324,13 +329,48 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
     await fetchData()
   }
 
+  const handleAddHiddenSectionToRoster = () => {
+    if (!selectedHiddenSectionId) return
+    setManuallyAddedSections(prev => prev.includes(selectedHiddenSectionId) ? prev : [...prev, selectedHiddenSectionId])
+  }
+
+  const startRenameHiddenSection = () => {
+    if (!selectedHiddenSectionId) return
+    const sec = data.sections.find(s => s.id === selectedHiddenSectionId)
+    if (!sec) return
+    setRenameHiddenSectionTitle(sec.title)
+    setIsRenamingHiddenSection(true)
+  }
+
+  const saveRenameHiddenSection = async () => {
+    if (!selectedHiddenSectionId || !renameHiddenSectionTitle.trim()) {
+      setIsRenamingHiddenSection(false)
+      return
+    }
+    setLoading(true)
+    await updateSection(selectedHiddenSectionId, renameHiddenSectionTitle.trim())
+    setIsRenamingHiddenSection(false)
+    clearCache()
+    await fetchData(true)
+    setLoading(false)
+  }
+
+  const deleteHiddenSection = async () => {
+    if (!selectedHiddenSectionId) return
+    await handleDeleteSection(selectedHiddenSectionId)
+    setSelectedHiddenSectionId('')
+    setIsRenamingHiddenSection(false)
+    setRenameHiddenSectionTitle('')
+  }
+
   const handleAssignNurse = async (nurseId: string, sectionId: string) => {
     if (!nurseId) return
     setLoading(true)
     try {
         const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear)
         if (res.success) {
-            await fetchData()
+            clearCache()
+            await fetchData(true)
         } else {
             alert('Erro ao adicionar: ' + res.message)
         }
@@ -463,7 +503,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
       return data.nurses.map(nurse => {
           const rosterEntry = rosterLookup[nurse.id]
           if (rosterEntry) {
-              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id, is_rostered: true }
+              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id, is_rostered: true, roster_created_at: rosterEntry.created_at }
           }
           return { ...nurse, is_rostered: false }
       })
@@ -483,9 +523,13 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
               grouped[n.section_id].push(n)
           }
       })
-      // Sort nurses by name in each section
       Object.keys(grouped).forEach(key => {
-          grouped[key].sort((a, b) => a.name.localeCompare(b.name))
+          grouped[key].sort((a, b) => {
+              const aTime = a.roster_created_at ? new Date(a.roster_created_at).getTime() : 0
+              const bTime = b.roster_created_at ? new Date(b.roster_created_at).getTime() : 0
+              if (aTime !== bTime) return aTime - bTime
+              return a.name.localeCompare(b.name)
+          })
       })
       return grouped
   }, [activeNurses])
@@ -555,16 +599,18 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                     <Trash2 size={12} />
                   </button>
                   )}
-                  <select 
-                    value={nurse.id} 
-                    onChange={(e) => handleReassign(nurse.id, e.target.value)}
-                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-black cursor-pointer outline-none uppercase disabled:cursor-default"
-                    disabled={!isAdmin}
-                  >
-                    {data.nurses.map(n => (
-                      <option key={n.id} value={n.id}>{n.name}</option>
-                    ))}
-                  </select>
+                  {isAdmin ? (
+                    <select 
+                      value={nurse.id} 
+                      onChange={(e) => handleReassign(nurse.id, e.target.value)}
+                      className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-black cursor-pointer outline-none uppercase no-print"
+                    >
+                      {data.nurses.map(n => (
+                        <option key={n.id} value={n.id}>{n.name}</option>
+                      ))}
+                    </select>
+                  ) : null}
+                  <span className="text-xs font-bold text-black uppercase">{nurse.name}</span>
                 </div>
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
@@ -774,15 +820,15 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
         </div>
         {!loading && (
           <div className="flex gap-2 w-full md:w-auto md:ml-auto">
-             <button 
-                 onClick={handlePrint}
-                 className="bg-blue-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-600 transition-colors"
-             >
-                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                 Imprimir
-             </button>
-          </div>
-        )}
+         <button 
+             onClick={handlePrint}
+             className="bg-blue-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-600 transition-colors"
+         >
+             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+             Imprimir
+         </button>
+       </div>
+     )}
       </div>
 
       {/* Report Header */}
@@ -909,15 +955,23 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
         {loading ? (
              <div className="text-center py-4">Carregando...</div>
         ) : (
-             <>
-             {visibleSections.map(section => (
-                 <div key={section.id} className="mb-8 border border-black">
-                     <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
-                         <thead>
-                            {/* Main Headers Row 1 */}
-                            <tr className="bg-blue-100 text-black">
-                                <th className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold" rowSpan={2}>#</th>
-                                <th className="border border-black px-1 py-1 text-center min-w-[250px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group" rowSpan={2}>
+             (() => {
+               const rosterForContext = (data.roster || []).filter(r => r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
+               const baseLaunched = rosterForContext.length > 0
+               const isLaunched = baseLaunched
+               if (!isLaunched && !isAdmin) {
+                 return <div className="text-center py-6 text-sm text-gray-600">Escala em construção</div>
+               }
+               return (
+                 <>
+                 {visibleSections.map(section => (
+                     <div key={section.id} className="mb-8 border border-black">
+                         <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
+                             <thead>
+                             {/* Main Headers Row 1 */}
+                             <tr className="bg-blue-100 text-black">
+                                 <th className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold" rowSpan={2}>#</th>
+                                 <th className="border border-black px-1 py-1 text-center min-w-[250px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center">
                                             <input 
@@ -966,19 +1020,13 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                  </div>
              ))}
              
-             {/* Add Section Button */}
              {isAdmin && (
              <div className="mb-8 p-4 border border-dashed border-gray-400 rounded bg-gray-50 text-center no-print">
                  <p className="text-sm text-gray-600 mb-2">Adicionar grupo à escala deste setor:</p>
                  <select 
                     className="border border-blue-300 text-blue-600 rounded px-2 py-1 text-sm bg-white"
-                    onChange={(e) => {
-                         const val = e.target.value
-                         if (val) {
-                             setManuallyAddedSections(prev => prev.includes(val) ? prev : [...prev, val])
-                         }
-                     }}
-                    value=""
+                    onChange={(e) => setSelectedHiddenSectionId(e.target.value)}
+                    value={selectedHiddenSectionId}
                 >
                      <option value="" disabled>+ Selecionar Grupo...</option>
                      {data.sections
@@ -988,9 +1036,56 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                         ))
                      }
                  </select>
+                 <div className="mt-2 flex items-center justify-center gap-2">
+                    <button 
+                      onClick={handleAddHiddenSectionToRoster}
+                      disabled={!selectedHiddenSectionId}
+                      className="px-2 py-1 text-xs border rounded text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      Adicionar
+                    </button>
+                    <button 
+                      onClick={startRenameHiddenSection}
+                      disabled={!selectedHiddenSectionId}
+                      className="px-2 py-1 text-xs border rounded text-gray-700 border-gray-200 bg-gray-50 hover:bg-gray-100 disabled:opacity-50"
+                    >
+                      Editar Nome
+                    </button>
+                    <button 
+                      onClick={deleteHiddenSection}
+                      disabled={!selectedHiddenSectionId}
+                      className="px-2 py-1 text-xs border rounded text-red-600 border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      Excluir
+                    </button>
+                 </div>
+                 {isRenamingHiddenSection && (
+                  <div className="mt-2 flex items-center justify-center gap-2">
+                    <input 
+                      className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-black w-64"
+                      value={renameHiddenSectionTitle}
+                      onChange={(e) => setRenameHiddenSectionTitle(e.target.value)}
+                      autoFocus
+                    />
+                    <button 
+                      onClick={saveRenameHiddenSection}
+                      className="px-2 py-1 text-xs border rounded text-green-600 border-green-200 bg-green-50 hover:bg-green-100"
+                    >
+                      Salvar
+                    </button>
+                    <button 
+                      onClick={() => { setIsRenamingHiddenSection(false); setRenameHiddenSectionTitle('') }}
+                      className="px-2 py-1 text-xs border rounded text-red-600 border-red-200 bg-red-50 hover:bg-red-100"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                 )}
              </div>
              )}
              </>
+               )
+             })()
         )}
       </div>
       
@@ -1167,6 +1262,17 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
           /* Ensure sticky columns don't mess up print */
           th, td {
             position: static !important;
+          }
+          /* Tabela com fundo branco na impressão */
+          table, th, td {
+            background-color: #ffffff !important;
+          }
+          .bg-blue-100, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-gray-400 {
+            background-color: #ffffff !important;
+          }
+          /* Reforçar bordas escuras na impressão */
+          table, th, td {
+            border-color: #000000 !important;
           }
         }
       `}</style>

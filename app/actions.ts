@@ -301,6 +301,21 @@ export async function getUserDashboardData() {
     const shifts = db.shifts
       .filter(s => s.nurse_id === userId && s.shift_date >= cutoffDateStr)
       .sort((a, b) => a.shift_date.localeCompare(b.shift_date))
+      .map(s => {
+        const dateStr = s.shift_date
+        const [y, m] = dateStr.split('-')
+        const year = parseInt(y, 10)
+        const month = parseInt(m, 10)
+        
+        const roster = db.monthly_rosters?.find(r => 
+            r.nurse_id === userId && r.month === month && r.year === year
+        )
+        
+        return {
+            ...s,
+            is_in_roster: !!roster
+        }
+      })
 
     // Time off requests (Folgas/Trocas/Licenças)
     let timeOffs = db.time_off_requests
@@ -329,16 +344,82 @@ export async function getUserDashboardData() {
 
   if (userError || !userData) return null
 
-  // Shifts (from cutoff date onwards)
-  let shiftsQuery = supabase
+  // Shifts (from cutoff date onwards), enriched with nurse's section and unit
+  const { data: rawShifts } = await supabase
     .from('shifts')
-    .select('*')
+    .select(`
+      *,
+      nurses (
+        units (title),
+        schedule_sections (title)
+      )
+    `)
     .gte('date', cutoffDateStr)
+    .eq('nurse_id', userId)
     .order('date', { ascending: true })
 
-  shiftsQuery = shiftsQuery.eq('nurse_id', userId)
+  // Build month/year sets from shifts
+  const monthsSet = new Set<number>()
+  const yearsSet = new Set<number>()
+  ;(rawShifts || []).forEach((s: any) => {
+    const dateStr = s.date || s.shift_date
+    if (dateStr) {
+      const [y, m] = dateStr.split('-')
+      const year = parseInt(y, 10)
+      const month = parseInt(m, 10)
+      if (!Number.isNaN(year)) yearsSet.add(year)
+      if (!Number.isNaN(month)) monthsSet.add(month)
+    }
+  })
 
-  const { data: shifts } = await shiftsQuery
+  // Fetch monthly roster for the months that have shifts for this user
+  let rosterLookup: Record<string, { section_id: string | null, unit_id: string | null }> = {}
+  if (monthsSet.size > 0 && yearsSet.size > 0) {
+    const monthsArr = Array.from(monthsSet.values())
+    const yearsArr = Array.from(yearsSet.values())
+
+    const { data: rosterRows } = await supabase
+      .from('monthly_rosters')
+      .select('*')
+      .eq('nurse_id', userId)
+      .in('month', monthsArr)
+      .in('year', yearsArr)
+
+    if (rosterRows && rosterRows.length > 0) {
+      rosterRows.forEach((r: any) => {
+        const key = `${r.year}-${String(r.month).padStart(2, '0')}`
+        rosterLookup[key] = { section_id: r.section_id || null, unit_id: r.unit_id || null }
+      })
+    }
+  }
+
+  // Fetch sections and units to resolve titles
+  const [sectionsRes, unitsRes] = await Promise.all([
+    supabase.from('schedule_sections').select('id,title'),
+    supabase.from('units').select('id,title')
+  ])
+  const sectionsById: Record<string, string> = {}
+  const unitsById: Record<string, string> = {}
+  ;(sectionsRes.data || []).forEach((s: any) => { sectionsById[s.id] = s.title })
+  ;(unitsRes.data || []).forEach((u: any) => { unitsById[u.id] = u.title })
+
+  // Final enriched shifts using monthly roster assignment (escala)
+  const shifts = (rawShifts || []).map((s: any) => {
+    const dateStr = s.date || s.shift_date
+    const [y, m] = dateStr ? dateStr.split('-') : [undefined, undefined]
+    const rosterKey = y && m ? `${parseInt(y, 10)}-${m}` : ''
+    const roster = rosterLookup[rosterKey]
+    const sectionTitleFromRoster = roster?.section_id ? sectionsById[roster.section_id] : null
+    const unitTitleFromRoster = roster?.unit_id ? unitsById[roster.unit_id] : null
+    const sectionTitleFallback = s.nurses?.schedule_sections?.title || null
+    const unitTitleFallback = s.nurses?.units?.title || null
+    return {
+      ...s,
+      section_name: sectionTitleFromRoster ?? sectionTitleFallback,
+      unit_name: unitTitleFromRoster ?? unitTitleFallback,
+      is_in_roster: !!roster
+    }
+  })
 
   // Time off requests
   let timeOffsQuery = supabase
@@ -369,56 +450,119 @@ export async function getDailyShifts(date: string) {
 
   if (isLocalMode()) {
     const db = readDb()
-    const shifts = db.shifts.filter(s => s.date === date) // Assuming date in shifts is stored as YYYY-MM-DD
-    
+    const shifts = db.shifts.filter(s => s.date === date)
+
+    const [yearStr, monthStr] = date.split('-')
+    const yearNum = parseInt(yearStr, 10)
+    const monthNum = parseInt(monthStr, 10)
+
     const enrichedShifts = shifts.map(s => {
-        const nurse = db.nurses.find(n => n.id === s.nurse_id)
-        const unit = nurse?.unit_id ? db.units.find(u => u.id === nurse.unit_id)?.title : null
-        const section = nurse?.section_id ? db.schedule_sections.find(sec => sec.id === nurse.section_id)?.title : null
-        
-        return {
-            ...s,
-            nurse_name: nurse?.name || 'Desconhecido',
-            nurse_role: nurse?.role || 'Desconhecido',
-            unit_name: unit,
-            section_name: section
-        }
+      const nurse = db.nurses.find(n => n.id === s.nurse_id)
+      const roster = db.monthly_rosters.find(
+        r => r.nurse_id === s.nurse_id && r.month === monthNum && r.year === yearNum
+      )
+
+      const sectionId = roster?.section_id ?? nurse?.section_id ?? null
+      const unitId = roster?.unit_id ?? nurse?.unit_id ?? null
+
+      const sectionTitle = sectionId ? db.schedule_sections.find(sec => sec.id === sectionId)?.title ?? null : null
+      const unitTitle = unitId ? db.units.find(u => u.id === unitId)?.title ?? null : null
+
+      return {
+        ...s,
+        nurse_name: nurse?.name || 'Desconhecido',
+        nurse_role: nurse?.role || 'Desconhecido',
+        unit_name: unitTitle,
+        section_name: sectionTitle,
+        is_in_roster: !!roster
+      }
     })
-    
-    return { success: true, data: enrichedShifts }
+
+    return { success: true, data: enrichedShifts.filter(s => s.is_in_roster) }
   }
 
   const supabase = createClient()
-  
-  const { data: shifts, error } = await supabase
+
+  // 1) Buscar plantões do dia
+  const { data: rawShifts, error: shiftsError } = await supabase
     .from('shifts')
-    .select(`
-        *,
-        nurses (
-            name,
-            role,
-            units (title),
-            schedule_sections (title)
-        )
-    `)
+    .select('*')
     .eq('date', date)
 
-  if (error) {
-      console.error('Error fetching daily shifts:', error)
-      return { success: false, message: 'Erro ao buscar plantões' }
+  if (shiftsError) {
+    console.error('Error fetching daily shifts:', shiftsError)
+    return { success: false, message: 'Erro ao buscar plantões' }
   }
 
-  const enrichedShifts = (shifts || []).map((s: any) => ({
+  const shifts = rawShifts || []
+  if (shifts.length === 0) {
+    return { success: true, data: [] }
+  }
+
+  const nurseIds = Array.from(new Set(shifts.map(s => s.nurse_id).filter(Boolean)))
+  const [yearStr, monthStr] = date.split('-')
+  const yearNum = parseInt(yearStr, 10)
+  const monthNum = parseInt(monthStr, 10)
+
+  // 2) Buscar dados auxiliares em paralelo: roster (escala mensal), enfermeiros, seções e setores
+  const [
+    { data: rosterRows },
+    { data: nursesRows },
+    { data: sectionsRows },
+    { data: unitsRows }
+  ] = await Promise.all([
+    supabase.from('monthly_rosters')
+      .select('nurse_id, section_id, unit_id, month, year')
+      .eq('month', monthNum)
+      .eq('year', yearNum)
+      .in('nurse_id', nurseIds),
+    supabase.from('nurses')
+      .select('id, name, role, unit_id, section_id')
+      .in('id', nurseIds),
+    supabase.from('schedule_sections')
+      .select('id, title'),
+    supabase.from('units')
+      .select('id, title')
+  ])
+
+  const rosterByNurse: Record<string, { section_id: string | null, unit_id: string | null }> = {}
+  ;(rosterRows || []).forEach((r: any) => {
+    rosterByNurse[r.nurse_id] = { section_id: r.section_id || null, unit_id: r.unit_id || null }
+  })
+
+  const nursesById: Record<string, { name: string, role: string }> = {}
+  ;(nursesRows || []).forEach((n: any) => {
+    nursesById[n.id] = { name: n.name, role: n.role }
+  })
+
+  const sectionsById: Record<string, string> = {}
+  ;(sectionsRows || []).forEach((s: any) => { sectionsById[s.id] = s.title })
+
+  const unitsById: Record<string, string> = {}
+  ;(unitsRows || []).forEach((u: any) => { unitsById[u.id] = u.title })
+
+  // 3) Enriquecer plantões com dados de escala mensal (prioritário) e nomes
+  const enrichedShifts = shifts.map((s: any) => {
+    const nurseInfo = nursesById[s.nurse_id] || { name: 'Desconhecido', role: 'Desconhecido', unit_id: null, section_id: null }
+    const roster = rosterByNurse[s.nurse_id]
+    const sectionTitle = roster?.section_id ? sectionsById[roster.section_id] || null : null
+    const unitTitle = roster?.unit_id ? unitsById[roster.unit_id] || null : null
+    const sectionFallback = nurseInfo.section_id ? sectionsById[nurseInfo.section_id] || null : null
+    const unitFallback = nurseInfo.unit_id ? unitsById[nurseInfo.unit_id] || null : null
+
+    return {
       ...s,
       shift_type: s.type,
       shift_date: s.date,
-      nurse_name: s.nurses?.name,
-      nurse_role: s.nurses?.role,
-      unit_name: s.nurses?.units?.title,
-      section_name: s.nurses?.schedule_sections?.title
-  }))
+      nurse_name: nurseInfo.name,
+      nurse_role: nurseInfo.role,
+      unit_name: unitTitle ?? unitFallback,
+      section_name: sectionTitle ?? sectionFallback,
+      is_in_roster: !!roster
+    }
+  })
 
-  return { success: true, data: enrichedShifts }
+  return { success: true, data: enrichedShifts.filter(s => s.is_in_roster) }
 }
 
 export async function getMonthlyScheduleData(month: number, year: number) {
@@ -600,6 +744,16 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
           db.monthly_rosters[existingIndex].section_id = sectionId
           db.monthly_rosters[existingIndex].unit_id = unitId
         } else {
+          // If adding new to roster, clear any existing shifts for this month (clean slate)
+          // This prevents "ghost" shifts from appearing if the nurse had shifts in this month previously
+          const startDate = `${year}-${String(m).padStart(2, '0')}-01`
+          const lastDay = new Date(year, m, 0).getDate()
+          const endDate = `${year}-${String(m).padStart(2, '0')}-${lastDay}`
+          
+          db.shifts = db.shifts.filter(s => 
+            !(s.nurse_id === nurseId && s.shift_date >= startDate && s.shift_date <= endDate)
+          )
+
           db.monthly_rosters.push({
             id: randomUUID(),
             nurse_id: nurseId,
@@ -619,19 +773,42 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
 
   const supabase = createClient()
   
-  const upserts = monthsToUpdate.map(m => ({
-    nurse_id: nurseId, 
-    section_id: sectionId, 
-    unit_id: unitId, 
-    month: m, 
-    year 
-  }))
+  for (const m of monthsToUpdate) {
+    // Check if exists first to decide whether to clear shifts
+    const { data: existing } = await supabase
+        .from('monthly_rosters')
+        .select('id')
+        .eq('nurse_id', nurseId)
+        .eq('month', m)
+        .eq('year', year)
+        .maybeSingle()
 
-  const { error } = await supabase
-    .from('monthly_rosters')
-    .upsert(upserts, { onConflict: 'nurse_id, month, year' })
+    if (!existing) {
+        // Clear shifts for this month if adding new
+        const startDate = `${year}-${String(m).padStart(2, '0')}-01`
+        const lastDay = new Date(year, m, 0).getDate()
+        const endDate = `${year}-${String(m).padStart(2, '0')}-${lastDay}`
+        
+        await supabase.from('shifts')
+            .delete()
+            .eq('nurse_id', nurseId)
+            .gte('date', startDate)
+            .lte('date', endDate)
+    }
 
-  if (error) return { success: false, message: error.message }
+    const { error } = await supabase
+        .from('monthly_rosters')
+        .upsert({
+            nurse_id: nurseId, 
+            section_id: sectionId, 
+            unit_id: unitId, 
+            month: m, 
+            year 
+        }, { onConflict: 'nurse_id, month, year' })
+
+    if (error) return { success: false, message: error.message }
+  }
+
   revalidatePath('/')
   return { success: true }
 }

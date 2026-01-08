@@ -1,7 +1,6 @@
 import { getUserDashboardData, getNurses } from '@/app/actions'
 import { getSwapRequests } from '@/app/swap-actions'
 import { redirect } from 'next/navigation'
-import SwapSection from './SwapSection'
 import AdminDailySchedule from './AdminDailySchedule'
 import MyShifts from './MyShifts'
 
@@ -50,21 +49,13 @@ export default async function DashboardPage() {
           {user.isAdmin ? (
             <AdminDailySchedule />
           ) : (
-            <MyShifts shifts={shifts} />
+            <MyShifts shifts={shifts} currentUserId={user.id} />
           )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Meus Plantões (Visible in grid only for Admin since they have Daily Schedule on top) */}
-        {user.isAdmin && <MyShifts shifts={shifts} />}
-
-        {/* Minhas Trocas */}
-        <SwapSection 
-            swaps={swaps} 
-            nurses={nurses} 
-            userShifts={shifts} 
-            currentUserId={user.id} 
-        />
+        {user.isAdmin && <MyShifts shifts={shifts} currentUserId={user.id} />}
 
         {/* Minhas Folgas (or Admin Approvals) */}
         <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">

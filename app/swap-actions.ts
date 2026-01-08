@@ -57,6 +57,45 @@ export async function getSwapRequests() {
   }))
 }
 
+export async function getAvailableShiftsForNurse(nurseId: string) {
+  const session = cookies().get('session_user')
+  if (!session) return []
+  
+  const today = new Date()
+  const cutoffDate = new Date(today)
+  cutoffDate.setHours(0, 0, 0, 0)
+  const cutoffDateStr = cutoffDate.toISOString().split('T')[0]
+
+  if (isLocalMode()) {
+    const db = readDb()
+    return (db.shifts || [])
+      .filter((s: any) => s.nurse_id === nurseId && ((s.date || s.shift_date) >= cutoffDateStr))
+      .sort((a: any, b: any) => (a.date || a.shift_date).localeCompare(b.date || b.shift_date))
+      .map((s: any) => ({
+        date: s.date || s.shift_date,
+        type: s.type || s.shift_type
+      }))
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('shifts')
+    .select('*')
+    .eq('nurse_id', nurseId)
+    .gte('date', cutoffDateStr)
+    .order('date', { ascending: true })
+
+  if (error) {
+    console.error('Error fetching nurse shifts:', error)
+    return []
+  }
+
+  return (data || []).map((s: any) => ({
+    date: s.date,
+    type: s.type
+  }))
+}
+
 export async function createSwapRequest(formData: FormData) {
   const session = cookies().get('session_user')
   if (!session) return { success: false, message: 'Não autorizado' }
@@ -64,22 +103,35 @@ export async function createSwapRequest(formData: FormData) {
 
   const requested_id = formData.get('requested_id') as string
   const requester_shift_date = formData.get('requester_shift_date') as string
-  const requested_shift_date = formData.get('requested_shift_date') as string // Optional
+  const requested_shift_date = formData.get('requested_shift_date') as string
 
-  if (!requested_id || !requester_shift_date) {
-    return { success: false, message: 'Dados incompletos' }
+  if (!requested_id || !requester_shift_date || !requested_shift_date) {
+    return { success: false, message: 'Dados incompletos: selecione enfermeiro e ambas as datas' }
   }
 
   if (isLocalMode()) {
     const db = readDb()
     db.shift_swaps = db.shift_swaps || []
     
+    const requesterHasShift = db.shifts.some((s: any) => 
+      s.nurse_id === user.id && ((s.date && s.date === requester_shift_date) || (s.shift_date && s.shift_date === requester_shift_date))
+    )
+    if (!requesterHasShift) {
+      return { success: false, message: 'Você não possui plantão cadastrado nesta data' }
+    }
+    const requestedHasShift = db.shifts.some((s: any) => 
+      s.nurse_id === requested_id && ((s.date && s.date === requested_shift_date) || (s.shift_date && s.shift_date === requested_shift_date))
+    )
+    if (!requestedHasShift) {
+      return { success: false, message: 'O servidor selecionado não possui plantão nesta data' }
+    }
+    
     const newSwap = {
       id: randomUUID(),
       requester_id: user.id,
       requested_id,
       requester_shift_date,
-      requested_shift_date: requested_shift_date || null,
+      requested_shift_date,
       status: 'pending',
       created_at: new Date().toISOString()
     }
@@ -92,17 +144,39 @@ export async function createSwapRequest(formData: FormData) {
 
   const supabase = createClient()
   
+  // Validate existence of both shifts in Supabase
+  const { data: requesterShift } = await supabase
+    .from('shifts')
+    .select('id')
+    .eq('nurse_id', user.id)
+    .eq('date', requester_shift_date)
+    .limit(1)
+    .maybeSingle()
+  if (!requesterShift) {
+    return { success: false, message: 'Você não possui plantão cadastrado nesta data' }
+  }
+  const { data: requestedShift } = await supabase
+    .from('shifts')
+    .select('id')
+    .eq('nurse_id', requested_id)
+    .eq('date', requested_shift_date)
+    .limit(1)
+    .maybeSingle()
+  if (!requestedShift) {
+    return { success: false, message: 'O servidor selecionado não possui plantão nesta data' }
+  }
+  
   const { error } = await supabase.from('shift_swaps').insert({
     requester_id: user.id,
     requested_id,
     requester_shift_date,
-    requested_shift_date: requested_shift_date || null,
+    requested_shift_date,
     status: 'pending'
   })
 
   if (error) {
     console.error('Error creating swap:', error)
-    return { success: false, message: 'Erro ao criar solicitação' }
+    return { success: false, message: 'Erro ao criar solicitação: ' + (error.message || 'Falha ao inserir em shift_swaps') }
   }
 
   revalidatePath('/dashboard')
@@ -241,6 +315,55 @@ export async function rejectSwapRequest(swapId: string) {
 
   if (error) return { success: false, message: 'Erro ao rejeitar' }
 
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+export async function cancelSwapRequest(id: string) {
+  const session = cookies().get('session_user')
+  if (!session) return { success: false, message: 'Não autorizado' }
+  const user = JSON.parse(session.value)
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const index = (db.shift_swaps || []).findIndex((s: any) => s.id === id)
+    if (index === -1) return { success: false, message: 'Solicitação não encontrada' }
+    
+    // Only requester or admin can cancel
+    if (db.shift_swaps[index].requester_id !== user.id && user.role !== 'ADMIN') {
+        return { success: false, message: 'Você não tem permissão para cancelar esta solicitação' }
+    }
+
+    db.shift_swaps.splice(index, 1)
+    writeDb(db)
+    revalidatePath('/trocas')
+    revalidatePath('/dashboard')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  
+  // Verify ownership first
+  const { data: swap } = await supabase
+    .from('shift_swaps')
+    .select('requester_id')
+    .eq('id', id)
+    .single()
+    
+  if (!swap) return { success: false, message: 'Solicitação não encontrada' }
+  
+  if (swap.requester_id !== user.id && user.role !== 'ADMIN') {
+    return { success: false, message: 'Você não tem permissão para cancelar esta solicitação' }
+  }
+
+  const { error } = await supabase
+    .from('shift_swaps')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { success: false, message: error.message }
+  
+  revalidatePath('/trocas')
   revalidatePath('/dashboard')
   return { success: true }
 }

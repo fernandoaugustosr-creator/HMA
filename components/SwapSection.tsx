@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { createSwapRequest, approveSwapRequest, rejectSwapRequest } from '@/app/swap-actions'
+import { useState, useEffect } from 'react'
+import { createSwapRequest, approveSwapRequest, rejectSwapRequest, getAvailableShiftsForNurse } from '@/app/swap-actions'
 import { useRouter } from 'next/navigation'
 
 interface Swap {
@@ -33,6 +33,7 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
   const [myShiftDate, setMyShiftDate] = useState('')
   const [targetDate, setTargetDate] = useState('')
   const [error, setError] = useState('')
+  const [targetNurseShifts, setTargetNurseShifts] = useState<{date: string, type: string}[]>([])
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '-'
@@ -48,7 +49,15 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
     const formData = new FormData()
     formData.append('requested_id', selectedNurseId)
     formData.append('requester_shift_date', myShiftDate)
-    if (targetDate) formData.append('requested_shift_date', targetDate)
+    formData.append('requested_shift_date', targetDate)
+    
+    const myDateValid = futureShifts.some((s: any) => (s.date || s.shift_date) === myShiftDate)
+    const targetDateValid = targetNurseShifts.some(s => s.date === targetDate)
+    if (!myDateValid || !targetDateValid) {
+      setIsLoading(false)
+      setError('Selecione datas válidas conforme a escala de ambos')
+      return
+    }
 
     const result = await createSwapRequest(formData)
     
@@ -85,12 +94,49 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
     setIsModalOpen(true)
   }
 
-  const pendingSwaps = swaps.filter(s => s.status === 'pending' && (s.requester_id === currentUserId || s.requested_id === currentUserId))
+  useEffect(() => {
+    let isCancelled = false
+    async function loadTargetShifts() {
+      setTargetDate('')
+      setTargetNurseShifts([])
+      if (!selectedNurseId) return
+      const shifts = await getAvailableShiftsForNurse(selectedNurseId)
+      if (!isCancelled) {
+        setTargetNurseShifts(shifts)
+      }
+    }
+    loadTargetShifts()
+    return () => { isCancelled = true }
+  }, [selectedNurseId])
+
+  const pendingSwaps = swaps.filter(s => {
+    if (s.status !== 'pending') return false
+    
+    // Check if swap belongs to current user
+    if (s.requester_id !== currentUserId && s.requested_id !== currentUserId) return false
+
+    // Identify user's shift date involved in this swap
+    const myDate = s.requester_id === currentUserId 
+        ? s.requester_shift_date 
+        : s.requested_shift_date
+
+    // Check if this date corresponds to a valid rostered shift for the user
+    // Note: userShifts contains all shifts from cutoff date, enriched with is_in_roster
+    const myShift = userShifts.find(shift => 
+        (shift.date === myDate || shift.shift_date === myDate) &&
+        shift.is_in_roster
+    )
+    
+    // Only show if the user's shift is still valid and in roster
+    return !!myShift
+  })
   const historySwaps = swaps.filter(s => s.status !== 'pending' && (s.requester_id === currentUserId || s.requested_id === currentUserId))
   
   // Filter future shifts
     const futureShifts = userShifts
       .filter(s => s.nurse_id === currentUserId)
+      // Only show shifts that are part of the roster (escala)
+      .filter(s => s.is_in_roster)
       .filter(s => {
           const d = s.date || s.shift_date
           return d && new Date(d) >= new Date(new Date().setHours(0,0,0,0))
@@ -157,7 +203,15 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                                 </button>
                             </div>
                         ) : (
-                            <span className="text-xs text-orange-600 font-medium italic">Aguardando aprovação</span>
+                            <div className="flex flex-col items-end space-y-1">
+                                <span className="text-xs text-orange-600 font-medium italic">Aguardando aprovação</span>
+                                <button 
+                                    onClick={() => handleCancel(swap.id)}
+                                    className="text-xs text-red-500 hover:text-red-700 underline"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
                         )}
                     </div>
                     </div>
@@ -271,21 +325,29 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                             <option value="">Selecione...</option>
                             {futureShifts.map(s => (
                                 <option key={s.date || s.shift_date} value={s.date || s.shift_date}>
-                                    {formatDate(s.date || s.shift_date)} - {s.type === 'day' ? 'Dia' : 'Noite'}
+                                    {formatDate(s.date || s.shift_date)} - {(s.type || s.shift_type) === 'day' ? 'Dia' : (s.type || s.shift_type) === 'night' ? 'Noite' : (s.type || s.shift_type || 'N/A')}
                                 </option>
                             ))}
                         </select>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Dia Desejado (Receber)</label>
-                        <input 
-                            type="date"
+                        <label className="block text-sm font-medium text-gray-700">Dia Disponível (Receber)</label>
+                        <select
                             value={targetDate}
                             onChange={(e) => setTargetDate(e.target.value)}
                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm border p-2"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Opcional. Se vazio, será apenas uma doação de plantão.</p>
+                            required
+                            disabled={!selectedNurseId}
+                        >
+                            <option value="">{selectedNurseId ? 'Selecione...' : 'Selecione um servidor acima'}</option>
+                            {targetNurseShifts.map(s => (
+                                <option key={s.date} value={s.date}>
+                                    {formatDate(s.date)} - {s.type === 'day' ? 'Dia' : s.type === 'night' ? 'Noite' : (s.type || 'N/A')}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Apenas datas com plantão cadastrado para o servidor selecionado.</p>
                     </div>
 
                     <div className="flex justify-end pt-2">

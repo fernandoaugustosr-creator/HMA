@@ -2,14 +2,20 @@
 
 interface MyShiftsProps {
     shifts: any[]
+    currentUserId: string
 }
 
-export default function MyShifts({ shifts }: MyShiftsProps) {
+export default function MyShifts({ shifts, currentUserId }: MyShiftsProps) {
     const formatDate = (dateString: string) => {
         if (!dateString) return ''
         const [year, month, day] = dateString.split('-')
         return `${day}/${month}/${year}`
     }
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    const myShifts = Array.isArray(shifts) 
+        ? shifts.filter((s: any) => s.nurse_id === currentUserId && ((s.shift_date || s.date) === todayStr))
+        : []
 
     return (
         <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
@@ -20,19 +26,22 @@ export default function MyShifts({ shifts }: MyShiftsProps) {
               </svg>
               Meus Plantões
             </h2>
-            <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">{shifts.length}</span>
+            <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">{myShifts.length}</span>
           </div>
           
           <div className="flex-1 overflow-y-auto max-h-96">
-            {shifts.length === 0 ? (
+            {myShifts.length === 0 ? (
               <p className="text-gray-500 text-sm text-center py-4">Nenhum plantão agendado.</p>
             ) : (
               <ul className="space-y-2">
-                {shifts.map((shift: any) => (
+                {myShifts.map((shift: any) => (
                   <li key={shift.id || `${shift.date}_${shift.nurse_id}`} className="border-b border-gray-100 pb-2 last:border-0">
                     <div className="flex justify-between items-center">
                       <span className="font-medium text-gray-700">{formatDate(shift.shift_date || shift.date)}</span>
-                      <span className="text-sm text-gray-500 capitalize">{(shift.type || shift.shift_type) === 'day' ? 'Dia' : (shift.type || shift.shift_type) === 'night' ? 'Noite' : (shift.type || shift.shift_type || 'N/A')}</span>
+                      <span className="text-sm text-gray-500 capitalize">
+                        {(shift.type || shift.shift_type) === 'day' ? 'Dia' : (shift.type || shift.shift_type) === 'night' ? 'Noite' : (shift.type || shift.shift_type || 'N/A')}
+                        {` • ${shift.unit_name || shift.section_name || 'Sem Setor'}`}
+                      </span>
                     </div>
                   </li>
                 ))}

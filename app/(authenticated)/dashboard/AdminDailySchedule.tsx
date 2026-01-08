@@ -83,10 +83,12 @@ export default function AdminDailySchedule() {
                                     {groupedShifts[unit].map((shift: any, index: number) => (
                                         <li key={shift.id || index} className="border-b border-gray-100 pb-2 last:border-0">
                                             <div className="flex justify-between items-start">
-                                                <div>
-                                                    <p className="font-bold text-gray-800">{shift.nurse_name}</p>
-                                                    <p className="text-xs text-gray-500">{shift.nurse_role} • {shift.section_name || 'Sem Bloco'}</p>
-                                                </div>
+                                            <div>
+                                                <p className="font-bold text-gray-800">{shift.nurse_name}</p>
+                                                <p className="text-xs text-gray-500">
+                                                    {shift.nurse_role} • {shift.unit_name || 'Sem Setor'}
+                                                </p>
+                                            </div>
                                                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${shift.shift_type === 'night' ? 'bg-indigo-100 text-indigo-800' : 'bg-yellow-100 text-yellow-800'}`}>
                                                     {shift.shift_type === 'day' ? 'DIA' : shift.shift_type === 'night' ? 'NOITE' : (shift.shift_type || 'N/A').toUpperCase()}
                                                 </span>
