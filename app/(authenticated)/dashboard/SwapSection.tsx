@@ -85,8 +85,8 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
     setIsModalOpen(true)
   }
 
-  const pendingSwaps = swaps.filter(s => s.status === 'pending')
-  const historySwaps = swaps.filter(s => s.status !== 'pending')
+  const pendingSwaps = swaps.filter(s => s.status === 'pending' && (s.requester_id === currentUserId || s.requested_id === currentUserId))
+  const historySwaps = swaps.filter(s => s.status !== 'pending' && (s.requester_id === currentUserId || s.requested_id === currentUserId))
   
   // Filter future shifts
   const futureShifts = userShifts
