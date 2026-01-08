@@ -408,7 +408,7 @@ export async function getDailyShifts(date: string) {
       return { success: false, message: 'Erro ao buscar plantões' }
   }
 
-  const enrichedShifts = shifts.map((s: any) => ({
+  const enrichedShifts = (shifts || []).map((s: any) => ({
       ...s,
       shift_type: s.type,
       shift_date: s.date,

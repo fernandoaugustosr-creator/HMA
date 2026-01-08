@@ -32,7 +32,7 @@ export default function MyShifts({ shifts }: MyShiftsProps) {
                   <li key={shift.id || `${shift.date}_${shift.nurse_id}`} className="border-b border-gray-100 pb-2 last:border-0">
                     <div className="flex justify-between items-center">
                       <span className="font-medium text-gray-700">{formatDate(shift.shift_date || shift.date)}</span>
-                      <span className="text-sm text-gray-500 capitalize">{shift.type === 'day' ? 'Dia' : 'Noite'}</span>
+                      <span className="text-sm text-gray-500 capitalize">{(shift.type || shift.shift_type) === 'day' ? 'Dia' : (shift.type || shift.shift_type) === 'night' ? 'Noite' : (shift.type || shift.shift_type || 'N/A')}</span>
                     </div>
                   </li>
                 ))}

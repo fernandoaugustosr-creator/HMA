@@ -88,7 +88,7 @@ export default function AdminDailySchedule() {
                                                     <p className="text-xs text-gray-500">{shift.nurse_role} • {shift.section_name || 'Sem Bloco'}</p>
                                                 </div>
                                                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${shift.shift_type === 'night' ? 'bg-indigo-100 text-indigo-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                                    {shift.shift_type === 'day' ? 'DIA' : shift.shift_type === 'night' ? 'NOITE' : shift.shift_type.toUpperCase()}
+                                                    {shift.shift_type === 'day' ? 'DIA' : shift.shift_type === 'night' ? 'NOITE' : (shift.shift_type || 'N/A').toUpperCase()}
                                                 </span>
                                             </div>
                                         </li>
