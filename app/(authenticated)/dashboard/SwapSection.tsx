@@ -89,11 +89,12 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
   const historySwaps = swaps.filter(s => s.status !== 'pending' && (s.requester_id === currentUserId || s.requested_id === currentUserId))
   
   // Filter future shifts
-  const futureShifts = userShifts
-    .filter(s => {
-        const d = s.date || s.shift_date
-        return d && new Date(d) >= new Date(new Date().setHours(0,0,0,0))
-    })
+    const futureShifts = userShifts
+      .filter(s => s.nurse_id === currentUserId)
+      .filter(s => {
+          const d = s.date || s.shift_date
+          return d && new Date(d) >= new Date(new Date().setHours(0,0,0,0))
+      })
     .sort((a, b) => {
         const da = a.date || a.shift_date
         const db = b.date || b.shift_date
