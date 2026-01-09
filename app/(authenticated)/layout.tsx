@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import Sidebar from '@/components/Sidebar'
+import SupabaseStatus from '@/components/SupabaseStatus'
 import { redirect } from 'next/navigation'
 
 export default function AuthenticatedLayout({
@@ -21,8 +22,11 @@ export default function AuthenticatedLayout({
       <div className="no-print">
         <Sidebar user={user} />
       </div>
-      <main className="flex-1 p-2 md:p-8 overflow-y-auto md:h-screen">
-        {children}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        <div className="flex-1 p-2 md:p-8 overflow-y-auto">
+            {children}
+        </div>
+        <SupabaseStatus />
       </main>
     </div>
   )
