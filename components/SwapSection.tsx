@@ -87,6 +87,13 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
     else alert(result.message)
   }
 
+  const handleCancel = async (id: string) => {
+    if (!confirm('Tem certeza que deseja cancelar esta solicitação?')) return
+    const result = await cancelSwapRequest(id)
+    if (result.success) router.refresh()
+    else alert(result.message)
+  }
+
   const openModalForShift = (date: string) => {
     setMyShiftDate(date)
     setSelectedNurseId('')
