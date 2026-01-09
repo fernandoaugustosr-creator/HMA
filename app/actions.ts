@@ -297,22 +297,39 @@ export async function getUserDashboardData() {
   if (isLocalMode()) {
     const db = readDb()
     
+    // Create lookup maps for sections and units
+    const sectionsById: Record<string, string> = {}
+    ;(db.schedule_sections || []).forEach((s: any) => { sectionsById[s.id] = s.title })
+
+    const unitsById: Record<string, string> = {}
+    ;(db.units || []).forEach((u: any) => { unitsById[u.id] = u.title })
+
+    // Get nurse info for fallback
+    const nurse = db.nurses.find((n: any) => n.id === userId)
+
     // Shifts (from cutoff date onwards)
     const shifts = db.shifts
-      .filter(s => s.nurse_id === userId && s.shift_date >= cutoffDateStr)
-      .sort((a, b) => a.shift_date.localeCompare(b.shift_date))
-      .map(s => {
+      .filter((s: any) => s.nurse_id === userId && s.shift_date >= cutoffDateStr)
+      .sort((a: any, b: any) => a.shift_date.localeCompare(b.shift_date))
+      .map((s: any) => {
         const dateStr = s.shift_date
         const [y, m] = dateStr.split('-')
         const year = parseInt(y, 10)
         const month = parseInt(m, 10)
         
-        const roster = db.monthly_rosters?.find(r => 
+        const roster = db.monthly_rosters?.find((r: any) => 
             r.nurse_id === userId && r.month === month && r.year === year
         )
+
+        const sectionTitleFromRoster = roster?.section_id ? sectionsById[roster.section_id] : null
+        const unitTitleFromRoster = roster?.unit_id ? unitsById[roster.unit_id] : null
+        const sectionFallback = nurse?.section_id ? sectionsById[nurse.section_id] : null
+        const unitFallback = nurse?.unit_id ? unitsById[nurse.unit_id] : null
         
         return {
             ...s,
+            section_name: sectionTitleFromRoster ?? sectionFallback,
+            unit_name: unitTitleFromRoster ?? unitFallback,
             is_in_roster: !!roster
         }
       })
