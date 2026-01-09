@@ -547,9 +547,9 @@ export async function getDailyShifts(date: string) {
     rosterByNurse[r.nurse_id] = { section_id: r.section_id || null, unit_id: r.unit_id || null }
   })
 
-  const nursesById: Record<string, { name: string, role: string }> = {}
+  const nursesById: Record<string, { name: string, role: string, unit_id?: string, section_id?: string }> = {}
   ;(nursesRows || []).forEach((n: any) => {
-    nursesById[n.id] = { name: n.name, role: n.role }
+    nursesById[n.id] = { name: n.name, role: n.role, unit_id: n.unit_id, section_id: n.section_id }
   })
 
   const sectionsById: Record<string, string> = {}
