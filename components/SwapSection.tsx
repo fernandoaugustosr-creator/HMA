@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createSwapRequest, approveSwapRequest, rejectSwapRequest, getAvailableShiftsForNurse } from '@/app/swap-actions'
+import { createSwapRequest, approveSwapRequest, rejectSwapRequest, cancelSwapRequest, getAvailableShiftsForNurse } from '@/app/swap-actions'
 import { useRouter } from 'next/navigation'
 
 interface Swap {
