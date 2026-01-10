@@ -1130,7 +1130,7 @@ export async function updateTimeOffRequest(id: string, data: { startDate: string
 
   if (error) return { success: false, message: 'Erro ao atualizar solicitação: ' + error.message }
   revalidatePath('/folgas')
-  revalidatePath('/dashboard')
+  revalidatePath('/')
   return { success: true, message: 'Solicitação atualizada com sucesso' }
 }
 

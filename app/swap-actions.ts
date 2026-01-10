@@ -138,7 +138,7 @@ export async function createSwapRequest(formData: FormData) {
     
     db.shift_swaps.push(newSwap)
     writeDb(db)
-    revalidatePath('/dashboard')
+    revalidatePath('/')
     return { success: true }
   }
 
@@ -179,7 +179,7 @@ export async function createSwapRequest(formData: FormData) {
     return { success: false, message: 'Erro ao criar solicitação: ' + (error.message || 'Falha ao inserir em shift_swaps') }
   }
 
-  revalidatePath('/dashboard')
+  revalidatePath('/')
   return { success: true }
 }
 
@@ -217,7 +217,6 @@ export async function approveSwapRequest(swapId: string) {
 
     db.shift_swaps[swapIndex].status = 'approved'
     writeDb(db)
-    revalidatePath('/dashboard')
     revalidatePath('/')
     return { success: true }
   }
@@ -337,7 +336,7 @@ export async function cancelSwapRequest(id: string) {
     db.shift_swaps.splice(index, 1)
     writeDb(db)
     revalidatePath('/trocas')
-    revalidatePath('/dashboard')
+    revalidatePath('/')
     return { success: true }
   }
 
@@ -364,6 +363,6 @@ export async function cancelSwapRequest(id: string) {
   if (error) return { success: false, message: error.message }
   
   revalidatePath('/trocas')
-  revalidatePath('/dashboard')
+  revalidatePath('/')
   return { success: true }
 }
