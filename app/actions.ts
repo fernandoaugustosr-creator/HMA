@@ -910,6 +910,47 @@ export async function releaseSchedule(month: number, year: number, unitId: strin
   }
 }
 
+export async function unreleaseSchedule(month: number, year: number, unitId: string | null) {
+  try {
+      await checkAdmin()
+      
+      if (isLocalMode()) {
+         const db = readDb()
+         const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
+         
+         if (existingIndex >= 0) {
+             db.monthly_schedule_metadata[existingIndex].is_released = false
+             db.monthly_schedule_metadata[existingIndex].updated_at = new Date().toISOString()
+             writeDb(db)
+         }
+         revalidatePath('/')
+         return { success: true }
+      }
+
+      const supabase = createClient()
+      
+      let query = supabase.from('monthly_schedule_metadata').select('id').eq('month', month).eq('year', year)
+      if (unitId) query = query.eq('unit_id', unitId)
+      else query = query.is('unit_id', null)
+
+      const { data: existing } = await query.maybeSingle()
+
+      if (existing) {
+          const { error } = await supabase.from('monthly_schedule_metadata').update({
+              is_released: false,
+              updated_at: new Date().toISOString()
+          }).eq('id', existing.id)
+          if (error) throw error
+      }
+      
+      revalidatePath('/')
+      return { success: true }
+  } catch(e: any) {
+      console.error(e)
+      return { success: false, message: `Erro ao cancelar liberação da escala: ${e.message || 'Erro desconhecido'}` }
+  }
+}
+
 export async function updateScheduleFooter(month: number, year: number, unitId: string | null, footerText: string) {
   try {
       await checkAdmin()

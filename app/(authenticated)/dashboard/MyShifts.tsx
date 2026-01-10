@@ -16,6 +16,7 @@ export default function MyShifts({ shifts, currentUserId }: MyShiftsProps) {
     const myShifts = Array.isArray(shifts) 
         ? shifts
             .filter((s: any) => s.nurse_id === currentUserId && (s.shift_date || s.date) >= todayStr)
+            .filter((s: any) => s.is_in_roster) // Only show shifts that are part of a roster
             .sort((a, b) => (a.shift_date || a.date).localeCompare(b.shift_date || b.date))
             .slice(0, 10) // Show next 10 shifts
         : []

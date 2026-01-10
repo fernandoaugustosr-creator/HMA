@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, updateScheduleFooter, Section, Unit } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
@@ -154,13 +154,15 @@ export default function Schedule({
     printOnly = false,
     initialMonth,
     initialYear,
-    initialUnitId
+    initialUnitId,
+    onLoaded
 }: { 
     isAdmin?: boolean, 
     printOnly?: boolean,
     initialMonth?: number,
     initialYear?: number,
-    initialUnitId?: string
+    initialUnitId?: string,
+    onLoaded?: () => void
 }) {
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(initialMonth !== undefined ? initialMonth : currentDate.getMonth())
@@ -254,6 +256,7 @@ export default function Schedule({
             setSelectedUnitId(cachedData.units[0].id)
         }
         setLoading(false)
+        onLoaded?.()
         return
     }
 
@@ -269,8 +272,9 @@ export default function Schedule({
       console.error('Error fetching schedule:', error)
     } finally {
       setLoading(false)
+      onLoaded?.()
     }
-  }, [selectedMonth, selectedYear, selectedUnitId])
+  }, [selectedMonth, selectedYear, selectedUnitId, onLoaded])
 
   useEffect(() => {
     fetchData()
@@ -387,10 +391,6 @@ export default function Schedule({
 
 
 
-  const handlePrint = () => {
-    window.print()
-  }
-
   const handleRelease = async () => {
     if (!selectedUnitId) return alert('Selecione um setor para liberar')
     if (!confirm('Tem certeza que deseja liberar esta escala? Ela ficará disponível para download.')) return
@@ -399,6 +399,22 @@ export default function Schedule({
     const res = await releaseSchedule(selectedMonth + 1, selectedYear, selectedUnitId)
     if (res.success) {
         alert('Escala liberada com sucesso!')
+        clearCache()
+        fetchData(true)
+    } else {
+        alert(res.message)
+    }
+    setLoading(false)
+  }
+
+  const handleUnrelease = async () => {
+    if (!selectedUnitId) return
+    if (!confirm('Tem certeza que deseja CANCELAR a liberação desta escala? Ela deixará de aparecer na área pública.')) return
+    
+    setLoading(true)
+    const res = await unreleaseSchedule(selectedMonth + 1, selectedYear, selectedUnitId)
+    if (res.success) {
+        alert('Liberação cancelada com sucesso!')
         clearCache()
         fetchData(true)
     } else {
@@ -888,7 +904,7 @@ export default function Schedule({
           return (
             <tr key={nurse.id} className="hover:bg-gray-50">
               <td className="border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8">{currentCounter}</td>
-              <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 min-w-[250px] border-r-2 border-r-black">
+              <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 w-[300px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
                   {isAdmin && (
                   <button 
@@ -1172,10 +1188,16 @@ export default function Schedule({
                 </div>
              ) : (
                 isScheduleReleased ? (
-                    <div className="flex items-center justify-center gap-2 text-green-600 font-bold h-[38px] px-4 bg-green-50 border border-green-200 rounded w-full md:w-48 whitespace-nowrap">
-                        <Check size={18} />
-                        Escala Liberada
-                    </div>
+                    <button 
+                        onClick={handleUnrelease}
+                        className="group flex items-center justify-center gap-2 text-green-600 font-bold h-[38px] px-4 bg-green-50 border border-green-200 rounded w-full md:w-48 whitespace-nowrap hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                        title="Clique para cancelar a liberação"
+                    >
+                        <Check size={18} className="group-hover:hidden" />
+                        <X size={18} className="hidden group-hover:block" />
+                        <span className="group-hover:hidden">Escala Liberada</span>
+                        <span className="hidden group-hover:inline">Cancelar Liberação</span>
+                    </button>
                 ) : (
                     <button 
                         onClick={handleRelease}
@@ -1193,7 +1215,7 @@ export default function Schedule({
       {/* Report Header */}
       <div className="mb-4">
         {/* Logos Header */}
-        <div className={`flex justify-between items-center mb-4 border-b pb-2 ${printOnly ? 'hidden print:flex' : ''}`}>
+        <div className={`flex justify-between items-center mb-4 ${printOnly ? 'hidden print:flex' : ''}`}>
             <div className="flex flex-col items-start">
                 {/* Section Manager Dropdown (Replacing Logo) */}
                 <div className="flex items-center gap-4 relative">
@@ -1239,13 +1261,13 @@ export default function Schedule({
             </div>
         </div>
         
-        <div className={`bg-gray-200 border border-black p-1 text-center mb-1 ${printOnly ? 'hidden print:block' : ''}`}>
-          <h3 className="font-bold text-lg uppercase text-black">
+        <div className={`bg-gray-200 border border-black p-0.5 text-center mb-1 ${printOnly ? 'hidden print:block' : ''}`}>
+          <h3 className="font-bold text-base uppercase text-black">
             {data.units.find(u => u.id === selectedUnitId)?.title || 'OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO'}
           </h3>
         </div>
-        <div className={`bg-gray-200 border border-black p-1 text-center ${printOnly ? 'hidden print:block' : ''}`}>
-           <h4 className="font-bold text-md uppercase text-black">{MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
+        <div className={`bg-gray-200 border border-black p-0.5 text-center ${printOnly ? 'hidden print:block' : ''}`}>
+           <h4 className="font-bold text-sm uppercase text-black">{MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
         </div>
       </div>
 
@@ -1264,13 +1286,13 @@ export default function Schedule({
                return (
                  <>
                  {visibleSections.map(section => (
-                    <div key={section.id} className="border border-black">
-                        <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
+                    <div key={section.id} className="">
+                        <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px] table-fixed">
                              <thead>
                              {/* Main Headers Row 1 */}
-                             <tr className="bg-blue-100 text-black">
-                                 <th className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold" rowSpan={2}>#</th>
-                                 <th className="border border-black px-1 py-1 text-center min-w-[250px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group" rowSpan={2}>
+                            <tr className="bg-blue-100 text-black print:bg-blue-100">
+                                <th className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold print:bg-blue-100" rowSpan={2}>#</th>
+                                <th className="border border-black px-1 py-1 text-center w-[300px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group print:bg-blue-100" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center">
                                             <input 
@@ -1288,9 +1310,9 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>COREN</th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-[10px]" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold bg-blue-100 print:bg-blue-100" rowSpan={2}>COREN</th>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold bg-blue-100 print:bg-blue-100" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-[10px] bg-blue-100 print:bg-blue-100" rowSpan={2}>
                                     {editingSectorTitleId === section.id ? (
                                         <div className="flex items-center gap-1">
                                             <input 
@@ -1313,20 +1335,20 @@ export default function Schedule({
                                     )}
                                 </th>
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-6 ${isWeekend ? 'bg-gray-400' : ''}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-6 ${isWeekend ? 'bg-gray-400 print:bg-gray-400' : ''}`}>
                                     {weekday}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center w-16 font-bold">TOTAL</th>
+                                <th className="border border-black px-1 py-1 text-center w-16 font-bold bg-blue-100 print:bg-blue-100">TOTAL</th>
                             </tr>
                             {/* Main Headers Row 2 */}
-                            <tr className="bg-blue-100 text-black">
+                            <tr className="bg-blue-100 text-black print:bg-blue-100">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400' : ''}`}>
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400 print:bg-gray-400' : ''}`}>
                                     {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center font-bold">PLANTÃO</th>
+                                <th className="border border-black px-1 py-1 text-center font-bold bg-blue-100 print:bg-blue-100">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1408,45 +1430,9 @@ export default function Schedule({
         )}
       </div>
       
-      {/* Signatures Footer */}
-      <div className={`mt-8 mb-4 grid grid-cols-4 gap-4 text-center break-inside-avoid ${printOnly ? 'hidden print:grid' : ''}`}>
-        <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-2"></div>
-            <p className="font-bold text-[10px] text-black uppercase">Coordenação de Setor</p>
-        </div>
-        <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-2"></div>
-            <p className="font-bold text-[10px] text-black uppercase">Coordenação Geral de Enfermagem</p>
-        </div>
-        <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-2"></div>
-            <p className="font-bold text-[10px] text-black uppercase">Coordenação do RH/HMA</p>
-        </div>
-        <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-2"></div>
-            <p className="font-bold text-[10px] text-black uppercase">Direção Geral do HMA</p>
-        </div>
-      </div>
 
-      {/* Footer Text / Legend */}
-      <div className={`mt-4 border border-black p-2 text-[10px] text-black bg-white break-inside-avoid ${printOnly ? 'hidden print:block' : ''}`}>
-        {footerText ? (
-             <div className="whitespace-pre-wrap">{footerText}</div>
-        ) : (
-            <>
-                <p className="font-bold mb-1">LEGENDA:</p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                    <span><strong>D</strong> - DIURNO (07:00 às 19:00)</span>
-                    <span><strong>N</strong> - NOTURNO (19:00 às 07:00)</span>
-                    <span><strong>CH</strong> - CARGA HORÁRIA</span>
-                    <span><strong>LM</strong> - LICENÇA MATERNIDADE</span>
-                    <span><strong>LS</strong> - LICENÇA SAÚDE</span>
-                    <span><strong>FE</strong> - FÉRIAS</span>
-                    <span><strong>F</strong> - FOLGA</span>
-                </div>
-            </>
-        )}
-      </div>
+
+
 
 
 
@@ -1583,24 +1569,26 @@ export default function Schedule({
             </div>
         )}
 
-        {/* Signature Fields */}
-        <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-xs break-inside-avoid px-4">
-            <div className="flex flex-col items-center">
-                <div className="w-full border-b border-black mb-2"></div>
-                <p>Coordenação de Setor</p>
-            </div>
-            <div className="flex flex-col items-center">
-                <div className="w-full border-b border-black mb-2"></div>
-                <p>Coordenação Geral de Enfermagem</p>
-            </div>
-            <div className="flex flex-col items-center">
-                <div className="w-full border-b border-black mb-2"></div>
-                <p>Coordenação do RH/HMA</p>
-            </div>
-            <div className="flex flex-col items-center">
-                <div className="w-full border-b border-black mb-2"></div>
-                <p>Direção Geral do HMA</p>
-            </div>
+
+      </div>
+
+      {/* Signatures Footer */}
+      <div className={`mt-8 mb-4 grid grid-cols-4 gap-4 text-center break-inside-avoid ${printOnly ? 'hidden print:grid' : ''}`}>
+        <div className="flex flex-col items-center">
+            <div className="w-full border-b border-black mb-2"></div>
+            <p className="font-bold text-[10px] text-black uppercase">Coordenação de Setor</p>
+        </div>
+        <div className="flex flex-col items-center">
+            <div className="w-full border-b border-black mb-2"></div>
+            <p className="font-bold text-[10px] text-black uppercase">Coordenação Geral de Enfermagem</p>
+        </div>
+        <div className="flex flex-col items-center">
+            <div className="w-full border-b border-black mb-2"></div>
+            <p className="font-bold text-[10px] text-black uppercase">Coordenação do RH/HMA</p>
+        </div>
+        <div className="flex flex-col items-center">
+            <div className="w-full border-b border-black mb-2"></div>
+            <p className="font-bold text-[10px] text-black uppercase">Direção Geral do HMA</p>
         </div>
       </div>
       
@@ -1641,17 +1629,11 @@ export default function Schedule({
           }
           body {
             -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           /* Ensure sticky columns don't mess up print */
           th, td {
             position: static !important;
-          }
-          /* Tabela com fundo branco na impressão */
-          table, th, td {
-            background-color: #ffffff !important;
-          }
-          .bg-blue-100, .bg-gray-100, .bg-gray-200, .bg-gray-300, .bg-gray-400 {
-            background-color: #ffffff !important;
           }
           /* Reforçar bordas escuras na impressão */
           table, th, td {
