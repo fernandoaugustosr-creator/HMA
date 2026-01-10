@@ -55,6 +55,7 @@ create table if not exists monthly_rosters (
   section_id uuid references schedule_sections(id) not null,
   month integer not null,
   year integer not null,
+  observation text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   unique(nurse_id, month, year) -- Um enfermeiro só pode estar em um lugar por mês (regra simplificada)
 );

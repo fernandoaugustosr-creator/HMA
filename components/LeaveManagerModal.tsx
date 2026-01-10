@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { X, Trash2, Calendar, User } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { X, Trash2, Calendar, User, Plus as PlusIcon, List as ListIcon } from 'lucide-react'
 import { assignLeave, deleteTimeOff } from '@/app/actions'
+import SearchableSelect from './SearchableSelect'
 
 export type LeaveType = 'ferias' | 'licenca_saude' | 'licenca_maternidade' | 'cessao'
 
@@ -31,7 +32,13 @@ const TYPE_CONFIG: Record<LeaveType, { title: string, color: string, bg: string,
 
 export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, existingLeaves = [], type, selectedMonth, selectedYear }: Props) {
   const [loading, setLoading] = useState(false)
+  const [selectedNurseId, setSelectedNurseId] = useState('')
   const config = TYPE_CONFIG[type]
+
+  // Reset selection when modal opens/closes
+  useEffect(() => {
+    if (isOpen) setSelectedNurseId('')
+  }, [isOpen])
 
   // Filter leaves for this type
   const currentLeaves = useMemo(() => {
@@ -115,21 +122,20 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
             {/* Form Side */}
             <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                    <PlusIcon /> Novo Registro
+                    <PlusIcon size={16} /> Novo Registro
                 </h3>
                 <form action={handleSubmit} className="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Profissional</label>
-                        <select 
-                        name="nurseId" 
-                        required
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black text-sm"
-                        >
-                        <option value="">Selecione...</option>
-                        {nurses.map(nurse => (
-                            <option key={nurse.id} value={nurse.id}>{nurse.name}</option>
-                        ))}
-                        </select>
+                        <SearchableSelect
+                          options={nurses.map(n => ({ value: n.id, label: n.name }))}
+                          value={selectedNurseId}
+                          onChange={setSelectedNurseId}
+                          placeholder="Selecione um profissional..."
+                          required
+                          name="nurseId"
+                          className="mt-1"
+                        />
                     </div>
 
                     <div className="bg-white p-3 rounded border border-gray-200">
@@ -152,7 +158,7 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
             {/* List Side */}
             <div className="border-l pl-0 md:pl-6 border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                    <ListIcon /> Registros Ativos ({currentLeaves.length})
+                    <ListIcon size={16} /> Registros Ativos ({currentLeaves.length})
                 </h3>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                     {currentLeaves.length === 0 ? (
@@ -202,16 +208,4 @@ function formatDate(dateStr: string) {
     if (!dateStr) return ''
     const [y, m, d] = dateStr.split('-')
     return `${d}/${m}/${y}`
-}
-
-function PlusIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-    )
-}
-
-function ListIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-    )
 }

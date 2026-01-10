@@ -42,8 +42,7 @@ export default function MyShifts({ shifts, currentUserId }: MyShiftsProps) {
                     <div className="flex justify-between items-center">
                       <span className="font-medium text-gray-700">{formatDate(shift.shift_date || shift.date)}</span>
                       <span className="text-sm text-gray-500 capitalize">
-                        {(shift.type || shift.shift_type) === 'day' ? 'Dia' : (shift.type || shift.shift_type) === 'night' ? 'Noite' : (shift.type || shift.shift_type || 'N/A')}
-                        {` • ${shift.unit_name || shift.section_name || 'Sem Setor'}`}
+                        {shift.unit_name || shift.section_name || 'Sem Setor'}
                       </span>
                     </div>
                   </li>

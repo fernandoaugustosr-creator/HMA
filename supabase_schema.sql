@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS monthly_rosters (
     unit_id UUID REFERENCES units(id),
     month INTEGER NOT NULL,
     year INTEGER NOT NULL,
+    observation TEXT,
+    sector TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 

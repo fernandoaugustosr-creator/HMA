@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, Section, Unit } from '@/app/actions'
+import React, { useEffect, useState, useMemo } from 'react'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, updateScheduleFooter, Section, Unit } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
@@ -18,6 +18,7 @@ interface Nurse {
   is_rostered?: boolean
   roster_created_at?: string
   observation?: string
+  sector?: string
 }
 
 interface RosterItem {
@@ -28,6 +29,7 @@ interface RosterItem {
   month: number
   year: number
   observation?: string
+  sector?: string
 }
 
 interface Shift {
@@ -52,6 +54,7 @@ interface ScheduleData {
   timeOffs: TimeOff[]
   sections: Section[]
   units: Unit[]
+  releases?: any[]
 }
 
 const MONTHS = [
@@ -64,11 +67,60 @@ const YEARS = [2024, 2025, 2026, 2027]
 const ObservationCell = ({ 
   initialValue, 
   onSave,
-  isAdmin
+  isAdmin,
+  className = ""
 }: { 
   initialValue: string | undefined, 
   onSave: (val: string) => void,
-  isAdmin: boolean
+  isAdmin: boolean,
+  className?: string
+}) => {
+  const [value, setValue] = useState(initialValue || '')
+
+  useEffect(() => {
+    setValue(initialValue || '')
+  }, [initialValue])
+
+  const handleBlur = () => {
+    if (value !== (initialValue || '')) {
+      onSave(value)
+    }
+  }
+
+  const getColorClass = (val: string | undefined) => {
+    const v = (val || '').toUpperCase().trim()
+    if (v === '1ED') return 'text-red-600'
+    if (v === '1 ED AB') return 'text-blue-600'
+    return 'text-blue-800'
+  }
+
+  const colorClass = getColorClass(value)
+
+  if (!isAdmin) {
+    return <span className={`text-[10px] uppercase block font-bold ${colorClass} ${className}`}>{value}</span>
+  }
+
+  return (
+    <input 
+      type="text" 
+      className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold ${colorClass} ${className}`}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={handleBlur}
+    />
+  )
+}
+
+const SectorCell = ({ 
+  initialValue, 
+  onSave,
+  isAdmin,
+  className = ""
+}: { 
+  initialValue: string | undefined, 
+  onSave: (val: string) => void,
+  isAdmin: boolean,
+  className?: string
 }) => {
   const [value, setValue] = useState(initialValue || '')
 
@@ -83,13 +135,13 @@ const ObservationCell = ({
   }
 
   if (!isAdmin) {
-    return <span className="text-[10px] uppercase block w-full h-full min-h-[16px]">{value}</span>
+    return <span className={`text-[10px] uppercase block font-bold text-black ${className}`}>{value}</span>
   }
 
   return (
     <input 
       type="text" 
-      className="w-full bg-transparent text-center focus:outline-none uppercase text-[10px] px-0 py-0 h-full min-h-[16px]"
+      className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold text-black w-full ${className}`}
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onBlur={handleBlur}
@@ -97,13 +149,25 @@ const ObservationCell = ({
   )
 }
 
-export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
+export default function Schedule({ 
+    isAdmin = false, 
+    printOnly = false,
+    initialMonth,
+    initialYear,
+    initialUnitId
+}: { 
+    isAdmin?: boolean, 
+    printOnly?: boolean,
+    initialMonth?: number,
+    initialYear?: number,
+    initialUnitId?: string
+}) {
   const [currentDate] = useState(new Date())
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth())
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth !== undefined ? initialMonth : currentDate.getMonth())
+  const [selectedYear, setSelectedYear] = useState(initialYear !== undefined ? initialYear : currentDate.getFullYear())
   const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], sections: [], units: [] })
   const [loading, setLoading] = useState(true)
-  const [selectedUnitId, setSelectedUnitId] = useState<string>('')
+  const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
   
@@ -116,11 +180,19 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
   const [isRenamingHiddenSection, setIsRenamingHiddenSection] = useState(false)
   const [renameHiddenSectionTitle, setRenameHiddenSectionTitle] = useState('')
   
+  // Double Shift Modal State
+  const [doubleShiftModal, setDoubleShiftModal] = useState<{ isOpen: boolean, nurseId: string, sectionId: string } | null>(null)
+  
   // Unit Management State
   const [isAddingUnit, setIsAddingUnit] = useState(false)
   const [newUnitTitle, setNewUnitTitle] = useState('')
   const [isEditingUnit, setIsEditingUnit] = useState(false)
   const [editingUnitTitle, setEditingUnitTitle] = useState('')
+
+  // Footer Text State
+  const [footerText, setFooterText] = useState<string>('')
+  const [isEditingFooter, setIsEditingFooter] = useState(false)
+  const [tempFooterText, setTempFooterText] = useState('')
 
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
@@ -129,6 +201,40 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
   const [recurrence, setRecurrence] = useState<'none' | 'daily' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6'>('none')
   const [limitShifts, setLimitShifts] = useState<string>('')
   const [deleteWholeMonth, setDeleteWholeMonth] = useState(false)
+  
+  // Sector Title Editing State
+  const [editingSectorTitleId, setEditingSectorTitleId] = useState<string | null>(null)
+  const [tempSectorTitle, setTempSectorTitle] = useState('')
+
+  // Logo Upload State
+  const [logoTimestamp, setLogoTimestamp] = useState(Date.now())
+  const [cityLogoTimestamp, setCityLogoTimestamp] = useState(Date.now())
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const formData = new FormData()
+      formData.append('file', e.target.files[0])
+      const res = await uploadLogo(formData)
+      if (res.success) {
+        setLogoTimestamp(Date.now())
+      } else {
+        alert('Erro ao enviar logo: ' + (res.message || 'Erro desconhecido'))
+      }
+    }
+  }
+
+  const handleCityLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const formData = new FormData()
+      formData.append('file', e.target.files[0])
+      const res = await uploadCityLogo(formData)
+      if (res.success) {
+        setCityLogoTimestamp(Date.now())
+      } else {
+        alert('Erro ao enviar logo da prefeitura: ' + (res.message || 'Erro desconhecido'))
+      }
+    }
+  }
   
   // Cache to store fetched data by month-year key
   const scheduleCache = React.useRef<Record<string, ScheduleData>>({})
@@ -285,6 +391,22 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
     window.print()
   }
 
+  const handleRelease = async () => {
+    if (!selectedUnitId) return alert('Selecione um setor para liberar')
+    if (!confirm('Tem certeza que deseja liberar esta escala? Ela ficará disponível para download.')) return
+    
+    setLoading(true)
+    const res = await releaseSchedule(selectedMonth + 1, selectedYear, selectedUnitId)
+    if (res.success) {
+        alert('Escala liberada com sucesso!')
+        clearCache()
+        fetchData(true)
+    } else {
+        alert(res.message)
+    }
+    setLoading(false)
+  }
+
   async function handleRemoveFromRoster(nurseId: string) {
     if (!confirm('Tem certeza que deseja remover este servidor desta escala mensal?')) return
     setLoading(true)
@@ -315,8 +437,8 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
     // 2. Remove old
     await removeNurseFromRoster(oldId, selectedMonth + 1, selectedYear)
     
-    // 3. Add new (using same section and unit)
-    await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear)
+    // 3. Add new (using same section and unit), preserving created_at if possible or using old one
+    await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear, rosterItem.observation, rosterItem.created_at)
     
     clearCache()
     await fetchData(true)
@@ -338,6 +460,24 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
     if (!res.success) {
         alert('Erro ao salvar observação')
         // Revert? simpler to just fetch data
+        await fetchData(true)
+    }
+  }
+
+  const handleUpdateSector = async (nurseId: string, sector: string) => {
+    // Optimistic update locally
+    setData(prev => ({
+        ...prev,
+        roster: prev.roster.map(r => 
+            (r.nurse_id === nurseId && r.month === selectedMonth + 1 && r.year === selectedYear)
+            ? { ...r, sector }
+            : r
+        )
+    }))
+
+    const res = await updateRosterSector(nurseId, selectedMonth + 1, selectedYear, sector)
+    if (!res.success) {
+        alert('Erro ao salvar setor')
         await fetchData(true)
     }
   }
@@ -386,6 +526,43 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
     await fetchData()
   }
 
+  const startEditingSectorTitle = (section: Section) => {
+    if (!isAdmin) return
+    setEditingSectorTitleId(section.id)
+    setTempSectorTitle(section.sector_title || 'ENFERMARIAS/LEITOS')
+  }
+
+  const saveSectorTitle = async () => {
+    if (!editingSectorTitleId) return
+    setLoading(true)
+    // We only update the sector_title, keeping the existing title
+    const section = data.sections.find(s => s.id === editingSectorTitleId)
+    if (section) {
+        await updateSection(editingSectorTitleId, section.title, tempSectorTitle)
+    }
+    setEditingSectorTitleId(null)
+    await fetchData()
+  }
+
+  const handleEditFooter = () => {
+      setTempFooterText(footerText || '')
+      setIsEditingFooter(true)
+  }
+
+  const saveFooterText = async () => {
+      setLoading(true)
+      const res = await updateScheduleFooter(selectedMonth + 1, selectedYear, selectedUnitId, tempFooterText)
+      if (res.success) {
+          setIsEditingFooter(false)
+          setFooterText(tempFooterText)
+          clearCache()
+          await fetchData(true)
+      } else {
+          alert(res.message)
+      }
+      setLoading(false)
+  }
+
   const handleAddHiddenSectionToRoster = () => {
     if (!selectedHiddenSectionId) return
     setManuallyAddedSections(prev => prev.includes(selectedHiddenSectionId) ? prev : [...prev, selectedHiddenSectionId])
@@ -422,9 +599,17 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
 
   const handleAssignNurse = async (nurseId: string, sectionId: string) => {
     if (!nurseId) return
+    setDoubleShiftModal({ isOpen: true, nurseId, sectionId })
+  }
+
+  const finalizeAssignNurse = async (observation: string) => {
+    if (!doubleShiftModal) return
+    const { nurseId, sectionId } = doubleShiftModal
+    setDoubleShiftModal(null)
+    
     setLoading(true)
     try {
-        const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear)
+        const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear, observation)
         if (res.success) {
             clearCache()
             await fetchData(true)
@@ -560,7 +745,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
       return data.nurses.map(nurse => {
           const rosterEntry = rosterLookup[nurse.id]
           if (rosterEntry) {
-              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id, is_rostered: true, roster_created_at: rosterEntry.created_at, observation: rosterEntry.observation }
+              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id, is_rostered: true, roster_created_at: rosterEntry.created_at, observation: rosterEntry.observation, sector: rosterEntry.sector }
           }
           return { ...nurse, is_rostered: false }
       })
@@ -584,8 +769,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
           grouped[key].sort((a, b) => {
               const aTime = a.roster_created_at ? new Date(a.roster_created_at).getTime() : 0
               const bTime = b.roster_created_at ? new Date(b.roster_created_at).getTime() : 0
-              if (aTime !== bTime) return aTime - bTime
-              return a.name.localeCompare(b.name)
+              return aTime - bTime
           })
       })
       return grouped
@@ -635,16 +819,75 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
       return lookup
   }, [data.timeOffs, selectedMonth, selectedYear])
 
+  const nurseObservations = useMemo(() => {
+    const map = new Map<string, string>();
+    (data.roster || []).forEach(r => {
+        if (r.month === selectedMonth + 1 && r.year === selectedYear && r.observation) {
+            map.set(r.nurse_id, r.observation);
+        }
+    });
+    return map;
+  }, [data.roster, selectedMonth, selectedYear]);
+
   const renderGrid = (professionals: Nurse[], section: Section) => {
+    // Helper to find the first shift day (1-31) for a nurse in the current month
+    const getFirstShiftDay = (nurseId: string) => {
+        for (let day = 1; day <= daysInMonth; day++) {
+             const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+             if (shiftsLookup.lookup[`${nurseId}_${dateStr}`]) {
+                 return day
+             }
+        }
+        return 999 // No shifts found
+    }
+
+    // Sort professionals by first shift day then by insertion time (for Tecnicos) or just insertion time (for others)
+    const sortedProfessionals = [...professionals].sort((a, b) => {
+        const isTecnicoA = (a.role || '').toUpperCase() === 'TECNICO'
+        const isTecnicoB = (b.role || '').toUpperCase() === 'TECNICO'
+
+        if (isTecnicoA && isTecnicoB) {
+            const dayA = getFirstShiftDay(a.id)
+            const dayB = getFirstShiftDay(b.id)
+            
+            if (dayA !== dayB) {
+                return dayA - dayB
+            }
+        }
+        
+        const aTime = a.roster_created_at ? new Date(a.roster_created_at).getTime() : 0
+        const bTime = b.roster_created_at ? new Date(b.roster_created_at).getTime() : 0
+        return aTime - bTime
+    })
+
+    let currentCounter = 0
+    let lastFirstDay = -1
+
     return (
       <>
-        {professionals.map((nurse, index) => {
+        {sortedProfessionals.map((nurse) => {
           // Calculate Total Shifts
           const totalShifts = shiftsLookup.countLookup[nurse.id] || 0
+          
+          // Calculate counter group based on first shift day
+          const firstDay = getFirstShiftDay(nurse.id)
+          const isTecnico = (nurse.role || '').toUpperCase() === 'TECNICO'
+          
+          if (isTecnico) {
+              if (firstDay !== lastFirstDay) {
+                  currentCounter = 1
+                  lastFirstDay = firstDay
+              } else {
+                  currentCounter++
+              }
+          } else {
+              currentCounter++
+              lastFirstDay = firstDay
+          }
 
           return (
             <tr key={nurse.id} className="hover:bg-gray-50">
-              <td className="border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8">{index + 1}</td>
+              <td className="border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8">{currentCounter}</td>
               <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 min-w-[250px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
                   {isAdmin && (
@@ -660,24 +903,45 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                     <select 
                       value={nurse.id} 
                       onChange={(e) => handleReassign(nurse.id, e.target.value)}
-                      className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-black cursor-pointer outline-none uppercase no-print"
+                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold cursor-pointer outline-none uppercase no-print ${
+                        (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
+                        (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
+                        (nurse.vinculo && nurse.vinculo.toUpperCase().includes('SELETIVO')) ? 'text-green-600' :
+                        'text-black'
+                      }`}
                     >
-                      {data.nurses.map(n => (
-                        <option key={n.id} value={n.id}>{n.name}</option>
-                      ))}
+                      {data.nurses.map(n => {
+                        const obs = (nurseObservations.get(n.id) || '').toUpperCase().trim()
+                        const label = `${n.name} ${obs ? `(${obs})` : ''}`
+                        return <option key={n.id} value={n.id}>{label}</option>
+                      })}
                     </select>
                   ) : null}
-                  <span className="text-xs font-bold text-black uppercase">{nurse.name}</span>
+                  {!isAdmin && (() => {
+                     const obs = (nurse.observation || '').toUpperCase().trim()
+                     let nameColorClass = "text-black"
+                     if (obs === '1ED') {
+                         nameColorClass = "text-red-600"
+                     } else if (obs === '1 ED AB') {
+                         nameColorClass = "text-blue-600"
+                     } else if (nurse.vinculo && nurse.vinculo.toUpperCase().includes('SELETIVO')) {
+                         nameColorClass = "text-green-600"
+                     }
+                     
+                     return <span className={`text-xs font-bold ${nameColorClass} uppercase`}>
+                         {nurse.name} {obs ? obs : ''}
+                     </span>
+                   })()}
                 </div>
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.vinculo || '-'}</td>
-              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase p-0">
-                <ObservationCell 
-                  initialValue={nurse.observation} 
-                  onSave={(val) => handleUpdateObservation(nurse.id, val)}
-                  isAdmin={isAdmin}
-                />
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
+                  <SectorCell 
+                      initialValue={nurse.sector}
+                      onSave={(val) => handleUpdateSector(nurse.id, val)}
+                      isAdmin={isAdmin}
+                  />
               </td>
               
               {daysArray.map(({ day, weekday, isWeekend }) => {
@@ -783,7 +1047,6 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
           </td>
           <td className="border border-black px-1 py-1"></td>
           <td className="border border-black px-1 py-1"></td>
-          <td className="border border-black px-1 py-1"></td>
           {daysArray.map(({ day, isWeekend }) => (
             <td 
               key={`placeholder-${day}`} 
@@ -797,193 +1060,159 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
     )
   }
 
+  const isLaunched = (data.roster || []).some(r => r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
+  
+  const isScheduleReleased = useMemo(() => {
+      if (!data.releases) return false
+      return data.releases.some(r => r.month === selectedMonth + 1 && r.year === selectedYear && r.unit_id === selectedUnitId && r.is_released)
+  }, [data.releases, selectedMonth, selectedYear, selectedUnitId])
+
+  // Sync Footer Text
+  useEffect(() => {
+      const metadata = data.releases?.find(r => r.month === selectedMonth + 1 && r.year === selectedYear && (selectedUnitId ? r.unit_id === selectedUnitId : !r.unit_id))
+      setFooterText(metadata?.footer_text || '')
+  }, [data.releases, selectedMonth, selectedYear, selectedUnitId])
+
   return (
     <div className="w-full bg-white p-2 md:p-4">
       {/* Header Filters */}
-      <div className="flex flex-col md:flex-row gap-4 mb-6 items-start md:items-end no-print">
-        <div className="w-full md:w-auto">
-          <label className="block text-sm font-medium text-black mb-1">Setor</label>
-          {isEditingUnit ? (
-              <div className="flex items-center gap-2">
-                  <input 
-                      value={editingUnitTitle}
-                      onChange={e => setEditingUnitTitle(e.target.value)}
-                      className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
-                      autoFocus
-                  />
-                  <button onClick={saveUnitTitle} className="text-green-600 p-2 hover:bg-gray-100 rounded" title="Salvar">
-                      <Save size={18} />
-                  </button>
-                  <button onClick={() => setIsEditingUnit(false)} className="text-red-600 p-2 hover:bg-gray-100 rounded" title="Cancelar">
-                      <X size={18} />
-                  </button>
-              </div>
-          ) : (
-            <div className="flex items-center gap-2">
-                <select 
-                    value={selectedUnitId} 
-                    onChange={handleUnitChange}
-                    className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
-                >
-                    <option value="">Selecione um setor...</option>
-                    {data.units.map(unit => (
-                    <option key={unit.id} value={unit.id}>{unit.title}</option>
-                    ))}
-                    {isAdmin && (
-                    <>
-                    <option disabled>──────────</option>
-                    <option value="new_unit_action">+ Adicionar novo setor...</option>
-                    </>
+      <div className="flex flex-col items-center gap-4 mb-6 no-print">
+        <div className="flex flex-col md:flex-row gap-4 items-end justify-center">
+            <div className="w-full md:w-auto">
+            <label className="block text-sm font-medium text-black mb-1">Setor</label>
+            {isEditingUnit ? (
+                <div className="flex items-center gap-2">
+                    <input 
+                        value={editingUnitTitle}
+                        onChange={e => setEditingUnitTitle(e.target.value)}
+                        className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
+                        autoFocus
+                    />
+                    <button onClick={saveUnitTitle} className="text-green-600 p-2 hover:bg-gray-100 rounded" title="Salvar">
+                        <Save size={18} />
+                    </button>
+                    <button onClick={() => setIsEditingUnit(false)} className="text-red-600 p-2 hover:bg-gray-100 rounded" title="Cancelar">
+                        <X size={18} />
+                    </button>
+                </div>
+            ) : (
+                <div className="flex items-center gap-2">
+                    <select 
+                        value={selectedUnitId} 
+                        onChange={handleUnitChange}
+                        className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
+                    >
+                        <option value="">Selecione um setor...</option>
+                        {data.units.map(unit => (
+                        <option key={unit.id} value={unit.id}>{unit.title}</option>
+                        ))}
+                        {isAdmin && (
+                        <>
+                        <option disabled>──────────</option>
+                        <option value="new_unit_action">+ Adicionar novo setor...</option>
+                        </>
+                        )}
+                    </select>
+                    {selectedUnitId && selectedUnitId !== 'new_unit_action' && isAdmin && (
+                        <div className="flex items-center">
+                            <button 
+                                onClick={startEditingUnit}
+                                className="text-blue-600 p-2 hover:bg-gray-100 rounded"
+                                title="Editar nome do setor"
+                            >
+                                <Pencil size={16} />
+                            </button>
+                            <button 
+                                onClick={handleDeleteUnit}
+                                className="text-red-600 p-2 hover:bg-gray-100 rounded"
+                                title="Excluir setor"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
                     )}
-                </select>
-                {selectedUnitId && selectedUnitId !== 'new_unit_action' && isAdmin && (
-                    <div className="flex items-center">
-                        <button 
-                            onClick={startEditingUnit}
-                            className="text-blue-600 p-2 hover:bg-gray-100 rounded"
-                            title="Editar nome do setor"
-                        >
-                            <Pencil size={16} />
-                        </button>
-                        <button 
-                            onClick={handleDeleteUnit}
-                            className="text-red-600 p-2 hover:bg-gray-100 rounded"
-                            title="Excluir setor"
-                        >
-                            <Trash2 size={16} />
-                        </button>
-                    </div>
-                )}
+                </div>
+            )}
             </div>
-          )}
+            <div className="w-full md:w-auto">
+            <label className="block text-sm font-medium text-black mb-1">Mês</label>
+            <select 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-40 bg-white text-black"
+            >
+                {MONTHS.map((m, i) => (
+                <option key={i} value={i}>{m}</option>
+                ))}
+            </select>
+            </div>
+            <div className="w-full md:w-auto">
+            <label className="block text-sm font-medium text-black mb-1">Ano</label>
+            <select 
+                value={selectedYear} 
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-32 bg-white text-black"
+            >
+                {YEARS.map((y) => (
+                <option key={y} value={y}>{y}</option>
+                ))}
+            </select>
+            </div>
         </div>
-        <div className="w-full md:w-auto">
-          <label className="block text-sm font-medium text-black mb-1">Mês</label>
-          <select 
-            value={selectedMonth} 
-            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-            className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-40 bg-white text-black"
-          >
-            {MONTHS.map((m, i) => (
-              <option key={i} value={i}>{m}</option>
-            ))}
-          </select>
+        <div className="flex gap-2 w-full md:w-auto justify-center mt-2">
+           {loading ? (
+               <button disabled className="bg-gray-300 text-gray-500 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm h-[38px] w-full md:w-48 cursor-not-allowed">
+                  <span className="animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></span>
+                  Carregando...
+               </button>
+           ) : (
+             (!isLaunched && !isAdmin) ? (
+                <div className="flex items-center justify-center h-[38px] px-4 text-red-600 font-bold bg-red-50 border border-red-200 rounded whitespace-nowrap">
+                    Escala ainda não liberada
+                </div>
+             ) : (
+                isScheduleReleased ? (
+                    <div className="flex items-center justify-center gap-2 text-green-600 font-bold h-[38px] px-4 bg-green-50 border border-green-200 rounded w-full md:w-48 whitespace-nowrap">
+                        <Check size={18} />
+                        Escala Liberada
+                    </div>
+                ) : (
+                    <button 
+                        onClick={handleRelease}
+                        className="bg-blue-600 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-700 transition-colors h-[38px] w-full md:w-48"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Liberar Escala
+                    </button>
+                )
+             )
+           )}
         </div>
-        <div className="w-full md:w-auto">
-          <label className="block text-sm font-medium text-black mb-1">Ano</label>
-          <select 
-            value={selectedYear} 
-            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-32 bg-white text-black"
-          >
-            {YEARS.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        </div>
-        {!loading && (
-          <div className="flex gap-2 w-full md:w-auto md:ml-auto">
-         <button 
-             onClick={handlePrint}
-             className="bg-blue-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-600 transition-colors"
-         >
-             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-             Imprimir
-         </button>
-       </div>
-     )}
       </div>
 
       {/* Report Header */}
       <div className="mb-4">
         {/* Logos Header */}
-        <div className="flex justify-between items-center mb-4 border-b pb-2">
+        <div className={`flex justify-between items-center mb-4 border-b pb-2 ${printOnly ? 'hidden print:flex' : ''}`}>
             <div className="flex flex-col items-start">
                 {/* Section Manager Dropdown (Replacing Logo) */}
-                <div className="flex items-center gap-2 relative">
-                    <div className="relative">
-                        <button 
-                            onClick={() => setIsSectionMenuOpen(!isSectionMenuOpen)}
-                            className="bg-blue-900 text-white p-2 rounded font-bold text-2xl flex items-center justify-center h-12 w-12 hover:bg-blue-800 transition-colors"
-                            title="Gerenciar Grupos/Blocos"
-                        >
-                            <Plus size={32} />
-                        </button>
-                        
-                        {isSectionMenuOpen && (
-                            <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-gray-300 shadow-xl rounded z-50 p-3 flex flex-col gap-2">
-                                <div className="flex justify-between items-center border-b pb-2">
-                                    <h4 className="text-sm font-bold text-gray-800">Gerenciar Blocos</h4>
-                                    <button onClick={() => setIsSectionMenuOpen(false)} className="text-gray-500 hover:text-black"><X size={16} /></button>
-                                </div>
-                                <div className="max-h-60 overflow-y-auto space-y-1 custom-scrollbar">
-                                    {data.sections.length === 0 && <p className="text-xs text-gray-500 text-center py-2">Nenhum bloco cadastrado.</p>}
-                                    {data.sections.map(section => (
-                                        <div key={section.id} className="flex items-center justify-between p-2 hover:bg-blue-50 rounded group transition-colors border border-transparent hover:border-blue-100">
-                                            <span className="text-xs text-black font-medium truncate flex-1" title={section.title}>{section.title}</span>
-                                            <div className="flex gap-1 items-center">
-                                                {/* Add to View Toggle */}
-                                                {!visibleSections.find(vs => vs.id === section.id) ? (
-                                                    <button 
-                                                        onClick={() => {
-                                                            setManuallyAddedSections(prev => [...prev, section.id])
-                                                        }}
-                                                        className="text-green-600 hover:bg-green-200 p-1.5 rounded transition-colors"
-                                                        title="Adicionar à visualização atual"
-                                                    >
-                                                        <Plus size={14} />
-                                                    </button>
-                                                ) : (
-                                                    <span className="text-[10px] text-green-600 font-bold px-1">VISÍVEL</span>
-                                                )}
-                                                
-                                                {/* Edit Actions */}
-                                                {isAdmin && (
-                                                    <>
-                                                    <div className="w-px h-3 bg-gray-300 mx-1"></div>
-                                                    <button 
-                                                        onClick={() => {
-                                                            startEditingSection(section)
-                                                            setIsSectionMenuOpen(false)
-                                                        }}
-                                                        className="text-blue-600 hover:bg-blue-200 p-1.5 rounded transition-colors"
-                                                        title="Renomear"
-                                                    >
-                                                        <Pencil size={14} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleDeleteSection(section.id)}
-                                                        className="text-red-600 hover:bg-red-200 p-1.5 rounded transition-colors"
-                                                        title="Excluir"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                {isAdmin && (
-                                    <div className="pt-2 border-t mt-1">
-                                        <button 
-                                            onClick={() => {
-                                                setIsAddingSection(true)
-                                                setIsSectionMenuOpen(false)
-                                            }}
-                                            className="w-full text-xs bg-blue-600 text-white py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2 font-bold transition-colors shadow-sm"
-                                        >
-                                            <Plus size={14} /> NOVO BLOCO
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                <div className="flex items-center gap-4 relative">
 
-                    <div className="flex flex-col">
-                         <h1 className="text-3xl font-black text-blue-900 leading-none">HMA</h1>
-                         <span className="text-[10px] text-blue-900 font-bold tracking-wider">HOSPITAL MUNICIPAL DE AÇAILÂNDIA</span>
+
+                    <div className="relative group cursor-pointer" onClick={() => document.getElementById('logo-upload')?.click()}>
+                        <img 
+                            src={`/logo-hma.png?t=${logoTimestamp}`} 
+                            alt="HMA Logo" 
+                            className="h-16 object-contain" 
+                            title="Clique para alterar logo"
+                        />
+                        <input 
+                            type="file" 
+                            id="logo-upload" 
+                            className="hidden" 
+                            accept="image/png,image/jpeg"
+                            onChange={handleLogoUpload}
+                        />
                     </div>
                 </div>
             </div>
@@ -991,30 +1220,37 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
             <div className="flex flex-col items-end">
                 {/* City Hall Logo Placeholder */}
                 <div className="flex items-center gap-2">
-                    <div className="flex flex-col items-end">
-                        <h2 className="text-xl font-bold text-blue-800">AÇAILÂNDIA</h2>
-                        <p className="text-[10px] text-yellow-600 font-bold uppercase tracking-widest">CIDADE ACOLHEDORA, CIDADE FORTE</p>
-                    </div>
-                     {/* Replace with actual logo image if available */}
-                     <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center text-blue-800 font-bold text-xs border-2 border-green-600">
-                        PREF
+                     <div className="relative group cursor-pointer" onClick={() => document.getElementById('city-logo-upload')?.click()}>
+                        <img 
+                            src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
+                            alt="City Logo" 
+                            className="h-16 object-contain" 
+                            title="Clique para alterar logo"
+                        />
+                        <input 
+                            type="file" 
+                            id="city-logo-upload" 
+                            className="hidden" 
+                            accept="image/png,image/jpeg"
+                            onChange={handleCityLogoUpload}
+                        />
                     </div>
                 </div>
             </div>
         </div>
         
-        <div className="bg-gray-200 border border-black p-1 text-center mb-1">
+        <div className={`bg-gray-200 border border-black p-1 text-center mb-1 ${printOnly ? 'hidden print:block' : ''}`}>
           <h3 className="font-bold text-lg uppercase text-black">
             {data.units.find(u => u.id === selectedUnitId)?.title || 'OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO'}
           </h3>
         </div>
-        <div className="bg-gray-200 border border-black p-1 text-center">
+        <div className={`bg-gray-200 border border-black p-1 text-center ${printOnly ? 'hidden print:block' : ''}`}>
            <h4 className="font-bold text-md uppercase text-black">{MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
         </div>
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto border-none shadow-none max-w-full relative">
+      <div className={`overflow-x-auto border-none shadow-none max-w-full relative ${printOnly ? 'hidden print:block' : ''}`}>
         {loading ? (
              <div className="text-center py-4">Carregando...</div>
         ) : (
@@ -1022,14 +1258,14 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                const rosterForContext = (data.roster || []).filter(r => r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
                const baseLaunched = rosterForContext.length > 0
                const isLaunched = baseLaunched
-               if (!isLaunched && !isAdmin) {
+               if (!isLaunched && !isAdmin && !printOnly) {
                  return <div className="text-center py-6 text-sm text-gray-600">Escala em construção</div>
                }
                return (
                  <>
                  {visibleSections.map(section => (
-                     <div key={section.id} className="mb-8 border border-black">
-                         <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
+                    <div key={section.id} className="border border-black">
+                        <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px]">
                              <thead>
                              {/* Main Headers Row 1 */}
                              <tr className="bg-blue-100 text-black">
@@ -1054,7 +1290,28 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                                 </th>
                                 <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>COREN</th>
                                 <th className="border border-black px-1 py-1 text-center w-24 font-bold" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold">D. SEMANA</th>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-[10px]" rowSpan={2}>
+                                    {editingSectorTitleId === section.id ? (
+                                        <div className="flex items-center gap-1">
+                                            <input 
+                                                value={tempSectorTitle}
+                                                onChange={(e) => setTempSectorTitle(e.target.value)}
+                                                className="w-full text-[10px] bg-white text-black border border-gray-300 rounded px-1"
+                                                autoFocus
+                                                onBlur={saveSectorTitle}
+                                                onKeyDown={(e) => e.key === 'Enter' && saveSectorTitle()}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <span 
+                                            onClick={() => startEditingSectorTitle(section)}
+                                            className={isAdmin ? "cursor-pointer hover:text-blue-600" : ""}
+                                            title={isAdmin ? "Clique para editar" : ""}
+                                        >
+                                            {section.sector_title || 'ENFERMARIAS/LEITOS'}
+                                        </span>
+                                    )}
+                                </th>
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
                                     <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-6 ${isWeekend ? 'bg-gray-400' : ''}`}>
                                     {weekday}
@@ -1064,7 +1321,6 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                             </tr>
                             {/* Main Headers Row 2 */}
                             <tr className="bg-blue-100 text-black">
-                                <th className="border border-black px-1 py-1 text-center font-bold uppercase">OBSERVAÇÃO</th>
                                 {daysArray.map(({ day, isWeekend }) => (
                                     <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400' : ''}`}>
                                     {day}
@@ -1153,29 +1409,43 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
       </div>
       
       {/* Signatures Footer */}
-      <div className="mt-8 mb-4 grid grid-cols-2 gap-8 text-center break-inside-avoid">
+      <div className={`mt-8 mb-4 grid grid-cols-4 gap-4 text-center break-inside-avoid ${printOnly ? 'hidden print:grid' : ''}`}>
         <div className="flex flex-col items-center">
-            <div className="w-64 border-b border-black mb-2"></div>
-            <p className="font-bold text-sm text-black">COORDENADOR(A) DE ENFERMAGEM</p>
+            <div className="w-full border-b border-black mb-2"></div>
+            <p className="font-bold text-[10px] text-black uppercase">Coordenação de Setor</p>
         </div>
         <div className="flex flex-col items-center">
-            <div className="w-64 border-b border-black mb-2"></div>
-            <p className="font-bold text-sm text-black">DIRETOR(A) ADMINISTRATIVO(A)</p>
+            <div className="w-full border-b border-black mb-2"></div>
+            <p className="font-bold text-[10px] text-black uppercase">Coordenação Geral de Enfermagem</p>
+        </div>
+        <div className="flex flex-col items-center">
+            <div className="w-full border-b border-black mb-2"></div>
+            <p className="font-bold text-[10px] text-black uppercase">Coordenação do RH/HMA</p>
+        </div>
+        <div className="flex flex-col items-center">
+            <div className="w-full border-b border-black mb-2"></div>
+            <p className="font-bold text-[10px] text-black uppercase">Direção Geral do HMA</p>
         </div>
       </div>
 
-      {/* Static Legend */}
-      <div className="mt-4 border border-black p-2 text-[10px] text-black bg-white break-inside-avoid">
-        <p className="font-bold mb-1">LEGENDA:</p>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-            <span><strong>D</strong> - DIURNO (07:00 às 19:00)</span>
-            <span><strong>N</strong> - NOTURNO (19:00 às 07:00)</span>
-            <span><strong>CH</strong> - CARGA HORÁRIA</span>
-            <span><strong>LM</strong> - LICENÇA MATERNIDADE</span>
-            <span><strong>LS</strong> - LICENÇA SAÚDE</span>
-            <span><strong>FE</strong> - FÉRIAS</span>
-            <span><strong>F</strong> - FOLGA</span>
-        </div>
+      {/* Footer Text / Legend */}
+      <div className={`mt-4 border border-black p-2 text-[10px] text-black bg-white break-inside-avoid ${printOnly ? 'hidden print:block' : ''}`}>
+        {footerText ? (
+             <div className="whitespace-pre-wrap">{footerText}</div>
+        ) : (
+            <>
+                <p className="font-bold mb-1">LEGENDA:</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    <span><strong>D</strong> - DIURNO (07:00 às 19:00)</span>
+                    <span><strong>N</strong> - NOTURNO (19:00 às 07:00)</span>
+                    <span><strong>CH</strong> - CARGA HORÁRIA</span>
+                    <span><strong>LM</strong> - LICENÇA MATERNIDADE</span>
+                    <span><strong>LS</strong> - LICENÇA SAÚDE</span>
+                    <span><strong>FE</strong> - FÉRIAS</span>
+                    <span><strong>F</strong> - FOLGA</span>
+                </div>
+            </>
+        )}
       </div>
 
 
@@ -1184,7 +1454,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
         isOpen={!!leaveModalType}
         onClose={() => setLeaveModalType(null)}
         onSuccess={() => {
-            fetchData()
+            fetchData(true)
             setLeaveModalType(null)
         }}
         nurses={data.nurses}
@@ -1224,32 +1494,55 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
       {/* Footer Legends */}
       <div className="mt-8 space-y-2">
         {isAdmin && (
-        <div className="flex flex-wrap gap-2 justify-end mb-2 no-print">
-            <button className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50">Editar texto do rodapé</button>
-            <button 
-              onClick={() => setLeaveModalType('ferias')}
-              className="px-2 py-1 text-xs border rounded text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100"
-            >
-              Gerenciar Férias
-            </button>
-            <button 
-              onClick={() => setLeaveModalType('licenca_saude')}
-              className="px-2 py-1 text-xs border rounded text-red-600 border-red-200 bg-red-50 hover:bg-red-100"
-            >
-              Licença Saúde
-            </button>
-            <button 
-              onClick={() => setLeaveModalType('licenca_maternidade')}
-              className="px-2 py-1 text-xs border rounded text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100"
-            >
-              Licença Maternidade
-            </button>
-            <button 
-              onClick={() => setLeaveModalType('cessao')}
-              className="px-2 py-1 text-xs border rounded text-cyan-600 border-cyan-200 bg-cyan-50 hover:bg-cyan-100"
-            >
-              Cessão
-            </button>
+        <div className="flex flex-col items-end gap-2 mb-2 no-print">
+            <div className="flex flex-wrap gap-2 justify-end">
+                <button 
+                    onClick={handleEditFooter}
+                    className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50"
+                >
+                    Editar texto do rodapé
+                </button>
+                <button 
+                  onClick={() => setLeaveModalType('ferias')}
+                  className="px-2 py-1 text-xs border rounded text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100"
+                >
+                  Gerenciar Férias
+                </button>
+                <button 
+                  onClick={() => setLeaveModalType('licenca_saude')}
+                  className="px-2 py-1 text-xs border rounded text-red-600 border-red-200 bg-red-50 hover:bg-red-100"
+                >
+                  Licença Saúde
+                </button>
+                <button 
+                  onClick={() => setLeaveModalType('licenca_maternidade')}
+                  className="px-2 py-1 text-xs border rounded text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100"
+                >
+                  Licença Maternidade
+                </button>
+                <button 
+                  onClick={() => setLeaveModalType('cessao')}
+                  className="px-2 py-1 text-xs border rounded text-cyan-600 border-cyan-200 bg-cyan-50 hover:bg-cyan-100"
+                >
+                  Cessão
+                </button>
+            </div>
+
+            {isEditingFooter && (
+                <div className="bg-white p-4 border rounded shadow-lg w-full max-w-2xl">
+                    <h3 className="font-bold mb-2 text-black">Editar Texto do Rodapé</h3>
+                    <textarea
+                        className="w-full h-32 border p-2 mb-2 text-sm text-black"
+                        value={tempFooterText}
+                        onChange={e => setTempFooterText(e.target.value)}
+                        placeholder="Digite o texto do rodapé aqui... (Deixe em branco para usar o padrão)"
+                    />
+                    <div className="flex justify-end gap-2">
+                        <button onClick={() => setIsEditingFooter(false)} className="px-3 py-1 border rounded hover:bg-gray-100 text-black">Cancelar</button>
+                        <button onClick={saveFooterText} className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+                    </div>
+                </div>
+            )}
         </div>
         )}
 
@@ -1282,6 +1575,33 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                 </div>
             )
         })}
+
+        {/* Footer Text Display */}
+        {footerText && (
+            <div className="mt-4 text-xs text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
+                {footerText}
+            </div>
+        )}
+
+        {/* Signature Fields */}
+        <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-xs break-inside-avoid px-4">
+            <div className="flex flex-col items-center">
+                <div className="w-full border-b border-black mb-2"></div>
+                <p>Coordenação de Setor</p>
+            </div>
+            <div className="flex flex-col items-center">
+                <div className="w-full border-b border-black mb-2"></div>
+                <p>Coordenação Geral de Enfermagem</p>
+            </div>
+            <div className="flex flex-col items-center">
+                <div className="w-full border-b border-black mb-2"></div>
+                <p>Coordenação do RH/HMA</p>
+            </div>
+            <div className="flex flex-col items-center">
+                <div className="w-full border-b border-black mb-2"></div>
+                <p>Direção Geral do HMA</p>
+            </div>
+        </div>
       </div>
       
       {/* Unit Creation Modal */}
@@ -1456,6 +1776,47 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
                     </button>
                 </div>
             </div>
+        </div>
+      )}
+      {/* Double Shift Modal */}
+      {doubleShiftModal && doubleShiftModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4 text-gray-900">Adicionar Profissional</h3>
+            <p className="mb-6 text-gray-700">Este vínculo é uma escala dupla?</p>
+            
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => finalizeAssignNurse('1ED')}
+                className="bg-blue-600 text-white px-4 py-3 rounded hover:bg-blue-700 font-medium text-left flex justify-between items-center"
+              >
+                <span>Sim, Hospital</span>
+                <span className="bg-blue-800 text-xs px-2 py-1 rounded">1ED</span>
+              </button>
+              
+              <button 
+                onClick={() => finalizeAssignNurse('1 ED AB')}
+                className="bg-green-600 text-white px-4 py-3 rounded hover:bg-green-700 font-medium text-left flex justify-between items-center"
+              >
+                <span>Sim, Atenção Básica</span>
+                <span className="bg-green-800 text-xs px-2 py-1 rounded">1 ED AB</span>
+              </button>
+              
+              <button 
+                onClick={() => finalizeAssignNurse('')}
+                className="bg-gray-200 text-gray-800 px-4 py-3 rounded hover:bg-gray-300 font-medium text-left"
+              >
+                Não (Vínculo Normal)
+              </button>
+
+              <button 
+                onClick={() => setDoubleShiftModal(null)}
+                className="mt-2 text-red-500 text-sm hover:underline self-center"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

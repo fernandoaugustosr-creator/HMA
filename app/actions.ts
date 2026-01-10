@@ -288,6 +288,95 @@ export async function login(prevState: any, formData: FormData) {
   redirect('/')
 }
 
+export async function getMonthlyNote(month: number, year: number, unitId?: string | null) {
+  try {
+    if (isLocalMode()) {
+       const db = readDb()
+       const note = db.monthly_notes.find(n => n.month === month && n.year === year && (unitId ? n.unit_id === unitId : !n.unit_id))
+       return { success: true, note: note ? note.note : '' }
+    }
+
+    const supabase = createClient()
+    let query = supabase.from('monthly_notes').select('note').eq('month', month).eq('year', year)
+    
+    if (unitId) {
+        query = query.eq('unit_id', unitId)
+    } else {
+        query = query.is('unit_id', null)
+    }
+
+    const { data, error } = await query.maybeSingle()
+    
+    if (error) {
+        console.error('Error fetching note:', error)
+        return { success: false, message: 'Erro ao buscar observação' }
+    }
+
+    return { success: true, note: data ? data.note : '' }
+  } catch (e) {
+      console.error('Error in getMonthlyNote:', e)
+      return { success: false, message: 'Erro interno' }
+  }
+}
+
+export async function saveMonthlyNote(month: number, year: number, note: string, unitId?: string | null) {
+  try {
+      await checkAdmin()
+      
+      if (isLocalMode()) {
+          const db = readDb()
+          const index = db.monthly_notes.findIndex(n => n.month === month && n.year === year && (unitId ? n.unit_id === unitId : !n.unit_id))
+          if (index >= 0) {
+              db.monthly_notes[index].note = note
+              db.monthly_notes[index].updated_at = new Date().toISOString()
+          } else {
+              db.monthly_notes.push({
+                  id: randomUUID(),
+                  month,
+                  year,
+                  unit_id: unitId || null,
+                  note,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+              })
+          }
+          writeDb(db)
+          revalidatePath('/')
+          return { success: true }
+      }
+
+      const supabase = createClient()
+      
+      let query = supabase.from('monthly_notes').select('id').eq('month', month).eq('year', year)
+      if (unitId) query = query.eq('unit_id', unitId)
+      else query = query.is('unit_id', null)
+      
+      const { data: existing } = await query.maybeSingle()
+      
+      if (existing) {
+          const { error } = await supabase.from('monthly_notes').update({ note, updated_at: new Date().toISOString() }).eq('id', existing.id)
+          if (error) throw error
+      } else {
+          const payload: any = {
+              month,
+              year,
+              note,
+              updated_at: new Date().toISOString()
+          }
+          if (unitId) payload.unit_id = unitId
+          
+          const { error } = await supabase.from('monthly_notes').insert(payload)
+          if (error) throw error
+      }
+      
+      revalidatePath('/')
+      return { success: true }
+  } catch (e) {
+      console.error('Error saving note:', e)
+      return { success: false, message: 'Erro ao salvar observação' }
+  }
+}
+
 export async function getUserDashboardData() {
   const session = cookies().get('session_user')
   if (!session) return null
@@ -642,6 +731,9 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         t.status === 'approved' && 
         ((t.start_date <= endDate && t.end_date >= startDate))
       )
+      
+      // Get releases (metadata)
+      const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year)
 
       return {
         nurses: db.nurses || [],
@@ -649,7 +741,8 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         shifts: shifts || [],
         timeOffs: timeOffs || [],
         sections: db.schedule_sections || [],
-        units: db.units || []
+        units: db.units || [],
+        releases: releases || []
       }
     }
 
@@ -662,14 +755,16 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         { data: nurses, error: nursesError },
         { data: rosterData, error: rosterError },
         { data: rawShifts, error: shiftsError },
-        { data: timeOffsData, error: timeOffsError }
+        { data: timeOffsData, error: timeOffsError },
+        { data: releases, error: releasesError }
     ] = await Promise.all([
         supabase.from('schedule_sections').select('*').order('position'),
         supabase.from('units').select('*'),
         supabase.from('nurses').select('*').order('name'),
         supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year),
         supabase.from('shifts').select('*').gte('date', startDate).lte('date', endDate),
-        supabase.from('time_off_requests').select('*').eq('status', 'approved').or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`)
+        supabase.from('time_off_requests').select('*').eq('status', 'approved').or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
+        supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year)
     ])
 
     if (sectionsError) console.error('Error fetching sections:', sectionsError)
@@ -677,6 +772,7 @@ export async function getMonthlyScheduleData(month: number, year: number) {
     if (shiftsError) console.error('Error fetching shifts:', shiftsError)
     if (timeOffsError) console.error('Error fetching timeOffs:', timeOffsError)
     if (rosterError && rosterError.code !== 'PGRST116') console.error('Error fetching roster:', rosterError)
+    if (releasesError && releasesError.code !== 'PGRST116') console.error('Error fetching releases:', releasesError)
 
     let roster = rosterData || []
 
@@ -729,7 +825,8 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       shifts: shifts || [],
       timeOffs: timeOffsData || [],
       sections: sections || [],
-      units: units || []
+      units: units || [],
+      releases: releases || []
     }
   } catch (error) {
     console.error('Critical error in getMonthlyScheduleData:', error)
@@ -740,12 +837,189 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       shifts: [],
       timeOffs: [],
       sections: [],
-      units: []
+      units: [],
+      releases: []
     }
   }
 }
 
-export async function assignNurseToRoster(nurseId: string, sectionId: string, unitId: string | null, month: number, year: number) {
+export async function releaseSchedule(month: number, year: number, unitId: string | null) {
+  try {
+      await checkAdmin()
+      const session = cookies().get('session_user')
+      const user = JSON.parse(session!.value)
+
+      if (isLocalMode()) {
+         const db = readDb()
+         const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
+         
+         const payload = {
+             id: existingIndex >= 0 ? db.monthly_schedule_metadata[existingIndex].id : randomUUID(),
+             month,
+             year,
+             unit_id: unitId || null,
+             is_released: true,
+             released_at: new Date().toISOString(),
+             updated_at: new Date().toISOString(),
+             released_by: user.id
+         }
+
+         if (existingIndex >= 0) {
+             db.monthly_schedule_metadata[existingIndex] = { ...db.monthly_schedule_metadata[existingIndex], ...payload }
+         } else {
+             db.monthly_schedule_metadata.push(payload)
+         }
+         writeDb(db)
+         revalidatePath('/')
+         return { success: true }
+      }
+
+      const supabase = createClient()
+      
+      let query = supabase.from('monthly_schedule_metadata').select('id').eq('month', month).eq('year', year)
+      if (unitId) query = query.eq('unit_id', unitId)
+      else query = query.is('unit_id', null)
+
+      const { data: existing } = await query.maybeSingle()
+
+      if (existing) {
+          const { error } = await supabase.from('monthly_schedule_metadata').update({
+              is_released: true,
+              released_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+          }).eq('id', existing.id)
+          if (error) throw error
+      } else {
+          const payload: any = {
+              month,
+              year,
+              is_released: true,
+              released_at: new Date().toISOString()
+          }
+          if (unitId) payload.unit_id = unitId
+
+          const { error } = await supabase.from('monthly_schedule_metadata').insert(payload)
+          if (error) throw error
+      }
+      
+      revalidatePath('/')
+      return { success: true }
+  } catch(e: any) {
+      console.error(e)
+      return { success: false, message: `Erro ao liberar escala: ${e.message || 'Erro desconhecido'}` }
+  }
+}
+
+export async function updateScheduleFooter(month: number, year: number, unitId: string | null, footerText: string) {
+  try {
+      await checkAdmin()
+      const session = cookies().get('session_user')
+      const user = JSON.parse(session!.value)
+
+      if (isLocalMode()) {
+         const db = readDb()
+         const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
+         
+         const payload = {
+             id: existingIndex >= 0 ? db.monthly_schedule_metadata[existingIndex].id : randomUUID(),
+             month,
+             year,
+             unit_id: unitId || null,
+             footer_text: footerText,
+             updated_at: new Date().toISOString()
+         }
+
+         if (existingIndex >= 0) {
+             db.monthly_schedule_metadata[existingIndex] = { ...db.monthly_schedule_metadata[existingIndex], ...payload }
+         } else {
+             // Initialize with defaults if creating new just for footer
+             db.monthly_schedule_metadata.push({
+                 ...payload,
+                 is_released: false,
+                 released_at: null
+             })
+         }
+         writeDb(db)
+         revalidatePath('/')
+         return { success: true }
+      }
+
+      const supabase = createClient()
+      
+      let query = supabase.from('monthly_schedule_metadata').select('id').eq('month', month).eq('year', year)
+      if (unitId) query = query.eq('unit_id', unitId)
+      else query = query.is('unit_id', null)
+
+      const { data: existing } = await query.maybeSingle()
+
+      if (existing) {
+          const { error } = await supabase.from('monthly_schedule_metadata').update({
+              footer_text: footerText,
+              updated_at: new Date().toISOString()
+          }).eq('id', existing.id)
+          if (error) throw error
+      } else {
+          const payload: any = {
+              month,
+              year,
+              footer_text: footerText,
+              is_released: false
+          }
+          if (unitId) payload.unit_id = unitId
+
+          const { error } = await supabase.from('monthly_schedule_metadata').insert(payload)
+          if (error) throw error
+      }
+      
+      revalidatePath('/')
+      return { success: true }
+  } catch(e) {
+      console.error(e)
+      return { success: false, message: 'Erro ao salvar rodapé' }
+  }
+}
+
+export async function getReleasedSchedules() {
+  try {
+    if (isLocalMode()) {
+      const db = readDb()
+      const releases = db.monthly_schedule_metadata
+        .filter(m => m.is_released)
+        .map(m => {
+          const unit = db.units.find(u => u.id === m.unit_id)
+          return {
+            ...m,
+            unit_name: unit ? unit.title : 'Unknown Unit'
+          }
+        })
+        .sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year
+            return b.month - a.month
+        })
+      return releases
+    }
+
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('monthly_schedule_metadata')
+      .select('*, units(title)')
+      .eq('is_released', true)
+      .order('year', { ascending: false })
+      .order('month', { ascending: false })
+
+    if (error) throw error
+    
+    return data.map((d: any) => ({
+      ...d,
+      unit_name: d.units?.title
+    }))
+  } catch (error) {
+    console.error('Error fetching released schedules:', error)
+    return []
+  }
+}
+
+export async function assignNurseToRoster(nurseId: string, sectionId: string, unitId: string | null, month: number, year: number, observation?: string, createdAt?: string) {
   try {
     await checkAdmin()
   } catch (e) {

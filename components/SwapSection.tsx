@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createSwapRequest, approveSwapRequest, rejectSwapRequest, cancelSwapRequest, getAvailableShiftsForNurse } from '@/app/swap-actions'
 import { useRouter } from 'next/navigation'
+import SearchableSelect from './SearchableSelect'
 
 interface Swap {
   id: string
@@ -308,17 +309,14 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                 <form onSubmit={handleCreate} className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Com quem?</label>
-                        <select 
+                        <SearchableSelect
+                            options={nurses.filter(n => n.id !== currentUserId).map(n => ({ value: n.id, label: n.name }))}
                             value={selectedNurseId}
-                            onChange={(e) => setSelectedNurseId(e.target.value)}
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm border p-2"
+                            onChange={setSelectedNurseId}
+                            placeholder="Selecione um colega..."
                             required
-                        >
-                            <option value="">Selecione...</option>
-                            {nurses.filter(n => n.id !== currentUserId).map(n => (
-                                <option key={n.id} value={n.id}>{n.name}</option>
-                            ))}
-                        </select>
+                            className="mt-1"
+                        />
                     </div>
 
                     <div>

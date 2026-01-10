@@ -2,7 +2,8 @@
 
 import { useFormState } from 'react-dom'
 import { requestTimeOff } from '@/app/actions'
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
+import SearchableSelect from '@/components/SearchableSelect'
 
 const initialState = {
   message: '',
@@ -12,10 +13,12 @@ const initialState = {
 export default function RequestForm({ nurses }: { nurses?: any[] }) {
   const [state, formAction] = useFormState(requestTimeOff, initialState)
   const formRef = useRef<HTMLFormElement>(null)
+  const [selectedNurseId, setSelectedNurseId] = useState('')
 
   useEffect(() => {
     if (state.success && formRef.current) {
       formRef.current.reset()
+      setSelectedNurseId('')
     }
   }, [state.success])
 
@@ -24,19 +27,15 @@ export default function RequestForm({ nurses }: { nurses?: any[] }) {
       {nurses && nurses.length > 0 && (
         <div>
           <label htmlFor="nurseId" className="block text-sm font-medium text-black">Enfermeiro(a)</label>
-          <select
-            name="nurseId"
-            id="nurseId"
+          <SearchableSelect
+            options={nurses.map(n => ({ value: n.id, label: `${n.name} - ${n.cpf || ''}` }))}
+            value={selectedNurseId}
+            onChange={setSelectedNurseId}
+            placeholder="Selecione um enfermeiro(a)"
             required
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-          >
-            <option value="">Selecione um enfermeiro(a)</option>
-            {nurses.map((nurse) => (
-              <option key={nurse.id} value={nurse.id}>
-                {nurse.name} - {nurse.cpf}
-              </option>
-            ))}
-          </select>
+            name="nurseId"
+            className="mt-1"
+          />
         </div>
       )}
 
