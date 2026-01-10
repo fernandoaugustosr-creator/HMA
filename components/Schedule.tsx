@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, Section, Unit } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, Section, Unit } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
@@ -17,6 +17,7 @@ interface Nurse {
   unit_id?: string
   is_rostered?: boolean
   roster_created_at?: string
+  observation?: string
 }
 
 interface RosterItem {
@@ -26,6 +27,7 @@ interface RosterItem {
   unit_id: string | null
   month: number
   year: number
+  observation?: string
 }
 
 interface Shift {
@@ -58,6 +60,42 @@ const MONTHS = [
 ]
 
 const YEARS = [2024, 2025, 2026, 2027]
+
+const ObservationCell = ({ 
+  initialValue, 
+  onSave,
+  isAdmin
+}: { 
+  initialValue: string | undefined, 
+  onSave: (val: string) => void,
+  isAdmin: boolean
+}) => {
+  const [value, setValue] = useState(initialValue || '')
+
+  useEffect(() => {
+    setValue(initialValue || '')
+  }, [initialValue])
+
+  const handleBlur = () => {
+    if (value !== (initialValue || '')) {
+      onSave(value)
+    }
+  }
+
+  if (!isAdmin) {
+    return <span className="text-[10px] uppercase block w-full h-full min-h-[16px]">{value}</span>
+  }
+
+  return (
+    <input 
+      type="text" 
+      className="w-full bg-transparent text-center focus:outline-none uppercase text-[10px] px-0 py-0 h-full min-h-[16px]"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={handleBlur}
+    />
+  )
+}
 
 export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
   const [currentDate] = useState(new Date())
@@ -285,6 +323,25 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
     setLoading(false)
   }
 
+  const handleUpdateObservation = async (nurseId: string, observation: string) => {
+    // Optimistic update locally
+    setData(prev => ({
+        ...prev,
+        roster: prev.roster.map(r => 
+            r.nurse_id === nurseId && r.month === selectedMonth + 1 && r.year === selectedYear 
+            ? { ...r, observation } 
+            : r
+        )
+    }))
+
+    const res = await updateRosterObservation(nurseId, selectedMonth + 1, selectedYear, observation)
+    if (!res.success) {
+        alert('Erro ao salvar observação')
+        // Revert? simpler to just fetch data
+        await fetchData(true)
+    }
+  }
+
 
   // Section Handlers
   const saveNewSection = async () => {
@@ -503,7 +560,7 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
       return data.nurses.map(nurse => {
           const rosterEntry = rosterLookup[nurse.id]
           if (rosterEntry) {
-              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id, is_rostered: true, roster_created_at: rosterEntry.created_at }
+              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id, is_rostered: true, roster_created_at: rosterEntry.created_at, observation: rosterEntry.observation }
           }
           return { ...nurse, is_rostered: false }
       })
@@ -615,7 +672,13 @@ export default function Schedule({ isAdmin = false }: { isAdmin?: boolean }) {
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.vinculo || '-'}</td>
-              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase"></td>
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase p-0">
+                <ObservationCell 
+                  initialValue={nurse.observation} 
+                  onSave={(val) => handleUpdateObservation(nurse.id, val)}
+                  isAdmin={isAdmin}
+                />
+              </td>
               
               {daysArray.map(({ day, weekday, isWeekend }) => {
                 const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`

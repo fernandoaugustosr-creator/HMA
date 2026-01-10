@@ -44,18 +44,14 @@ export default async function DashboardPage() {
         <p className="text-gray-600">{user.role}</p>
       </div>
 
-      {/* Top Section: Daily Schedule for Admin, My Shifts for Users */}
+      {/* Top Section: Daily Schedule for Everyone */}
       <div className="h-full">
-          {user.isAdmin ? (
-            <AdminDailySchedule />
-          ) : (
-            <MyShifts shifts={shifts} currentUserId={user.id} />
-          )}
+         <AdminDailySchedule />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Meus Plantões (Visible in grid only for Admin since they have Daily Schedule on top) */}
-        {user.isAdmin && <MyShifts shifts={shifts} currentUserId={user.id} />}
+        {/* Meus Plantões */}
+        <MyShifts shifts={shifts} currentUserId={user.id} />
 
         {/* Minhas Folgas (or Admin Approvals) */}
         <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">

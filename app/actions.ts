@@ -28,6 +28,12 @@ export async function checkAdmin() {
   return user
 }
 
+export async function checkUser() {
+  const session = cookies().get('session_user')
+  if (!session) throw new Error('Unauthorized')
+  return JSON.parse(session.value)
+}
+
 export async function getNurses() {
   if (isLocalMode()) {
     const db = readDb()
@@ -460,7 +466,7 @@ export async function getUserDashboardData() {
 
 export async function getDailyShifts(date: string) {
   try {
-    const user = await checkAdmin()
+    const user = await checkUser()
   } catch (e) {
     return { success: false, message: 'Acesso negado' }
   }
@@ -925,6 +931,37 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
   
   revalidatePath('/')
   return { success: true, message: 'Cópia realizada com sucesso.' }
+}
+
+export async function updateRosterObservation(nurseId: string, month: number, year: number, observation: string) {
+  try {
+    await checkAdmin()
+    
+    if (isLocalMode()) {
+      const db = readDb()
+      const roster = db.monthly_rosters.find(r => r.nurse_id === nurseId && r.month === month && r.year === year)
+      if (roster) {
+        roster.observation = observation
+        writeDb(db)
+        revalidatePath('/')
+        return { success: true }
+      }
+      return { success: false, message: 'Roster entry not found' }
+    }
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('monthly_rosters')
+      .update({ observation })
+      .match({ nurse_id: nurseId, month, year })
+
+    if (error) throw error
+    revalidatePath('/')
+    return { success: true }
+  } catch (e) {
+    console.error('Error updating observation:', e)
+    return { success: false, message: 'Erro ao atualizar observação' }
+  }
 }
 
 export async function logout() {
