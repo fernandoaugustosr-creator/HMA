@@ -1279,6 +1279,45 @@ export async function updateRosterObservation(nurseId: string, month: number, ye
   }
 }
 
+export async function updateRosterSector(nurseId: string, month: number, year: number, sector: string) {
+  try {
+    await checkAdmin()
+    
+    if (isLocalMode()) {
+      const db = readDb()
+      const roster = db.monthly_rosters.find(r => r.nurse_id === nurseId && r.month === month && r.year === year)
+      if (roster) {
+        roster.sector = sector
+        writeDb(db)
+        revalidatePath('/')
+        return { success: true }
+      }
+      return { success: false, message: 'Roster entry not found' }
+    }
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('monthly_rosters')
+      .update({ sector })
+      .match({ nurse_id: nurseId, month, year })
+
+    if (error) throw error
+    revalidatePath('/')
+    return { success: true }
+  } catch (e) {
+    console.error('Error updating sector:', e)
+    return { success: false, message: 'Erro ao atualizar setor' }
+  }
+}
+
+export async function uploadLogo(formData: FormData) {
+  return { success: false, message: 'Upload de logo não implementado ainda.' }
+}
+
+export async function uploadCityLogo(formData: FormData) {
+  return { success: false, message: 'Upload de logo da prefeitura não implementado ainda.' }
+}
+
 export async function logout() {
   cookies().delete('session_user')
   redirect('/login')

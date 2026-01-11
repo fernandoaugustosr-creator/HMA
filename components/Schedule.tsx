@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
+import Image from 'next/image'
 import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy } from 'lucide-react'
@@ -1222,11 +1223,14 @@ export default function Schedule({
 
 
                     <div className="relative group cursor-pointer" onClick={() => document.getElementById('logo-upload')?.click()}>
-                        <img 
+                        <Image 
                             src={`/logo-hma.png?t=${logoTimestamp}`} 
                             alt="HMA Logo" 
-                            className="h-16 object-contain" 
+                            width={200}
+                            height={64}
+                            className="h-16 object-contain w-auto" 
                             title="Clique para alterar logo"
+                            unoptimized
                         />
                         <input 
                             type="file" 
@@ -1243,11 +1247,14 @@ export default function Schedule({
                 {/* City Hall Logo Placeholder */}
                 <div className="flex items-center gap-2">
                      <div className="relative group cursor-pointer" onClick={() => document.getElementById('city-logo-upload')?.click()}>
-                        <img 
+                        <Image 
                             src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
                             alt="City Logo" 
-                            className="h-16 object-contain" 
+                            width={200}
+                            height={64}
+                            className="h-16 object-contain w-auto" 
                             title="Clique para alterar logo"
+                            unoptimized
                         />
                         <input 
                             type="file" 
