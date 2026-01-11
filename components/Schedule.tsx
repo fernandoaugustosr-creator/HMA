@@ -31,6 +31,7 @@ interface RosterItem {
   year: number
   observation?: string
   sector?: string
+  created_at?: string
 }
 
 interface Shift {
