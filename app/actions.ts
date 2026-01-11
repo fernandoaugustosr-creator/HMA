@@ -12,6 +12,7 @@ export interface Section {
   id: string
   title: string
   position: number
+  sector_title?: string
 }
 
 export interface Unit {
@@ -1754,7 +1755,7 @@ export async function addSection(title: string) {
   return { success: true }
 }
 
-export async function updateSection(id: string, title: string) {
+export async function updateSection(id: string, title: string, sectorTitle?: string) {
   try {
     await checkAdmin()
   } catch (e) {
@@ -1766,6 +1767,7 @@ export async function updateSection(id: string, title: string) {
     const section = db.schedule_sections.find(s => s.id === id)
     if (section) {
       section.title = title
+      if (sectorTitle !== undefined) section.sector_title = sectorTitle
       writeDb(db)
     }
     revalidatePath('/')
@@ -1773,7 +1775,10 @@ export async function updateSection(id: string, title: string) {
   }
 
   const supabase = createClient()
-  const { error } = await supabase.from('schedule_sections').update({ title }).eq('id', id)
+  const payload: any = { title }
+  if (sectorTitle !== undefined) payload.sector_title = sectorTitle
+  
+  const { error } = await supabase.from('schedule_sections').update(payload).eq('id', id)
   if (error) return { success: false, message: error.message }
   revalidatePath('/')
   return { success: true }
