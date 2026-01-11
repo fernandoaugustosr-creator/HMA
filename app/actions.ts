@@ -1081,6 +1081,8 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
         if (existingIndex !== -1) {
           db.monthly_rosters[existingIndex].section_id = sectionId
           db.monthly_rosters[existingIndex].unit_id = unitId
+          if (observation !== undefined) db.monthly_rosters[existingIndex].observation = observation
+          if (createdAt) db.monthly_rosters[existingIndex].created_at = createdAt
         } else {
           // If adding new to roster, clear any existing shifts for this month (clean slate)
           // This prevents "ghost" shifts from appearing if the nurse had shifts in this month previously
@@ -1099,7 +1101,8 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
             unit_id: unitId,
             month: m,
             year,
-            created_at: new Date().toISOString()
+            observation: observation || '',
+            created_at: createdAt || new Date().toISOString()
           })
         }
     })
@@ -1134,15 +1137,19 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
             .lte('date', endDate)
     }
 
+    const payload: any = {
+        nurse_id: nurseId, 
+        section_id: sectionId, 
+        unit_id: unitId, 
+        month: m, 
+        year 
+    }
+    if (observation !== undefined) payload.observation = observation
+    if (createdAt) payload.created_at = createdAt
+
     const { error } = await supabase
         .from('monthly_rosters')
-        .upsert({
-            nurse_id: nurseId, 
-            section_id: sectionId, 
-            unit_id: unitId, 
-            month: m, 
-            year 
-        }, { onConflict: 'nurse_id, month, year' })
+        .upsert(payload, { onConflict: 'nurse_id, month, year' })
 
     if (error) return { success: false, message: error.message }
   }
