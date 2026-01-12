@@ -33,6 +33,7 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
   const [selectedNurseId, setSelectedNurseId] = useState('')
   const [myShiftDate, setMyShiftDate] = useState('')
   const [targetDate, setTargetDate] = useState('')
+  const [isShiftLocked, setIsShiftLocked] = useState(false)
   const [error, setError] = useState('')
   const [targetNurseShifts, setTargetNurseShifts] = useState<{date: string, type: string}[]>([])
 
@@ -97,6 +98,7 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
 
   const openModalForShift = (date: string) => {
     setMyShiftDate(date)
+    setIsShiftLocked(true)
     setSelectedNurseId('')
     setTargetDate('')
     setIsModalOpen(true)
@@ -236,6 +238,7 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                 <button 
                     onClick={() => {
                         setMyShiftDate('')
+                        setIsShiftLocked(false)
                         setIsModalOpen(true)
                     }}
                     className="text-xs text-orange-600 hover:text-orange-800 underline"
@@ -324,13 +327,14 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                         <select 
                             value={myShiftDate}
                             onChange={(e) => setMyShiftDate(e.target.value)}
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm border p-2"
+                            disabled={isShiftLocked}
+                            className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm border p-2 ${isShiftLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                             required
                         >
                             <option value="">Selecione...</option>
                             {futureShifts.map(s => (
                                 <option key={s.date || s.shift_date} value={s.date || s.shift_date}>
-                                    {formatDate(s.date || s.shift_date)} - {(s.type || s.shift_type) === 'day' ? 'Dia' : (s.type || s.shift_type) === 'night' ? 'Noite' : (s.type || s.shift_type || 'N/A')}
+                                    {formatDate(s.date || s.shift_date)} - {(s.type || s.shift_type) === 'day' ? 'Diurno' : (s.type || s.shift_type) === 'night' ? 'Noturno' : (s.type || s.shift_type || 'N/A')}
                                 </option>
                             ))}
                         </select>
@@ -348,7 +352,7 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                             <option value="">{selectedNurseId ? 'Selecione...' : 'Selecione um servidor acima'}</option>
                             {targetNurseShifts.map(s => (
                                 <option key={s.date} value={s.date}>
-                                    {formatDate(s.date)} - {s.type === 'day' ? 'Dia' : s.type === 'night' ? 'Noite' : (s.type || 'N/A')}
+                                    {formatDate(s.date)} - {s.type === 'day' ? 'Diurno' : s.type === 'night' ? 'Noturno' : (s.type || 'N/A')}
                                 </option>
                             ))}
                         </select>
