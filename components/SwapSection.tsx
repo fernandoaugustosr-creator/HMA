@@ -311,18 +311,6 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
 
                 <form onSubmit={handleCreate} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Com quem?</label>
-                        <SearchableSelect
-                            options={nurses.filter(n => n.id !== currentUserId).map(n => ({ value: n.id, label: n.name }))}
-                            value={selectedNurseId}
-                            onChange={setSelectedNurseId}
-                            placeholder="Selecione um colega..."
-                            required
-                            className="mt-1"
-                        />
-                    </div>
-
-                    <div>
                         <label className="block text-sm font-medium text-gray-700">Meu Plantão (Dar)</label>
                         <select 
                             value={myShiftDate}
@@ -338,6 +326,18 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId }
                                 </option>
                             ))}
                         </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Com quem?</label>
+                        <SearchableSelect
+                            options={nurses.filter(n => n.id !== currentUserId).map(n => ({ value: n.id, label: n.name }))}
+                            value={selectedNurseId}
+                            onChange={setSelectedNurseId}
+                            placeholder="Selecione um colega..."
+                            required
+                            className="mt-1"
+                        />
                     </div>
 
                     <div>
