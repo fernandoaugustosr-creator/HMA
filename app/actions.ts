@@ -132,7 +132,7 @@ export async function createNurse(prevState: any, formData: FormData) {
   if (!finalSectionId) {
       const { data: sections } = await supabase.from('schedule_sections').select('*')
       if (sections) {
-          if (role === 'ENFERMEIRO') finalSectionId = sections.find(s => s.title === 'ENFERMEIROS')?.id || null
+          if (role === 'ENFERMEIRO' || role === 'COORDENADOR') finalSectionId = sections.find(s => s.title === 'ENFERMEIROS')?.id || null
           else if (role === 'TECNICO') finalSectionId = sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')?.id || null
       }
   }

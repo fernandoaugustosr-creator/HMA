@@ -63,6 +63,7 @@ export default function NurseForm() {
           >
             <option value="ENFERMEIRO">Enfermeiro(a)</option>
             <option value="TECNICO">Técnico(a) de Enfermagem</option>
+            <option value="COORDENADOR">Coordenador(a)</option>
           </select>
         </div>
         <div>
