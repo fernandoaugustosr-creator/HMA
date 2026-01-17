@@ -109,6 +109,16 @@ export async function createSwapRequest(formData: FormData) {
     return { success: false, message: 'Dados incompletos: selecione enfermeiro e ambas as datas' }
   }
 
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const requesterDateObj = new Date((requester_shift_date || '') + 'T12:00:00')
+  const diffMs = requesterDateObj.getTime() - today.getTime()
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+  if (isNaN(diffDays) || diffDays !== 1) {
+    return { success: false, message: 'Permuta só pode ser solicitada no dia anterior ao plantão.' }
+  }
+
   if (isLocalMode()) {
     const db = readDb()
     db.shift_swaps = db.shift_swaps || []
