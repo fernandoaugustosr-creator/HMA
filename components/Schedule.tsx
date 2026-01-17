@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
-import { Trash2, Plus, Pencil, Save, X, Check, Copy } from 'lucide-react'
+import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
 
@@ -20,6 +20,7 @@ interface Nurse {
   roster_created_at?: string
   observation?: string
   sector?: string
+  list_order?: number | null
 }
 
 interface RosterItem {
@@ -32,13 +33,14 @@ interface RosterItem {
   observation?: string
   sector?: string
   created_at?: string
+  list_order?: number | null
 }
 
 interface Shift {
   id: string
   nurse_id: string
   shift_date: string
-  shift_type: 'day' | 'night' | 'morning' | 'afternoon'
+  shift_type: 'day' | 'night' | 'morning' | 'afternoon' | 'mt'
 }
 
 interface TimeOff {
@@ -109,6 +111,7 @@ const ObservationCell = ({
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onBlur={handleBlur}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
     />
   )
 }
@@ -116,11 +119,13 @@ const ObservationCell = ({
 const SectorCell = ({ 
   initialValue, 
   onSave,
+  onCopyDown,
   isAdmin,
   className = ""
 }: { 
   initialValue: string | undefined, 
   onSave: (val: string) => void,
+  onCopyDown?: (val: string) => void,
   isAdmin: boolean,
   className?: string
 }) => {
@@ -136,18 +141,45 @@ const SectorCell = ({
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+        e.preventDefault()
+        if (value !== (initialValue || '')) {
+            onSave(value)
+        }
+        (e.target as HTMLInputElement).blur()
+    }
+  }
+
   if (!isAdmin) {
     return <span className={`text-[10px] uppercase block font-bold text-black ${className}`}>{value}</span>
   }
 
   return (
-    <input 
-      type="text" 
-      className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold text-black w-full ${className}`}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={handleBlur}
-    />
+    <div className="relative group w-full h-full">
+        <input 
+          type="text" 
+          className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold text-black w-full h-full ${className}`}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+        />
+        {onCopyDown && value && (
+            <button
+                onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onCopyDown(value)
+                }}
+                className="absolute right-0 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center justify-center bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-full w-4 h-4 z-20 shadow-sm border border-blue-200"
+                title="Replicar para todos abaixo"
+                tabIndex={-1}
+            >
+                <ArrowDown size={10} />
+            </button>
+        )}
+    </div>
   )
 }
 
@@ -201,18 +233,70 @@ export default function Schedule({
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [shiftModalData, setShiftModalData] = useState<{nurseId: string, nurseName: string, date: string} | null>(null)
-  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'delete'>('day')
-  const [recurrence, setRecurrence] = useState<'none' | 'daily' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6'>('none')
+  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'delete'>('day')
+  const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6' | 'custom'>('off4')
+  const [customRecurrenceDays, setCustomRecurrenceDays] = useState<string>('')
   const [limitShifts, setLimitShifts] = useState<string>('')
   const [deleteWholeMonth, setDeleteWholeMonth] = useState(false)
   
   // Sector Title Editing State
   const [editingSectorTitleId, setEditingSectorTitleId] = useState<string | null>(null)
   const [tempSectorTitle, setTempSectorTitle] = useState('')
+  const [hiddenSectorColumns, setHiddenSectorColumns] = useState<string[]>([])
 
   // Logo Upload State
   const [logoTimestamp, setLogoTimestamp] = useState(Date.now())
   const [cityLogoTimestamp, setCityLogoTimestamp] = useState(Date.now())
+
+  // Copy Schedule State
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false)
+  const [copyTargetMonth, setCopyTargetMonth] = useState(selectedMonth)
+  const [copyTargetYear, setCopyTargetYear] = useState(selectedYear)
+
+  // Replication State
+  const [replicationModalOpen, setReplicationModalOpen] = useState(false)
+  const [replicationData, setReplicationData] = useState<{
+      value: string,
+      targets: { id: string, group: number }[]
+  } | null>(null)
+
+  const handleExecuteReplication = async (targetGroup: number) => {
+      if (!replicationData) return
+
+      const targetsToUpdate = replicationData.targets.filter(t => t.group === targetGroup)
+      
+      if (targetsToUpdate.length === 0) {
+          alert('Nenhum profissional encontrado para este critério.')
+          return
+      }
+
+      setLoading(true)
+      
+      // Optimistic Update
+      setData(prev => ({
+          ...prev,
+          roster: prev.roster.map(r => {
+              const isTarget = targetsToUpdate.some(t => t.id === r.nurse_id)
+              if (isTarget && r.month === selectedMonth + 1 && r.year === selectedYear) {
+                  return { ...r, sector: replicationData.value }
+              }
+              return r
+          })
+      }))
+
+      // Server Update
+      try {
+          await Promise.all(targetsToUpdate.map(t => updateRosterSector(t.id, selectedMonth + 1, selectedYear, replicationData.value)))
+          setReplicationModalOpen(false)
+          setReplicationData(null)
+      } catch (e) {
+          console.error('Error copying sectors', e)
+          alert('Erro ao salvar alguns setores.')
+          fetchData(true)
+      } finally {
+          setLoading(false)
+      }
+  }
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -425,6 +509,22 @@ export default function Schedule({
     setLoading(false)
   }
 
+  const handleClearSchedule = async () => {
+    if (!selectedUnitId) return alert('Selecione um setor para excluir a escala')
+    if (!confirm('Tem certeza que deseja EXCLUIR TODA a escala deste mês para este setor? Esta ação removerá todos os profissionais e plantões deste mês e não poderá ser desfeita.')) return
+    
+    setLoading(true)
+    const res = await clearMonthlySchedule(selectedMonth + 1, selectedYear, selectedUnitId)
+    if (res.success) {
+        alert('Escala do mês excluída com sucesso!')
+        clearCache()
+        fetchData(true)
+    } else {
+        alert(res.message || 'Erro ao excluir escala')
+    }
+    setLoading(false)
+  }
+
   async function handleRemoveFromRoster(nurseId: string) {
     if (!confirm('Tem certeza que deseja remover este servidor desta escala mensal?')) return
     setLoading(true)
@@ -497,6 +597,23 @@ export default function Schedule({
     if (!res.success) {
         alert('Erro ao salvar setor')
         await fetchData(true)
+    }
+  }
+
+  const handleUpdateOrder = async (nurseId: string, listOrder: number | null) => {
+    setData(prev => ({
+      ...prev,
+      roster: prev.roster.map(r =>
+        r.nurse_id === nurseId && r.month === selectedMonth + 1 && r.year === selectedYear
+          ? { ...r, list_order: listOrder }
+          : r
+      )
+    }))
+
+    const res = await updateRosterOrder(nurseId, selectedMonth + 1, selectedYear, listOrder)
+    if (!res.success) {
+      alert('Erro ao salvar numeração')
+      await fetchData(true)
     }
   }
 
@@ -649,8 +766,8 @@ export default function Schedule({
         date: dateStr
     })
     setShiftType('day')
-    setRecurrence('none')
     setLimitShifts('')
+    setCustomRecurrenceDays('')
     setDeleteWholeMonth(false)
     setIsShiftModalOpen(true)
   }
@@ -684,6 +801,16 @@ export default function Schedule({
             const limit = limitShifts ? parseInt(limitShifts) : Infinity
 
             while (currentDateIter.getMonth() === selectedMonth && currentDateIter.getFullYear() === selectedYear) {
+                // Special handling for Mon-Fri recurrence
+                if (recurrence === 'mon_fri') {
+                    const dayOfWeek = currentDateIter.getDay()
+                    if (dayOfWeek === 0 || dayOfWeek === 6) {
+                        // Skip weekends
+                        currentDateIter.setDate(currentDateIter.getDate() + 1)
+                        continue
+                    }
+                }
+
                 if (count >= limit) break
 
                 const dateString = `${currentDateIter.getFullYear()}-${String(currentDateIter.getMonth() + 1).padStart(2, '0')}-${String(currentDateIter.getDate()).padStart(2, '0')}`
@@ -699,7 +826,7 @@ export default function Schedule({
                 if (recurrence === 'none') break
                 
                 // Increment based on recurrence
-                if (recurrence === 'daily') {
+                if (recurrence === 'daily' || recurrence === 'mon_fri') {
                     currentDateIter.setDate(currentDateIter.getDate() + 1)
                 } else if (recurrence === '12x36') {
                     currentDateIter.setDate(currentDateIter.getDate() + 2)
@@ -713,6 +840,13 @@ export default function Schedule({
                     currentDateIter.setDate(currentDateIter.getDate() + 6)
                 } else if (recurrence === 'off6') {
                     currentDateIter.setDate(currentDateIter.getDate() + 7)
+                } else if (recurrence === 'custom') {
+                    const days = parseInt(customRecurrenceDays)
+                    if (!isNaN(days) && days > 0) {
+                        currentDateIter.setDate(currentDateIter.getDate() + days)
+                    } else {
+                        break // Invalid custom days
+                    }
                 }
             }
         }
@@ -797,6 +931,7 @@ export default function Schedule({
   const shiftsLookup = React.useMemo(() => {
       const lookup: Record<string, Shift> = {} // Key: "nurseId_date"
       const countLookup: Record<string, number> = {} // Key: nurseId
+      const weekendCountLookup: Record<string, number> = {} // Key: nurseId
       
       const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`
       
@@ -805,10 +940,17 @@ export default function Schedule({
               if (s.shift_date.startsWith(monthPrefix)) {
                   lookup[`${s.nurse_id}_${s.shift_date}`] = s
                   countLookup[s.nurse_id] = (countLookup[s.nurse_id] || 0) + 1
+
+                  // Check if weekend
+                  const date = new Date(s.shift_date + 'T12:00:00')
+                  const day = date.getDay()
+                  if (day === 0 || day === 6) { // 0=Sun, 6=Sat
+                      weekendCountLookup[s.nurse_id] = (weekendCountLookup[s.nurse_id] || 0) + 1
+                  }
               }
           })
       }
-      return { lookup, countLookup }
+      return { lookup, countLookup, weekendCountLookup }
   }, [data.shifts, selectedMonth, selectedYear])
 
   const timeOffsLookup = React.useMemo(() => {
@@ -847,65 +989,98 @@ export default function Schedule({
     return map;
   }, [data.roster, selectedMonth, selectedYear]);
 
+  const nurseOrderMap = useMemo(() => {
+    const map = new Map<string, number>();
+    (data.roster || []).forEach(r => {
+      if (r.month === selectedMonth + 1 && r.year === selectedYear && r.list_order !== null && r.list_order !== undefined) {
+        map.set(r.nurse_id, r.list_order);
+      }
+    });
+    return map;
+  }, [data.roster, selectedMonth, selectedYear]);
+
   const renderGrid = (professionals: Nurse[], section: Section) => {
-    // Helper to find the first shift day (1-31) for a nurse in the current month
     const getFirstShiftDay = (nurseId: string) => {
-        for (let day = 1; day <= daysInMonth; day++) {
-             const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-             if (shiftsLookup.lookup[`${nurseId}_${dateStr}`]) {
-                 return day
-             }
-        }
-        return 999 // No shifts found
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        const shift = shiftsLookup.lookup[`${nurseId}_${dateStr}`]
+        if (shift && (shift.shift_type === 'day' || shift.shift_type === 'mt')) return day
+      }
+      return 999
     }
 
-    // Sort professionals by first shift day then by insertion time (for Tecnicos) or just insertion time (for others)
-    const sortedProfessionals = [...professionals].sort((a, b) => {
-        const isTecnicoA = (a.role || '').toUpperCase() === 'TECNICO'
-        const isTecnicoB = (b.role || '').toUpperCase() === 'TECNICO'
+    const sortedProfessionals = professionals.map((p, i) => ({
+        nurse: p,
+        index: i,
+        firstDay: getFirstShiftDay(p.id),
+        isTecnico: (p.role || '').toUpperCase() === 'TECNICO',
+        listOrder: nurseOrderMap.get(p.id)
+    }))
 
-        if (isTecnicoA && isTecnicoB) {
-            const dayA = getFirstShiftDay(a.id)
-            const dayB = getFirstShiftDay(b.id)
-            
-            if (dayA !== dayB) {
-                return dayA - dayB
-            }
-        }
-        
-        const aTime = a.roster_created_at ? new Date(a.roster_created_at).getTime() : 0
-        const bTime = b.roster_created_at ? new Date(b.roster_created_at).getTime() : 0
-        return aTime - bTime
+    const professionalsWithRowNumber = sortedProfessionals.map((p, index) => {
+      const rowNumber =
+        p.listOrder !== undefined && p.listOrder !== null
+          ? p.listOrder
+          : index + 1
+      const group = rowNumber
+      return {
+        ...p,
+        rowNumber,
+        group
+      }
     })
 
-    let currentCounter = 0
-    let lastFirstDay = -1
+    const orderedProfessionals = professionalsWithRowNumber
+
+    const handleCopySectorDown = async (_startIndex: number, value: string) => {
+      const targets = orderedProfessionals.map(x => ({
+          id: x.nurse.id,
+          group: x.group
+      }))
+      
+      if (targets.length === 0) return
+
+      setReplicationData({
+          value,
+          targets
+      })
+      setReplicationModalOpen(true)
+    }
 
     return (
       <>
-        {sortedProfessionals.map((nurse) => {
-          // Calculate Total Shifts
+        {orderedProfessionals.map(({ nurse, firstDay, isTecnico, rowNumber }, index) => {
           const totalShifts = shiftsLookup.countLookup[nurse.id] || 0
+          const weekendShifts = shiftsLookup.weekendCountLookup[nurse.id] || 0
           
-          // Calculate counter group based on first shift day
-          const firstDay = getFirstShiftDay(nurse.id)
-          const isTecnico = (nurse.role || '').toUpperCase() === 'TECNICO'
+          // Logic: If someone has > 15 shifts but ZERO weekend shifts, they are likely a "Diarista" (Mon-Fri)
+          // Diaristas are not paid by shift (Plantão), so their count should be blank.
+          const isDiarista = totalShifts >= 15 && weekendShifts === 0
           
-          if (isTecnico) {
-              if (firstDay !== lastFirstDay) {
-                  currentCounter = 1
-                  lastFirstDay = firstDay
-              } else {
-                  currentCounter++
-              }
-          } else {
-              currentCounter++
-              lastFirstDay = firstDay
-          }
+          const displayTotal = isDiarista ? '' : totalShifts
 
           return (
             <tr key={nurse.id} className="hover:bg-gray-50">
-              <td className="border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8">{currentCounter}</td>
+              <td
+                className={`border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8 ${isAdmin ? 'cursor-pointer hover:bg-gray-100' : ''}`}
+                onClick={async () => {
+                  if (!isAdmin) return
+                  const ok = confirm('Reiniciar numeração deste grupo começando em 1?')
+                  if (!ok) return
+                  setLoading(true)
+                  const res = await resetSectionOrder(section.id, selectedUnitId || null, selectedMonth + 1, selectedYear, nurse.id)
+                  if (!res.success) {
+                    alert(res.message || 'Erro ao reiniciar numeração')
+                  } else {
+                    clearCache()
+                    await fetchData(true)
+                  }
+                  setLoading(false)
+                }}
+                title={isAdmin ? 'Clique para reiniciar numeração deste grupo' : undefined}
+              >
+                {rowNumber}
+              </td>
               <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 w-[300px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
                   {isAdmin && (
@@ -954,13 +1129,16 @@ export default function Schedule({
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.vinculo || '-'}</td>
+              {!hiddenSectorColumns.includes(section.id) && (
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
                   <SectorCell 
                       initialValue={nurse.sector}
                       onSave={(val) => handleUpdateSector(nurse.id, val)}
+                      onCopyDown={(val) => handleCopySectorDown(index, val)}
                       isAdmin={isAdmin}
                   />
               </td>
+              )}
               
               {daysArray.map(({ day, weekday, isWeekend }) => {
                 const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -993,6 +1171,7 @@ export default function Schedule({
                    else if (shift.shift_type === 'night') content = 'N'
                    else if (shift.shift_type === 'morning') content = 'M'
                    else if (shift.shift_type === 'afternoon') content = 'T'
+                   else if (shift.shift_type === 'mt') content = 'MT'
                 }
                 
                 // Highlight weekends (Gray background for entire column, overridden by specific statuses if needed, but image shows gray prevails or mixes)
@@ -1017,7 +1196,7 @@ export default function Schedule({
                   </td>
                 )
               })}
-              <td className="border border-black px-1 py-1 text-center text-xs font-bold">{totalShifts}</td>
+              <td className="border border-black px-1 py-1 text-center text-xs font-bold">{displayTotal}</td>
             </tr>
           )
         })}
@@ -1065,6 +1244,9 @@ export default function Schedule({
           </td>
           <td className="border border-black px-1 py-1"></td>
           <td className="border border-black px-1 py-1"></td>
+          {!hiddenSectorColumns.includes(section.id) && (
+            <td className="border border-black px-1 py-1"></td>
+          )}
           {daysArray.map(({ day, isWeekend }) => (
             <td 
               key={`placeholder-${day}`} 
@@ -1091,8 +1273,40 @@ export default function Schedule({
       setFooterText(metadata?.footer_text || '')
   }, [data.releases, selectedMonth, selectedYear, selectedUnitId])
 
+  const handleCopySchedule = async () => {
+    if (loading) return
+    if (!confirm(`Deseja copiar a escala atual (${MONTHS[selectedMonth]}/${selectedYear}) para ${MONTHS[copyTargetMonth]}/${copyTargetYear}?`)) return
+    
+    setLoading(true)
+    try {
+        const res = await copyMonthlyRoster(selectedMonth + 1, selectedYear, copyTargetMonth + 1, copyTargetYear, selectedUnitId)
+        if (res.success) {
+            alert('Escala copiada com sucesso!')
+            setIsCopyModalOpen(false)
+            // Navigate to the new schedule
+            setSelectedMonth(copyTargetMonth)
+            setSelectedYear(copyTargetYear)
+        } else {
+            alert('Erro ao copiar escala: ' + res.message)
+        }
+    } catch (error) {
+        console.error(error)
+        alert('Erro interno ao copiar escala.')
+    } finally {
+        setLoading(false)
+        clearCache()
+    }
+  }
+
   return (
-    <div className="w-full bg-white p-2 md:p-4">
+    <div className="w-full bg-white p-1 schedule-root">
+      {/* Print Header */}
+      <div className="hidden print:flex w-full items-center justify-between mb-4 px-4">
+          <img src="/logo-hma.png" alt="Logo HMA" className="h-16 object-contain" />
+          <div className="flex-1"></div>
+          <img src="/logo-prefeitura.png" alt="Logo Prefeitura" className="h-16 object-contain" />
+      </div>
+
       {/* Header Filters */}
       <div className="flex flex-col items-center gap-4 mb-6 no-print">
         <div className="flex flex-col md:flex-row gap-4 items-end justify-center">
@@ -1121,9 +1335,14 @@ export default function Schedule({
                         className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
                     >
                         <option value="">Selecione um setor...</option>
-                        {data.units.map(unit => (
-                        <option key={unit.id} value={unit.id}>{unit.title}</option>
-                        ))}
+                        {data.units.map(unit => {
+                          const isReleased = data.releases?.some(r => r.unit_id === unit.id && r.month === selectedMonth + 1 && r.year === selectedYear && r.is_released)
+                          return (
+                            <option key={unit.id} value={unit.id}>
+                                {unit.title} {isReleased ? '(Laçada)' : ''}
+                            </option>
+                          )
+                        })}
                         {isAdmin && (
                         <>
                         <option disabled>──────────</option>
@@ -1189,7 +1408,33 @@ export default function Schedule({
                     Escala ainda não liberada
                 </div>
              ) : (
-                isScheduleReleased ? (
+                <>
+                {isAdmin && (
+                    <button 
+                        onClick={() => {
+                            setCopyTargetMonth(selectedMonth === 11 ? 0 : selectedMonth + 1)
+                            setCopyTargetYear(selectedMonth === 11 ? selectedYear + 1 : selectedYear)
+                            setIsCopyModalOpen(true)
+                        }}
+                        className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-gray-50 transition-colors h-[38px]"
+                        title="Copiar modelo desta escala"
+                    >
+                        <Copy size={16} />
+                        <span className="hidden md:inline">Copiar Modelo</span>
+                    </button>
+                )}
+                {isAdmin && isLaunched && selectedUnitId && (
+                    <button 
+                        onClick={handleClearSchedule}
+                        className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-red-100 transition-colors h-[38px] w-full md:w-56"
+                        title="Excluir toda a escala deste mês para o setor selecionado"
+                    >
+                        <Trash2 size={16} />
+                        <span className="hidden md:inline">Excluir Escala do Mês</span>
+                        <span className="md:hidden">Excluir Escala</span>
+                    </button>
+                )}
+                {isScheduleReleased ? (
                     <button 
                         onClick={handleUnrelease}
                         className="group flex items-center justify-center gap-2 text-green-600 font-bold h-[38px] px-4 bg-green-50 border border-green-200 rounded w-full md:w-48 whitespace-nowrap hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
@@ -1209,15 +1454,17 @@ export default function Schedule({
                         Liberar Escala
                     </button>
                 )
+                }
+                </>
              )
            )}
         </div>
       </div>
 
       {/* Report Header */}
-      <div className="mb-4">
+      <div className="mb-1">
         {/* Logos Header */}
-        <div className={`flex justify-between items-center mb-4 ${printOnly ? 'hidden print:flex' : ''}`}>
+        <div className={`flex justify-between items-center mb-2 ${printOnly ? 'hidden print:flex' : ''}`}>
             <div className="flex flex-col items-start">
                 {/* Section Manager Dropdown (Replacing Logo) */}
                 <div className="flex items-center gap-4 relative">
@@ -1295,12 +1542,32 @@ export default function Schedule({
                  <>
                  {visibleSections.map(section => (
                     <div key={section.id} className="">
-                        <table className="min-w-[1200px] w-full border-collapse border border-black text-black text-[11px] table-fixed">
+                        <table className="min-w-full w-full border-collapse border border-black text-black text-[11px]">
                              <thead>
                              {/* Main Headers Row 1 */}
                             <tr className="bg-blue-100 text-black print:bg-blue-100">
-                                <th className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold print:bg-blue-100" rowSpan={2}>#</th>
-                                <th className="border border-black px-1 py-1 text-center w-[300px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group print:bg-blue-100" rowSpan={2}>
+                                <th 
+                                  className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold print:bg-blue-100 cursor-pointer select-none"
+                                  rowSpan={2}
+                                  onClick={async () => {
+                                    if (!isAdmin) return
+                                    const ok = confirm('Reiniciar numeração deste grupo começando em 1?')
+                                    if (!ok) return
+                                    setLoading(true)
+                                    const res = await resetSectionOrder(section.id, selectedUnitId || null, selectedMonth + 1, selectedYear)
+                                    if (!res.success) {
+                                      alert(res.message || 'Erro ao reiniciar numeração')
+                                    } else {
+                                      clearCache()
+                                      await fetchData(true)
+                                    }
+                                    setLoading(false)
+                                  }}
+                                  title={isAdmin ? 'Clique para reiniciar numeração deste grupo' : undefined}
+                                >
+                                  #
+                                </th>
+                                <th className="border border-black px-1 py-1 text-center w-[220px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group print:bg-blue-100" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center">
                                             <input 
@@ -1318,9 +1585,19 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold bg-blue-100 print:bg-blue-100" rowSpan={2}>COREN</th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold bg-blue-100 print:bg-blue-100" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-[10px] bg-blue-100 print:bg-blue-100" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-20 font-bold bg-blue-100 print:bg-blue-100" rowSpan={2}>COREN</th>
+                                <th className="border border-black px-1 py-1 text-center w-20 font-bold bg-blue-100 print:bg-blue-100" rowSpan={2}>VÍNCULO</th>
+                                {!hiddenSectorColumns.includes(section.id) && (
+                                <th className="border border-black px-1 py-1 text-center w-20 font-bold text-[10px] bg-blue-100 print:bg-blue-100 group relative" rowSpan={2}>
+                                    {isAdmin && (
+                                        <button 
+                                            onClick={() => setHiddenSectorColumns(prev => [...prev, section.id])}
+                                            className="absolute top-0 right-0 p-0.5 text-red-500 hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Ocultar coluna"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    )}
                                     {editingSectorTitleId === section.id ? (
                                         <div className="flex items-center gap-1">
                                             <input 
@@ -1342,8 +1619,9 @@ export default function Schedule({
                                         </span>
                                     )}
                                 </th>
+                                )}
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-6 ${isWeekend ? 'bg-gray-400 print:bg-gray-400' : ''}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-5 ${isWeekend ? 'bg-gray-400 print:bg-gray-400' : ''}`}>
                                     {weekday}
                                     </th>
                                 ))}
@@ -1381,7 +1659,7 @@ export default function Schedule({
                     {data.sections.map(s => {
                       const alreadyVisible = !!visibleSections.find(vs => vs.id === s.id)
                       return (
-                        <option key={s.id} value={s.id} disabled={alreadyVisible}>
+                        <option key={s.id} value={s.id}>
                           {s.title}
                         </option>
                       )
@@ -1632,8 +1910,69 @@ export default function Schedule({
         </div>
       )}
 
+      {/* Copy Schedule Modal */}
+      {isCopyModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded shadow-lg w-full max-w-sm">
+                <h3 className="font-bold text-lg mb-4 text-black">Copiar Escala (Modelo)</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Selecione o mês e ano de destino para copiar a escala atual.
+                    <br/>
+                    <span className="text-red-500 font-bold">Atenção:</span> Se já houver escala no destino, os profissionais serão mesclados (duplicatas ignoradas).
+                </p>
+                
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-black mb-1">Mês de Destino</label>
+                    <select 
+                        value={copyTargetMonth} 
+                        onChange={(e) => setCopyTargetMonth(parseInt(e.target.value))}
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-black"
+                    >
+                        {MONTHS.map((m, i) => (
+                            <option key={i} value={i}>{m}</option>
+                        ))}
+                    </select>
+                </div>
+                
+                <div className="mb-6">
+                    <label className="block text-sm font-medium text-black mb-1">Ano de Destino</label>
+                    <select 
+                        value={copyTargetYear} 
+                        onChange={(e) => setCopyTargetYear(parseInt(e.target.value))}
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-black"
+                    >
+                        {YEARS.map((y) => (
+                            <option key={y} value={y}>{y}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                    <button 
+                        onClick={() => setIsCopyModalOpen(false)}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleCopySchedule}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
+                        disabled={loading}
+                    >
+                        {loading && <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></span>}
+                        Copiar
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       <style jsx global>{`
         @media print {
+          @page {
+            size: landscape;
+            margin: 5mm;
+          }
           .no-print {
             display: none !important;
           }
@@ -1691,6 +2030,12 @@ export default function Schedule({
                             Tarde (T)
                         </button>
                         <button 
+                            onClick={() => setShiftType('mt')}
+                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'mt' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            MT
+                        </button>
+                        <button 
                             onClick={() => {
                                 setShiftType('delete')
                                 setDeleteWholeMonth(false)
@@ -1729,14 +2074,33 @@ export default function Schedule({
                         >
                             <option value="none">Apenas este dia</option>
                             <option value="daily">Todos os dias (Diário)</option>
+                            <option value="mon_fri">De Segunda a Sexta</option>
                             <option value="12x36">A cada 2 dias (12x36 - Dia sim, dia não)</option>
                             <option value="every3">A cada 3 dias</option>
                             <option value="24x72">A cada 4 dias (24x72)</option>
                             <option value="off4">Folga de 4 dias (Trabalha 1, Folga 4)</option>
                             <option value="off5">Folga de 5 dias (Trabalha 1, Folga 5)</option>
                             <option value="off6">Folga de 6 dias (Trabalha 1, Folga 6)</option>
+                            <option value="custom">Personalizado (Repetir a cada X dias)</option>
                         </select>
                         
+                        {recurrence === 'custom' && (
+                            <div className="mt-2">
+                                <label className="block text-sm font-medium text-black mb-1">Repetir a cada (dias)</label>
+                                <input 
+                                    type="number"
+                                    value={customRecurrenceDays}
+                                    onChange={e => setCustomRecurrenceDays(e.target.value)}
+                                    placeholder="Ex: 8 para folga de 7 dias"
+                                    className="w-full border p-2 rounded text-black bg-white text-sm"
+                                    min="1"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Ex: Coloque 2 para dia sim/dia não (12x36). Coloque 5 para Trabalha 1/Folga 4.
+                                </p>
+                            </div>
+                        )}
+
                         <div className="mt-4">
                              <label className="block text-sm font-medium text-black mb-1">Limitar preenchimento (Opcional)</label>
                              <input 
@@ -1809,6 +2173,44 @@ export default function Schedule({
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* Replication Modal */}
+      {replicationModalOpen && replicationData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded shadow-lg w-full max-w-sm">
+                <h3 className="font-bold text-lg mb-4 text-black">Replicar Setor</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Você deseja replicar <strong>"{replicationData.value}"</strong> para quem?
+                </p>
+
+                <div className="flex flex-col gap-2">
+                    {[1, 2, 3, 4, 5].map(num => (
+                        <button 
+                            key={num}
+                            onClick={() => handleExecuteReplication(num)}
+                            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-black w-full text-left flex justify-between"
+                        >
+                            <span>Repetir em todos que são número {num} na lista</span>
+                            <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">
+                                {replicationData.targets.filter(t => t.group === num).length} prof.
+                            </span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="mt-4 flex justify-end">
+                    <button 
+                        onClick={() => {
+                            setReplicationModalOpen(false)
+                            setReplicationData(null)
+                        }}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            </div>
         </div>
       )}
     </div>

@@ -43,8 +43,8 @@ export default function MyShifts({ shifts, currentUserId }: MyShiftsProps) {
                     <div className="flex justify-between items-center">
                       <div className="flex flex-col">
                         <span className="font-medium text-gray-700">{formatDate(shift.shift_date || shift.date)}</span>
-                        <span className={`text-xs font-bold ${(shift.type === 'day' || shift.shift_type === 'day') ? 'text-orange-500' : 'text-indigo-500'}`}>
-                            {(shift.type === 'day' || shift.shift_type === 'day') ? 'Diurno' : 'Noturno'}
+                        <span className={`text-xs font-bold ${(shift.type === 'day' || shift.shift_type === 'day' || shift.type === 'mt' || shift.shift_type === 'mt') ? 'text-orange-500' : 'text-indigo-500'}`}>
+                            {(shift.type === 'day' || shift.shift_type === 'day') ? 'Diurno' : (shift.type === 'mt' || shift.shift_type === 'mt') ? 'MT' : 'Noturno'}
                         </span>
                       </div>
                       <span className="text-sm text-gray-500 capitalize">

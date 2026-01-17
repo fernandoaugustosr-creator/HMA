@@ -1167,7 +1167,17 @@ export async function getDailyShifts(date: string) {
       }
     })
 
-    return { success: true, data: enrichedShifts.filter(s => s.is_in_roster) }
+    const timeOffsForDay = (db.time_off_requests || []).filter((t: any) =>
+      t.status === 'approved' &&
+      t.start_date <= date &&
+      t.end_date >= date
+    )
+    const timeOffNurseIds = new Set(timeOffsForDay.map((t: any) => t.nurse_id))
+
+    return { 
+      success: true, 
+      data: enrichedShifts.filter(s => s.is_in_roster && !timeOffNurseIds.has(s.nurse_id)) 
+    }
   }
 
   const supabase = createClient()
@@ -1233,7 +1243,8 @@ export async function getDailyShifts(date: string) {
     { data: rosterRows },
     { data: nursesRows },
     { data: sectionsRows },
-    { data: unitsRows }
+    { data: unitsRows },
+    { data: timeOffRows }
   ] = await Promise.all([
     supabase.from('monthly_rosters')
       .select('nurse_id, section_id, unit_id, month, year')
@@ -1246,7 +1257,12 @@ export async function getDailyShifts(date: string) {
     supabase.from('schedule_sections')
       .select('id, title'),
     supabase.from('units')
-      .select('id, title')
+      .select('id, title'),
+    supabase.from('time_off_requests')
+      .select('id, nurse_id, start_date, end_date, type, status')
+      .eq('status', 'approved')
+      .lte('start_date', date)
+      .gte('end_date', date)
   ])
 
   const rosterByNurse: Record<string, { section_id: string | null, unit_id: string | null }> = {}
@@ -1264,6 +1280,11 @@ export async function getDailyShifts(date: string) {
 
   const unitsById: Record<string, string> = {}
   ;(unitsRows || []).forEach((u: any) => { unitsById[u.id] = u.title })
+
+  const timeOffNurseIds = new Set<string>()
+  ;(timeOffRows || []).forEach((t: any) => {
+    if (t.nurse_id) timeOffNurseIds.add(t.nurse_id)
+  })
 
   // 3) Enriquecer plantões com dados de escala mensal (prioritário) e nomes
   const enrichedShifts = shifts.map((s: any) => {
@@ -1290,7 +1311,10 @@ export async function getDailyShifts(date: string) {
     }
   })
 
-  return { success: true, data: enrichedShifts.filter(s => s.is_in_roster) }
+  return { 
+    success: true, 
+    data: enrichedShifts.filter(s => s.is_in_roster && !timeOffNurseIds.has(s.nurse_id)) 
+  }
 }
 
 export async function getMonthlyScheduleData(month: number, year: number) {
@@ -1531,16 +1555,16 @@ export async function unreleaseSchedule(month: number, year: number, unitId: str
       await checkAdmin()
       
       if (isLocalMode()) {
-         const db = readDb()
-         const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
-         
-         if (existingIndex >= 0) {
-             db.monthly_schedule_metadata[existingIndex].is_released = false
-             db.monthly_schedule_metadata[existingIndex].updated_at = new Date().toISOString()
-             writeDb(db)
-         }
-         revalidatePath('/')
-         return { success: true }
+        const db = readDb()
+        const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
+        
+        if (existingIndex >= 0) {
+            db.monthly_schedule_metadata[existingIndex].is_released = false
+            db.monthly_schedule_metadata[existingIndex].updated_at = new Date().toISOString()
+            writeDb(db)
+        }
+        revalidatePath('/')
+        return { success: true }
       }
 
       const supabase = createClient()
@@ -1574,31 +1598,30 @@ export async function updateScheduleFooter(month: number, year: number, unitId: 
       const user = JSON.parse(session!.value)
 
       if (isLocalMode()) {
-         const db = readDb()
-         const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
-         
-         const payload = {
-             id: existingIndex >= 0 ? db.monthly_schedule_metadata[existingIndex].id : randomUUID(),
-             month,
-             year,
-             unit_id: unitId || null,
-             footer_text: footerText,
-             updated_at: new Date().toISOString()
-         }
+        const db = readDb()
+        const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
+        
+        const payload = {
+            id: existingIndex >= 0 ? db.monthly_schedule_metadata[existingIndex].id : randomUUID(),
+            month,
+            year,
+            unit_id: unitId || null,
+            footer_text: footerText,
+            updated_at: new Date().toISOString()
+        }
 
-         if (existingIndex >= 0) {
-             db.monthly_schedule_metadata[existingIndex] = { ...db.monthly_schedule_metadata[existingIndex], ...payload }
-         } else {
-             // Initialize with defaults if creating new just for footer
-             db.monthly_schedule_metadata.push({
-                 ...payload,
-                 is_released: false,
-                 released_at: null
-             })
-         }
-         writeDb(db)
-         revalidatePath('/')
-         return { success: true }
+        if (existingIndex >= 0) {
+            db.monthly_schedule_metadata[existingIndex] = { ...db.monthly_schedule_metadata[existingIndex], ...payload }
+        } else {
+            db.monthly_schedule_metadata.push({
+                ...payload,
+                is_released: false,
+                released_at: null
+            })
+        }
+        writeDb(db)
+        revalidatePath('/')
+        return { success: true }
       }
 
       const supabase = createClient()
@@ -1633,6 +1656,97 @@ export async function updateScheduleFooter(month: number, year: number, unitId: 
   } catch(e) {
       console.error(e)
       return { success: false, message: 'Erro ao salvar rodapé' }
+  }
+}
+
+export async function clearMonthlySchedule(month: number, year: number, unitId: string | null) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
+
+  if (isLocalMode()) {
+    const db = readDb()
+
+    const rosterToDelete = db.monthly_rosters.filter((r: any) => r.month === month && r.year === year && (unitId ? r.unit_id === unitId : !r.unit_id))
+    const nurseIds = Array.from(new Set(rosterToDelete.map((r: any) => r.nurse_id).filter(Boolean)))
+
+    db.monthly_rosters = db.monthly_rosters.filter((r: any) => !(r.month === month && r.year === year && (unitId ? r.unit_id === unitId : !r.unit_id)))
+
+    if (nurseIds.length > 0) {
+      db.shifts = db.shifts.filter((s: any) => {
+        if (!nurseIds.includes(s.nurse_id)) return true
+        return s.shift_date < startDate || s.shift_date > endDate
+      })
+    }
+
+    db.monthly_schedule_metadata = db.monthly_schedule_metadata.filter((m: any) => !(m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id)))
+
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  try {
+    const supabase = createClient()
+
+    let rosterQuery = supabase
+      .from('monthly_rosters')
+      .select('nurse_id, unit_id')
+      .eq('month', month)
+      .eq('year', year)
+
+    const { data: rosterRows, error: rosterError } = await rosterQuery
+    if (rosterError && rosterError.code !== 'PGRST116') throw rosterError
+
+    const filteredRoster = (rosterRows || []).filter((r: any) => unitId ? r.unit_id === unitId : !r.unit_id)
+    const nurseIds = Array.from(new Set(filteredRoster.map((r: any) => r.nurse_id).filter(Boolean)))
+
+    let deleteRoster = supabase
+      .from('monthly_rosters')
+      .delete()
+      .eq('month', month)
+      .eq('year', year)
+
+    if (unitId) deleteRoster = deleteRoster.eq('unit_id', unitId)
+    else deleteRoster = deleteRoster.is('unit_id', null)
+
+    const { error: deleteRosterError } = await deleteRoster
+    if (deleteRosterError) throw deleteRosterError
+
+    if (nurseIds.length > 0) {
+      const { error: deleteShiftsError } = await supabase
+        .from('shifts')
+        .delete()
+        .in('nurse_id', nurseIds)
+        .gte('date', startDate)
+        .lte('date', endDate)
+
+      if (deleteShiftsError) throw deleteShiftsError
+    }
+
+    let deleteMetadata = supabase
+      .from('monthly_schedule_metadata')
+      .delete()
+      .eq('month', month)
+      .eq('year', year)
+
+    if (unitId) deleteMetadata = deleteMetadata.eq('unit_id', unitId)
+    else deleteMetadata = deleteMetadata.is('unit_id', null)
+
+    const { error: metadataError } = await deleteMetadata
+    if (metadataError) throw metadataError
+
+    revalidatePath('/')
+    return { success: true }
+  } catch (e: any) {
+    console.error('Error clearing monthly schedule:', e)
+    return { success: false, message: e.message || 'Erro ao excluir escala do mês' }
   }
 }
 
@@ -1830,15 +1944,61 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
                 unit_id: item.unit_id,
                 month: targetMonth,
                 year: targetYear,
-                created_at: new Date().toISOString()
+                observation: item.observation || '',
+                sector: item.sector || '',
+                list_order: item.list_order ?? null,
+                created_at: item.created_at || new Date().toISOString()
             })
             addedCount++
         }
     })
     
+    const nurseIds = sourceRoster.map(r => r.nurse_id)
+    if (nurseIds.length > 0) {
+        const sourceStartDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-01`
+        const sourceLastDay = new Date(sourceYear, sourceMonth, 0).getDate()
+        const sourceEndDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-${sourceLastDay}`
+        
+        const sourceShifts = db.shifts.filter(s => 
+            nurseIds.includes(s.nurse_id) && 
+            s.shift_date >= sourceStartDate && 
+            s.shift_date <= sourceEndDate
+        )
+
+        if (sourceShifts.length > 0) {
+            const targetLastDay = new Date(targetYear, targetMonth, 0).getDate()
+            const targetStartDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`
+            const targetEndDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetLastDay).padStart(2, '0')}`
+
+            // Limpar quaisquer plantões existentes desses profissionais no mês de destino
+            db.shifts = db.shifts.filter(s => 
+                !(
+                    nurseIds.includes(s.nurse_id) &&
+                    s.shift_date >= targetStartDate &&
+                    s.shift_date <= targetEndDate
+                )
+            )
+
+            sourceShifts.forEach(shift => {
+                const day = parseInt(shift.shift_date.split('-')[2], 10)
+                if (day > targetLastDay) return
+
+                const newDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+
+                db.shifts.push({
+                    id: randomUUID(),
+                    nurse_id: shift.nurse_id,
+                    shift_date: newDate,
+                    shift_type: shift.shift_type,
+                    updated_at: new Date().toISOString()
+                })
+            })
+        }
+    }
+
     writeDb(db)
     revalidatePath('/')
-    return { success: true, message: `${addedCount} servidores copiados.` }
+    return { success: true, message: `${addedCount} servidores copiados (incluindo plantões).` }
   }
 
   const supabase = createClient()
@@ -1857,7 +2017,11 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
       section_id: item.section_id,
       unit_id: item.unit_id,
       month: targetMonth,
-      year: targetYear
+      year: targetYear,
+      observation: item.observation || null,
+      sector: item.sector || null,
+      list_order: item.list_order ?? null,
+      created_at: item.created_at || new Date().toISOString()
   }))
 
   // Insert ignoring duplicates (onConflict do nothing)
@@ -1866,9 +2030,60 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
     .upsert(toInsert, { onConflict: 'nurse_id, month, year', ignoreDuplicates: true })
 
   if (insertError) return { success: false, message: insertError.message }
+
+  const nurseIds = sourceRoster.map(r => r.nurse_id)
+  
+  if (nurseIds.length > 0) {
+      const sourceStartDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-01`
+      const sourceLastDay = new Date(sourceYear, sourceMonth, 0).getDate()
+      const sourceEndDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-${sourceLastDay}`
+
+      const { data: sourceShifts } = await supabase
+          .from('shifts')
+          .select('*')
+          .in('nurse_id', nurseIds)
+          .gte('date', sourceStartDate)
+          .lte('date', sourceEndDate)
+
+      if (sourceShifts && sourceShifts.length > 0) {
+          const shiftsToInsert: any[] = []
+          const targetLastDay = new Date(targetYear, targetMonth, 0).getDate()
+
+          const targetStartDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`
+          const targetEndDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${targetLastDay}`
+          
+          // Limpar plantões existentes desses profissionais no mês de destino
+          await supabase
+              .from('shifts')
+              .delete()
+              .in('nurse_id', nurseIds)
+              .gte('date', targetStartDate)
+              .lte('date', targetEndDate)
+
+          sourceShifts.forEach(shift => {
+              const day = parseInt((shift.date as string).split('-')[2], 10)
+              if (day > targetLastDay) return
+
+              const newDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+              shiftsToInsert.push({
+                  nurse_id: shift.nurse_id as string,
+                  date: newDate,
+                  type: shift.type as string | null
+              })
+          })
+
+          if (shiftsToInsert.length > 0) {
+              const { error: shiftInsertError } = await supabase
+                  .from('shifts')
+                  .insert(shiftsToInsert)
+              
+              if (shiftInsertError) console.error('Error copying shifts:', shiftInsertError)
+          }
+      }
+  }
   
   revalidatePath('/')
-  return { success: true, message: 'Cópia realizada com sucesso.' }
+  return { success: true, message: 'Cópia realizada com sucesso (incluindo plantões).' }
 }
 
 export async function updateRosterObservation(nurseId: string, month: number, year: number, observation: string) {
@@ -1930,6 +2145,135 @@ export async function updateRosterSector(nurseId: string, month: number, year: n
   } catch (e) {
     console.error('Error updating sector:', e)
     return { success: false, message: 'Erro ao atualizar setor' }
+  }
+}
+
+export async function updateRosterOrder(nurseId: string, month: number, year: number, listOrder: number | null) {
+  try {
+    await checkAdmin()
+
+    if (isLocalMode()) {
+      const db = readDb()
+      const roster = db.monthly_rosters.find(r => r.nurse_id === nurseId && r.month === month && r.year === year)
+      if (roster) {
+        roster.list_order = listOrder
+        writeDb(db)
+        revalidatePath('/')
+        return { success: true }
+      }
+      return { success: false, message: 'Roster entry not found' }
+    }
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('monthly_rosters')
+      .update({ list_order: listOrder })
+      .match({ nurse_id: nurseId, month, year })
+
+    if (error) throw error
+    revalidatePath('/')
+    return { success: true }
+  } catch (e) {
+    console.error('Error updating list order:', e)
+    return { success: false, message: 'Erro ao atualizar numeração' }
+  }
+}
+
+export async function resetSectionOrder(sectionId: string, unitId: string | null, month: number, year: number, startNurseId?: string) {
+  try {
+    await checkAdmin()
+
+    if (isLocalMode()) {
+      const db = readDb()
+      const candidates = db.monthly_rosters
+        .filter(r => r.section_id === sectionId && r.month === month && r.year === year && (unitId ? r.unit_id === unitId : !r.unit_id))
+        .sort((a, b) => {
+          const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+          const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+          return aTime - bTime
+        })
+
+      let startIndex = 0
+      if (startNurseId) {
+        const idx = candidates.findIndex(r => r.nurse_id === startNurseId)
+        if (idx >= 0) startIndex = idx
+      }
+
+      // Update only from startIndex onwards, setting sequential numbers starting from 1
+      for (let i = startIndex; i < candidates.length; i++) {
+          candidates[i].list_order = i - startIndex + 1
+      }
+
+      writeDb(db)
+      revalidatePath('/')
+      return { success: true }
+    }
+
+    const supabase = createClient()
+
+    let query = supabase
+      .from('monthly_rosters')
+      .select('*')
+      .eq('section_id', sectionId)
+      .eq('month', month)
+      .eq('year', year)
+    if (unitId) {
+      query = query.eq('unit_id', unitId)
+    } else {
+      query = query.is('unit_id', null)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const sorted = (data || []).sort((a: any, b: any) => {
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+      return aTime - bTime
+    })
+
+    let startIndex = 0
+    if (startNurseId) {
+      const idx = sorted.findIndex((r: any) => r.nurse_id === startNurseId)
+      if (idx >= 0) startIndex = idx
+    }
+
+    // Only update from startIndex onwards
+    const updates = []
+    for (let i = startIndex; i < sorted.length; i++) {
+        const r = sorted[i]
+        updates.push({
+            id: r.id,
+            nurse_id: r.nurse_id,
+            section_id: r.section_id,
+            unit_id: r.unit_id ?? null,
+            month: r.month,
+            year: r.year,
+            observation: r.observation ?? null,
+            sector: r.sector ?? null,
+            created_at: r.created_at,
+            list_order: i - startIndex + 1
+        })
+    }
+
+    if (updates.length > 0) {
+      const { error: updateError } = await supabase
+        .from('monthly_rosters')
+        .upsert(updates, { onConflict: 'id' })
+      if (updateError) throw updateError
+    }
+
+    revalidatePath('/')
+    return { success: true }
+  } catch (e: any) {
+    console.error('Error resetting section order:', e)
+    const errorMessage = e && typeof e.message === 'string' ? e.message : ''
+    return { 
+      success: false, 
+      message: errorMessage 
+        ? `Erro ao reiniciar numeração: ${errorMessage}` 
+        : 'Erro ao reiniciar numeração' 
+    }
   }
 }
 

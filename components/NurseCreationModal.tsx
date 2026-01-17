@@ -26,7 +26,6 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     setError(null)
 
     const formData = new FormData(e.currentTarget)
-    // Add role if missing or ensure it's set
     if (!formData.get('role')) {
         formData.set('role', defaultRole)
     }
@@ -37,11 +36,40 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
         formData.set('unitId', defaultUnitId)
     }
 
+    const vinculos = formData.getAll('vinculo').filter(Boolean) as string[]
+
     let result
     if (nurseToEdit) {
+        if (vinculos.length > 0) {
+            formData.set('vinculo', vinculos[0])
+        }
         result = await updateNurse(nurseToEdit.id, null, formData)
     } else {
-        result = await createNurse(null, formData)
+        if (vinculos.length <= 1) {
+            if (vinculos.length === 1) {
+                formData.set('vinculo', vinculos[0])
+            }
+            result = await createNurse(null, formData)
+        } else {
+            for (let i = 0; i < vinculos.length; i++) {
+                const v = vinculos[i]
+                const fd = new FormData()
+
+                formData.forEach((value, key) => {
+                    if (key === 'vinculo') return
+                    if (key === 'cpf' && i > 0) return
+                    fd.append(key, value)
+                })
+
+                fd.set('vinculo', v)
+
+                const res = await createNurse(null, fd)
+                result = res
+                if (!res.success) {
+                    break
+                }
+            }
+        }
     }
 
     if (result.success) {
@@ -92,6 +120,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                 <label className="block text-sm font-medium text-gray-700">Vínculo</label>
                 <select 
                     name="vinculo" 
+                    multiple
                     defaultValue={nurseToEdit?.vinculo}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 >

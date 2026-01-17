@@ -7,6 +7,7 @@ export default function AdminDailySchedule() {
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
     const [shifts, setShifts] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
+    const [openUnits, setOpenUnits] = useState<Record<string, boolean>>({})
 
     useEffect(() => {
         async function fetchShifts() {
@@ -37,7 +38,7 @@ export default function AdminDailySchedule() {
         }
     }
 
-    const dayShifts = shifts.filter((shift: any) => shift.shift_type === 'day')
+    const dayShifts = shifts.filter((shift: any) => shift.shift_type === 'day' || shift.shift_type === 'mt')
 
     // Agrupar plantões por setor (Unit)
     const groupedShifts = dayShifts.reduce((acc: any, shift: any) => {
@@ -51,6 +52,18 @@ export default function AdminDailySchedule() {
 
     // Ordenar setores alfabeticamente
     const sortedUnits = Object.keys(groupedShifts).sort()
+
+  // Sempre que a data mudar, recolher todos os blocos novamente
+  useEffect(() => {
+      setOpenUnits({})
+  }, [selectedDate])
+
+    const toggleUnit = (unit: string) => {
+        setOpenUnits(prev => ({
+            ...prev,
+            [unit]: !prev[unit]
+        }))
+    }
 
     return (
         <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
@@ -75,36 +88,52 @@ export default function AdminDailySchedule() {
                 ) : dayShifts.length === 0 ? (
                     <p className="text-gray-500 text-sm text-center py-4">Nenhum profissional escalado para esta data.</p>
                 ) : (
-                    <div className="space-y-6">
-                        {sortedUnits.map((unit) => (
-                            <div key={unit}>
-                                <h3 className="text-sm font-bold text-gray-700 bg-gray-50 px-3 py-2 rounded mb-2 border-l-4 border-indigo-500">
-                                    {unit}
-                                </h3>
-                                <ul className="space-y-3 pl-2">
-                                    {groupedShifts[unit].map((shift: any, index: number) => (
-                                        <li key={shift.id || index} className="border-b border-gray-100 pb-2 last:border-0">
-                                            <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-bold text-gray-800">{shift.nurse_name}</p>
-                                                <p className="text-xs text-gray-500">
-                                                    {shift.nurse_role} • {shift.unit_name || 'Sem Setor'}
-                                                </p>
-                                                {shift.swap_with_name && (
-                                                    <p className="text-xs text-orange-600 font-semibold">
-                                                        Permuta com {shift.swap_with_name}
-                                                    </p>
-                                                )}
-                                            </div>
-                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${shift.shift_type === 'night' ? 'bg-indigo-100 text-indigo-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                                    {shift.shift_type === 'day' ? 'DIA' : shift.shift_type === 'night' ? 'NOITE' : (shift.shift_type || 'N/A').toUpperCase()}
-                                                </span>
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))}
+                    <div className="space-y-3">
+                        {sortedUnits.map((unit) => {
+                            const isOpen = openUnits[unit] ?? false
+                            const count = groupedShifts[unit]?.length || 0
+                            return (
+                                <div key={unit} className="border border-gray-100 rounded-md">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleUnit(unit)}
+                                        className="w-full flex items-center justify-between text-sm font-bold text-gray-700 bg-gray-50 px-3 py-2 rounded-t-md border-l-4 border-indigo-500"
+                                    >
+                                        <span>{unit}</span>
+                                        <span className="flex items-center gap-2 text-xs text-gray-500">
+                                            <span className="bg-gray-200 px-2 py-0.5 rounded-full font-semibold">
+                                                {count} prof.
+                                            </span>
+                                            <span>{isOpen ? '▲' : '▼'}</span>
+                                        </span>
+                                    </button>
+                                    {isOpen && (
+                                        <ul className="space-y-1 pl-3 px-1 pb-2 pt-1">
+                                            {groupedShifts[unit].map((shift: any, index: number) => (
+                                                <li key={shift.id || index} className="border-b border-gray-100 pb-2 last:border-0">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <p className="font-bold text-gray-800">{shift.nurse_name}</p>
+                                                            <p className="text-xs text-gray-500">
+                                                                {shift.nurse_role} • {shift.unit_name || 'Sem Setor'}
+                                                            </p>
+                                                            {shift.swap_with_name && (
+                                                                <p className="text-xs text-orange-600 font-semibold">
+                                                                    Permuta com {shift.swap_with_name}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${shift.shift_type === 'night' ? 'bg-indigo-100 text-indigo-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                            {shift.shift_type === 'day' ? 'DIA' : shift.shift_type === 'night' ? 'NOITE' : (shift.shift_type || 'N/A').toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            )
+                        })}
                     </div>
                 )}
             </div>

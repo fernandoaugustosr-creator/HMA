@@ -22,15 +22,26 @@ export default function DownloadsPage() {
       try {
         const data = await getReleasedSchedules()
         setReleases(data)
-        
-        // Find the most recent date to set as default
+
         if (data.length > 0) {
-            const sorted = [...data].sort((a, b) => {
-                if (a.year !== b.year) return b.year - a.year
-                return b.month - a.month
-            })
-            const mostRecent = sorted[0]
-            setSelectedMonthYear(`${mostRecent.year}-${mostRecent.month}`)
+            const now = new Date()
+            const currentYear = now.getFullYear()
+            const currentMonth = now.getMonth() + 1
+
+            const hasCurrentMonth = data.some(
+                r => r.year === currentYear && r.month === currentMonth
+            )
+
+            if (hasCurrentMonth) {
+                setSelectedMonthYear(`${currentYear}-${currentMonth}`)
+            } else {
+                const sorted = [...data].sort((a, b) => {
+                    if (a.year !== b.year) return b.year - a.year
+                    return b.month - a.month
+                })
+                const mostRecent = sorted[0]
+                setSelectedMonthYear(`${mostRecent.year}-${mostRecent.month}`)
+            }
         }
       } catch (e) {
         console.error(e)
@@ -184,7 +195,7 @@ export default function DownloadsPage() {
       </div>
 
       {/* Hidden Print Area - Only visible when printing */}
-      <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+      <div className="hidden print:block fixed inset-0 bg-white z-[9999] print-schedule-root">
          {selectedRelease && (
             <Schedule 
                 key={selectedRelease.id} // Force remount on change

@@ -26,6 +26,53 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.schedule-root {
+  width: 100%;
+  transform-origin: top left;
+}
+
+@media (max-width: 1600px) {
+  .schedule-root {
+    transform: scale(0.9);
+  }
+}
+
+@media (max-width: 1440px) {
+  .schedule-root {
+    transform: scale(0.85);
+  }
+}
+
+@media (max-width: 1366px) {
+  .schedule-root {
+    transform: scale(0.8);
+  }
+}
+
+@media (max-width: 1280px) {
+  .schedule-root {
+    transform: scale(0.75);
+  }
+}
+
+@media (max-width: 1024px) {
+  .schedule-root {
+    transform: scale(0.7);
+  }
+}
+
+@media (max-width: 900px) {
+  .schedule-root {
+    transform: scale(0.6);
+  }
+}
+
 @media print {
   @page {
     size: landscape;
@@ -70,8 +117,16 @@ body {
     padding: 1px !important;
   }
 
-  /* Hide scrollbars */
   * {
     overflow: visible !important;
+  }
+
+  .schedule-root {
+    transform: none !important;
+    width: 100% !important;
+  }
+
+  .print-schedule-root {
+    page-break-after: always;
   }
 }
