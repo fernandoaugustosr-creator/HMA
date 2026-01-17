@@ -106,6 +106,11 @@ CREATE TABLE IF NOT EXISTS monthly_schedule_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS monthly_notes_month_year_unit_idx ON monthly_notes (month, year, unit_id) WHERE unit_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS monthly_notes_month_year_no_unit_idx ON monthly_notes (month, year) WHERE unit_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_monthly_schedule_metadata_lookup ON monthly_schedule_metadata (month, year, unit_id);
+CREATE INDEX IF NOT EXISTS idx_shifts_date ON shifts(date);
+CREATE INDEX IF NOT EXISTS idx_shifts_nurse ON shifts(nurse_id);
+CREATE INDEX IF NOT EXISTS idx_time_off_requests_status ON time_off_requests(status);
+CREATE INDEX IF NOT EXISTS idx_time_off_requests_dates ON time_off_requests(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_monthly_rosters_month_year_unit ON monthly_rosters(month, year, unit_id);
 
 -- ==============================================================================
 -- 4. DADOS INICIAIS (Se não existirem)

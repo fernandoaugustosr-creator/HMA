@@ -62,8 +62,8 @@ end $$;
 -- Índices para deixar o carregamento da escala mais rápido
 create index if not exists idx_monthly_rosters_month_year on monthly_rosters(month, year);
 create index if not exists idx_monthly_rosters_nurse on monthly_rosters(nurse_id);
-create index if not exists idx_schedules_date on schedules(shift_date);
-create index if not exists idx_schedules_nurse on schedules(nurse_id);
+create index if not exists idx_shifts_date on shifts(date);
+create index if not exists idx_shifts_nurse on shifts(nurse_id);
 create index if not exists idx_nurses_section on nurses(section_id);
 
 -- ==============================================================================

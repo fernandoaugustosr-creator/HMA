@@ -9,7 +9,7 @@ const initialState = {
   success: false
 }
 
-export default function NurseForm() {
+export default function NurseForm({ sections = [] as any[] }: { sections?: any[] }) {
   const [state, formAction] = useFormState(createNurse, initialState)
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -75,6 +75,22 @@ export default function NurseForm() {
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
             placeholder="Ex: Concurso, Seletivo"
           />
+        </div>
+        <div>
+          <label htmlFor="sectionId" className="block text-sm font-medium text-gray-700">Setor (Opcional)</label>
+          <select
+            name="sectionId"
+            id="sectionId"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+            defaultValue=""
+          >
+            <option value="">Selecione...</option>
+            {sections.map((section: any) => (
+              <option key={section.id} value={section.id}>
+                {section.title}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
       

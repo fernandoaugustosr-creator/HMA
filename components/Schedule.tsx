@@ -254,9 +254,6 @@ export default function Schedule({
     if (!forceRefresh && scheduleCache.current[cacheKey]) {
         const cachedData = scheduleCache.current[cacheKey]
         setData(cachedData)
-        if (!selectedUnitId && cachedData.units && cachedData.units.length > 0) {
-            setSelectedUnitId(cachedData.units[0].id)
-        }
         setLoading(false)
         onLoaded?.()
         return
@@ -267,20 +264,23 @@ export default function Schedule({
       const newData = result as ScheduleData
       scheduleCache.current[cacheKey] = newData
       setData(newData)
-      if (!selectedUnitId && result.units && result.units.length > 0) {
-        setSelectedUnitId(result.units[0].id)
-      }
     } catch (error) {
       console.error('Error fetching schedule:', error)
     } finally {
       setLoading(false)
       onLoaded?.()
     }
-  }, [selectedMonth, selectedYear, selectedUnitId, onLoaded])
+  }, [selectedMonth, selectedYear, onLoaded])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    if (!selectedUnitId && data.units && data.units.length > 0) {
+      setSelectedUnitId(data.units[0].id)
+    }
+  }, [data.units, selectedUnitId])
 
 
   // We need a separate state for "Manually Added" to survive re-renders until saved
@@ -1371,20 +1371,22 @@ export default function Schedule({
              
              {isAdmin && (
              <div className="mb-8 p-4 border border-dashed border-gray-400 rounded bg-gray-50 text-center no-print">
-                 <p className="text-sm text-gray-600 mb-2">Adicionar grupo à escala deste setor:</p>
-                 <select 
-                    className="border border-blue-300 text-blue-600 rounded px-2 py-1 text-sm bg-white"
-                    onChange={(e) => setSelectedHiddenSectionId(e.target.value)}
-                    value={selectedHiddenSectionId}
-                >
-                     <option value="" disabled>+ Selecionar Grupo...</option>
-                     {data.sections
-                        .filter(s => !visibleSections.find(vs => vs.id === s.id))
-                        .map(s => (
-                            <option key={s.id} value={s.id}>{s.title}</option>
-                        ))
-                     }
-                 </select>
+                <p className="text-sm text-gray-600 mb-2">Adicionar grupo à escala deste setor:</p>
+                <select 
+                   className="border border-blue-300 text-blue-600 rounded px-2 py-1 text-sm bg-white"
+                   onChange={(e) => setSelectedHiddenSectionId(e.target.value)}
+                   value={selectedHiddenSectionId}
+               >
+                    <option value="" disabled>+ Selecionar Grupo...</option>
+                    {data.sections.map(s => {
+                      const alreadyVisible = !!visibleSections.find(vs => vs.id === s.id)
+                      return (
+                        <option key={s.id} value={s.id} disabled={alreadyVisible}>
+                          {s.title}
+                        </option>
+                      )
+                    })}
+                </select>
                  <div className="mt-2 flex items-center justify-center gap-2">
                     <button 
                       onClick={handleAddHiddenSectionToRoster}

@@ -24,7 +24,7 @@ export async function checkAdmin() {
   const session = cookies().get('session_user')
   if (!session) throw new Error('Unauthorized')
   const user = JSON.parse(session.value)
-  const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
   if (!isAdmin) throw new Error('Forbidden: Admin access required')
   return user
 }
@@ -42,7 +42,25 @@ export async function getNurses() {
   }
   
   const supabase = createClient()
-  const { data } = await supabase.from('nurses').select('*').order('name')
+  const { data } = await supabase
+    .from('nurses')
+    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
+    .order('name')
+  return data || []
+}
+
+export async function getNursesBySection(sectionId: string) {
+  if (isLocalMode()) {
+    const db = readDb()
+    return db.nurses.filter(n => n.section_id === sectionId).sort((a, b) => a.name.localeCompare(b.name))
+  }
+  
+  const supabase = createClient()
+  const { data } = await supabase
+    .from('nurses')
+    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
+    .eq('section_id', sectionId)
+    .order('name')
   return data || []
 }
 
@@ -120,10 +138,9 @@ export async function createNurse(prevState: any, formData: FormData) {
     }
 
     writeDb(db)
-
-    revalidatePath('/')
+    
     revalidatePath('/servidores')
-    return { success: true, message: 'Servidor cadastrado com sucesso (Local)' }
+    return { success: true, message: 'Servidor cadastrado com sucesso!' }
   }
 
   const supabase = createClient()
@@ -137,21 +154,21 @@ export async function createNurse(prevState: any, formData: FormData) {
       }
   }
 
-  const { data: insertedNurse, error } = await supabase.from('nurses').insert({ 
-    name, 
-    cpf: finalCpf, 
+  const { data: insertedNurse, error } = await supabase.from('nurses').insert({
+    name,
+    cpf: finalCpf,
     password,
     coren,
     vinculo,
     role,
-    section_id: finalSectionId,
-    unit_id: unitId
+    section_id: finalSectionId || null,
+    unit_id: unitId || null
   }).select().single()
 
   if (error) {
-    console.error('Supabase Error:', error)
+    console.error('Error creating nurse:', error)
     if (error.code === '23505') return { success: false, message: 'CPF já cadastrado' }
-    return { success: false, message: 'Erro ao cadastrar servidor (Supabase): ' + error.message }
+    return { success: false, message: 'Erro ao cadastrar servidor: ' + error.message }
   }
 
   // Add to current month roster automatically
@@ -169,9 +186,522 @@ export async function createNurse(prevState: any, formData: FormData) {
       })
   }
 
-  revalidatePath('/')
   revalidatePath('/servidores')
-  return { success: true, message: 'Servidor cadastrado com sucesso (Supabase)' }
+  return { success: true, message: 'Servidor cadastrado com sucesso!' }
+}
+
+export async function getSections() {
+  if (isLocalMode()) {
+    const db = readDb()
+    return db.schedule_sections || []
+  }
+  
+  const supabase = createClient()
+  const { data } = await supabase.from('schedule_sections').select('*').order('title')
+  return data || []
+}
+
+export async function createSection(prevState: any, formData: FormData) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const title = formData.get('title') as string
+  const coordinatorId = formData.get('coordinatorId') as string
+
+  if (!title) return { success: false, message: 'Título é obrigatório' }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const newSection = {
+      id: randomUUID(),
+      title,
+      position: (db.schedule_sections.length || 0) + 1,
+      created_at: new Date().toISOString()
+    }
+    db.schedule_sections.push(newSection)
+
+    if (coordinatorId) {
+      const nurse = db.nurses.find((n: any) => n.id === coordinatorId)
+      if (nurse) {
+        nurse.role = 'COORDENADOR'
+        nurse.section_id = newSection.id
+      }
+    }
+
+    writeDb(db)
+    revalidatePath('/coordenacao/gestao')
+    revalidatePath('/servidores')
+    return { success: true, message: 'Setor criado com sucesso!' }
+  }
+
+  const supabase = createClient()
+  const { data: section, error } = await supabase.from('schedule_sections').insert({ title }).select().single()
+  
+  if (error || !section) return { success: false, message: 'Erro ao criar setor: ' + (error?.message || '') }
+
+  if (coordinatorId) {
+    const { error: updateError } = await supabase.from('nurses').update({ 
+      role: 'COORDENADOR',
+      section_id: section.id
+    }).eq('id', coordinatorId)
+
+    if (updateError) {
+      return { success: true, message: 'Setor criado, mas erro ao definir coordenador: ' + updateError.message }
+    }
+  }
+  
+  revalidatePath('/coordenacao/gestao')
+  revalidatePath('/servidores')
+  return { success: true, message: 'Setor criado com sucesso!' }
+}
+
+export async function updateSectionForm(prevState: any, formData: FormData) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const id = formData.get('id') as string
+  const title = formData.get('title') as string
+  const coordinatorId = formData.get('coordinatorId') as string
+
+  if (!id || !title) {
+    return { success: false, message: 'Dados incompletos' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const section = db.schedule_sections.find((s: any) => s.id === id)
+    if (!section) {
+      return { success: false, message: 'Setor não encontrado' }
+    }
+    section.title = title
+
+    // Update coordinator if provided
+    if (coordinatorId) {
+      // Unassign previous coordinator of this section
+      const prevCoordinator = db.nurses.find((n: any) => n.section_id === id && n.role === 'COORDENADOR')
+      if (prevCoordinator && prevCoordinator.id !== coordinatorId) {
+        prevCoordinator.role = 'ENFERMEIRO' // Downgrade or just keep as nurse? Usually 'ENFERMEIRO'
+      }
+      
+      // Assign new
+      const newCoordinator = db.nurses.find((n: any) => n.id === coordinatorId)
+      if (newCoordinator) {
+        newCoordinator.role = 'COORDENADOR'
+        newCoordinator.section_id = id
+      }
+    } else if (coordinatorId === '') {
+       // Explicitly removed? The form might not send empty string if just not selected, but let's see.
+       // If user selects "Sem coordenador", we might want to handle it.
+       // But for now let's assume if they pick someone, we update.
+    }
+
+    writeDb(db)
+    revalidatePath('/coordenacao/gestao')
+    revalidatePath('/servidores')
+    return { success: true, message: 'Setor atualizado com sucesso!' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('schedule_sections').update({ title }).eq('id', id)
+
+  if (error) return { success: false, message: 'Erro ao atualizar setor: ' + error.message }
+
+  if (coordinatorId) {
+    // 1. Unassign old coordinator(s) for this section (optional but good for consistency)
+    await supabase.from('nurses').update({ role: 'ENFERMEIRO' }).eq('section_id', id).eq('role', 'COORDENADOR')
+
+    // 2. Assign new
+    const { error: updateError } = await supabase.from('nurses').update({ 
+      role: 'COORDENADOR',
+      section_id: id
+    }).eq('id', coordinatorId)
+
+    if (updateError) return { success: true, message: 'Setor atualizado, mas erro ao definir coordenador.' }
+  }
+
+  revalidatePath('/coordenacao/gestao')
+  revalidatePath('/servidores')
+  return { success: true, message: 'Setor atualizado com sucesso!' }
+}
+
+export async function deleteSectionForm(prevState: any, formData: FormData) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  try {
+    const id = formData.get('id') as string
+    if (!id) return { success: false, message: 'Setor inválido' }
+
+    if (isLocalMode()) {
+      const db = readDb()
+
+      // Desvincular servidores do setor
+      db.nurses.forEach((n: any) => {
+        if (n.section_id === id) {
+          n.section_id = null
+          if (n.role === 'COORDENADOR') n.role = 'ENFERMEIRO'
+        }
+      })
+
+      // Remover escalas mensais ligadas ao setor
+      if (Array.isArray(db.monthly_rosters)) {
+        db.monthly_rosters = db.monthly_rosters.filter((r: any) => r.section_id !== id)
+      }
+      
+      // Remover o setor
+      db.schedule_sections = db.schedule_sections.filter((s: any) => s.id !== id)
+      writeDb(db)
+      revalidatePath('/coordenacao/gestao')
+      revalidatePath('/servidores')
+      return { success: true, message: 'Setor excluído com sucesso!' }
+    }
+
+    const supabase = createClient()
+
+    // Primeiro remove escalas mensais que referenciam este setor (evita erro de FK)
+    const { error: rosterError } = await supabase
+      .from('monthly_rosters')
+      .delete()
+      .eq('section_id', id)
+
+    if (rosterError) {
+      return { success: false, message: 'Erro ao limpar escalas do setor: ' + rosterError.message }
+    }
+    
+    const { error } = await supabase.from('schedule_sections').delete().eq('id', id)
+
+    if (error) return { success: false, message: 'Erro ao excluir setor: ' + error.message }
+
+    revalidatePath('/coordenacao/gestao')
+    revalidatePath('/servidores')
+    return { success: true, message: 'Setor excluído com sucesso!' }
+  } catch (error: any) {
+    return { success: false, message: 'Erro interno ao excluir setor: ' + error.message }
+  }
+}
+
+export async function assignCoordinator(prevState: any, formData: FormData) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const nurseId = formData.get('nurseId') as string
+  const sectionId = formData.get('sectionId') as string
+
+  if (!nurseId || !sectionId) return { success: false, message: 'Dados incompletos' }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const nurse = db.nurses.find(n => n.id === nurseId)
+    if (nurse) {
+      nurse.role = 'COORDENADOR'
+      nurse.section_id = sectionId
+      writeDb(db)
+      revalidatePath('/coordenacao/gestao')
+      revalidatePath('/servidores')
+      return { success: true, message: 'Coordenador atribuído com sucesso!' }
+    }
+    return { success: false, message: 'Servidor não encontrado' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('nurses').update({ 
+    role: 'COORDENADOR',
+    section_id: sectionId
+  }).eq('id', nurseId)
+
+  if (error) return { success: false, message: 'Erro ao atribuir coordenador: ' + error.message }
+
+  revalidatePath('/coordenacao/gestao')
+  revalidatePath('/servidores')
+  return { success: true, message: 'Coordenador atribuído com sucesso!' }
+}
+
+export async function registerAbsence(prevState: any, formData: FormData) {
+  let user
+  try {
+    user = await checkUser()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const nurseId = formData.get('nurseId') as string
+  const date = formData.get('date') as string
+  const reason = formData.get('reason') as string
+
+  if (!nurseId || !date) {
+    return { success: false, message: 'Servidor e data são obrigatórios' }
+  }
+
+  if (isLocalMode()) {
+    return { success: false, message: 'Registro de falta não disponível no modo local.' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('absences').insert({
+    nurse_id: nurseId,
+    created_by: user.id,
+    date,
+    reason
+  })
+
+  if (error) return { success: false, message: 'Erro ao registrar falta: ' + error.message }
+
+  revalidatePath('/coordenacao')
+  return { success: true, message: 'Falta registrada com sucesso' }
+}
+
+export async function requestPayment(prevState: any, formData: FormData) {
+  let user
+  try {
+    user = await checkUser()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const shiftDate = formData.get('shiftDate') as string
+  const shiftHoursRaw = formData.get('shiftHours') as string
+  const location = formData.get('location') as string
+  const observation = formData.get('observation') as string
+  const nurseIdFromForm = formData.get('nurseId') as string | null
+
+  if (!shiftDate || !shiftHoursRaw || !location) {
+    return { success: false, message: 'Data, carga horária e local são obrigatórios' }
+  }
+
+  const shiftHours = parseInt(shiftHoursRaw, 10)
+  if (![12, 24].includes(shiftHours)) {
+    return { success: false, message: 'Carga horária inválida' }
+  }
+
+  const nurseId = nurseIdFromForm || user.id
+
+  if (isLocalMode()) {
+    return { success: false, message: 'Solicitação de pagamento não disponível no modo local.' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('payment_requests').insert({
+    nurse_id: nurseId,
+    coordinator_id: user.id,
+    shift_date: shiftDate,
+    shift_hours: shiftHours,
+    location,
+    observation
+  })
+
+  if (error) return { success: false, message: 'Erro ao solicitar pagamento: ' + error.message }
+
+  revalidatePath('/coordenacao')
+  return { success: true, message: 'Solicitação de pagamento enviada com sucesso' }
+}
+
+export async function getCoordinationRequests() {
+  let user
+  try {
+    user = await checkUser()
+  } catch (e) {
+    throw new Error('Unauthorized')
+  }
+
+  if (isLocalMode()) {
+    return {
+      absences: [],
+      paymentRequests: [],
+      generalRequests: [],
+    }
+  }
+
+  const supabase = createClient()
+
+  if (user.role === 'COORDENADOR' && user.section_id) {
+    const nursesInSection = await getNursesBySection(user.section_id)
+    const nurseIds = nursesInSection.map((n: any) => n.id)
+
+    if (nurseIds.length === 0) {
+      return {
+        absences: [],
+        paymentRequests: [],
+        generalRequests: [],
+      }
+    }
+
+    const [absencesRes, paymentsRes, generalRes] = await Promise.all([
+      supabase
+        .from('absences')
+        .select('id,nurse_id,created_by,date,reason,created_at')
+        .in('nurse_id', nurseIds)
+        .order('date', { ascending: false }),
+      supabase
+        .from('payment_requests')
+        .select('id,nurse_id,coordinator_id,shift_date,shift_hours,location,observation,status,created_at')
+        .in('nurse_id', nurseIds)
+        .order('shift_date', { ascending: false }),
+      supabase
+        .from('general_requests')
+        .select('id,nurse_id,content,created_at')
+        .eq('nurse_id', user.id)
+        .order('created_at', { ascending: false }),
+    ])
+
+    if (absencesRes.error) {
+      throw new Error(absencesRes.error.message)
+    }
+    if (paymentsRes.error) {
+      throw new Error(paymentsRes.error.message)
+    }
+    if (generalRes.error) {
+      throw new Error(generalRes.error.message)
+    }
+
+    return {
+      absences: absencesRes.data || [],
+      paymentRequests: paymentsRes.data || [],
+      generalRequests: generalRes.data || [],
+      nurses: nursesInSection || [],
+    }
+  }
+
+  const [absencesRes, paymentsRes, generalRes] = await Promise.all([
+    supabase
+      .from('absences')
+      .select('id,nurse_id,created_by,date,reason,created_at')
+      .order('date', { ascending: false }),
+    supabase
+      .from('payment_requests')
+      .select('id,nurse_id,coordinator_id,shift_date,shift_hours,location,observation,status,created_at')
+      .order('shift_date', { ascending: false }),
+    supabase
+      .from('general_requests')
+      .select('id,nurse_id,content,created_at')
+      .order('created_at', { ascending: false }),
+  ])
+
+  if (absencesRes.error) {
+    throw new Error(absencesRes.error.message)
+  }
+  if (paymentsRes.error) {
+    throw new Error(paymentsRes.error.message)
+  }
+  if (generalRes.error) {
+    throw new Error(generalRes.error.message)
+  }
+
+  let nursesList: any[] = []
+  if (user.role === 'COORDENACAO_GERAL') {
+    nursesList = await getNurses()
+  }
+
+  return {
+    absences: absencesRes.data || [],
+    paymentRequests: paymentsRes.data || [],
+    generalRequests: generalRes.data || [],
+    nurses: nursesList,
+  }
+}
+
+export async function deleteAbsence(id: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    return { success: false, message: 'Exclusão de faltas não disponível no modo local.' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('absences').delete().eq('id', id)
+
+  if (error) return { success: false, message: 'Erro ao remover falta: ' + error.message }
+  revalidatePath('/coordenacao')
+  return { success: true, message: 'Falta removida com sucesso' }
+}
+
+export async function deletePaymentRequest(id: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    return { success: false, message: 'Exclusão de pagamentos não disponível no modo local.' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('payment_requests').delete().eq('id', id)
+
+  if (error) return { success: false, message: 'Erro ao remover solicitação de pagamento: ' + error.message }
+  revalidatePath('/coordenacao')
+  return { success: true, message: 'Solicitação de pagamento removida com sucesso' }
+}
+
+export async function deleteGeneralRequest(id: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    return { success: false, message: 'Exclusão de solicitações não disponível no modo local.' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('general_requests').delete().eq('id', id)
+
+  if (error) return { success: false, message: 'Erro ao remover solicitação: ' + error.message }
+  revalidatePath('/coordenacao')
+  return { success: true, message: 'Solicitação removida com sucesso' }
+}
+
+export async function createGeneralRequest(prevState: any, formData: FormData) {
+  let user
+  try {
+    user = await checkUser()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const requestType = formData.get('requestType') as string
+  const description = formData.get('description') as string
+
+  if (!description) {
+    return { success: false, message: 'Descrição é obrigatória' }
+  }
+
+  let content = description
+  if (requestType) {
+    content = `[${requestType}] ${description}`
+  }
+
+  if (isLocalMode()) {
+    return { success: false, message: 'Outras solicitações não disponíveis no modo local.' }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('general_requests').insert({
+    nurse_id: user.id,
+    content
+  })
+
+  if (error) return { success: false, message: 'Erro ao enviar solicitação: ' + error.message }
+
+  revalidatePath('/coordenacao')
+  return { success: true, message: 'Solicitação enviada com sucesso' }
 }
 
 export async function login(prevState: any, formData: FormData) {
@@ -198,11 +728,18 @@ export async function login(prevState: any, formData: FormData) {
 
     const mustChangePassword = password === '123456'
 
+    let sectionTitle = ''
+    if (nurse.section_id) {
+       sectionTitle = db.schedule_sections.find(s => s.id === nurse.section_id)?.title || ''
+    }
+
     cookies().set('session_user', JSON.stringify({ 
       name: nurse.name, 
       id: nurse.id, 
       cpf: nurse.cpf,
       role: nurse.role,
+      section_id: nurse.section_id,
+      section_title: sectionTitle,
       mustChangePassword
     }), {
       httpOnly: true,
@@ -269,11 +806,25 @@ export async function login(prevState: any, formData: FormData) {
 
   const mustChangePassword = password === '123456'
 
+  let sectionTitle = ''
+  if (nurse.section_id) {
+      const { data: section } = await supabase.from('schedule_sections').select('title').eq('id', nurse.section_id).single()
+      if (section) sectionTitle = section.title
+  }
+
+  const cleanCpfForRole = (nurse.cpf || '').replace(/\D/g, '')
+  if (cleanCpfForRole === '02170025367' && nurse.role !== 'COORDENACAO_GERAL') {
+    await supabase.from('nurses').update({ role: 'COORDENACAO_GERAL' }).eq('id', nurse.id)
+    nurse.role = 'COORDENACAO_GERAL'
+  }
+
   cookies().set('session_user', JSON.stringify({ 
     name: nurse.name, 
     id: nurse.id, 
     cpf: nurse.cpf,
     role: nurse.role,
+    section_id: nurse.section_id,
+    section_title: sectionTitle,
     mustChangePassword
   }), {
     httpOnly: true,
@@ -383,7 +934,7 @@ export async function getUserDashboardData() {
   if (!session) return null
   const user = JSON.parse(session.value)
   const userId = user.id
-  const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   const today = new Date()
   const cutoffDate = new Date(today)
@@ -565,6 +1116,27 @@ export async function getDailyShifts(date: string) {
     const db = readDb()
     const shifts = db.shifts.filter(s => s.date === date)
 
+    const swaps = (db.shift_swaps || []).filter((swap: any) =>
+      swap.status === 'approved' &&
+      (swap.requester_shift_date === date || swap.requested_shift_date === date)
+    )
+
+    const swapsByKey: Record<string, string> = {}
+    swaps.forEach((swap: any) => {
+      const requester = db.nurses.find((n: any) => n.id === swap.requester_id)
+      const requested = db.nurses.find((n: any) => n.id === swap.requested_id)
+      const requesterName = requester?.name || 'Desconhecido'
+      const requestedName = requested?.name || 'Desconhecido'
+
+      const key1 = `${swap.requester_id}_${swap.requester_shift_date}`
+      swapsByKey[key1] = requestedName
+
+      if (swap.requested_shift_date) {
+        const key2 = `${swap.requested_id}_${swap.requested_shift_date}`
+        swapsByKey[key2] = requesterName
+      }
+    })
+
     const [yearStr, monthStr] = date.split('-')
     const yearNum = parseInt(yearStr, 10)
     const monthNum = parseInt(monthStr, 10)
@@ -581,13 +1153,17 @@ export async function getDailyShifts(date: string) {
       const sectionTitle = sectionId ? db.schedule_sections.find(sec => sec.id === sectionId)?.title ?? null : null
       const unitTitle = unitId ? db.units.find(u => u.id === unitId)?.title ?? null : null
 
+      const swapKey = `${s.nurse_id}_${s.date}`
+      const swapWithName = swapsByKey[swapKey] || null
+
       return {
         ...s,
         nurse_name: nurse?.name || 'Desconhecido',
         nurse_role: nurse?.role || 'Desconhecido',
         unit_name: unitTitle,
         section_name: sectionTitle,
-        is_in_roster: !!roster
+        is_in_roster: !!roster,
+        swap_with_name: swapWithName
       }
     })
 
@@ -611,6 +1187,41 @@ export async function getDailyShifts(date: string) {
   if (shifts.length === 0) {
     return { success: true, data: [] }
   }
+
+  const { data: swapsRows, error: swapsError } = await supabase
+    .from('shift_swaps')
+    .select(`
+      id,
+      requester_id,
+      requested_id,
+      requester_shift_date,
+      requested_shift_date,
+      status,
+      requester:nurses!requester_id(name),
+      requested:nurses!requested_id(name)
+    `)
+    .eq('status', 'approved')
+    .or(`requester_shift_date.eq.${date},requested_shift_date.eq.${date}`)
+
+  if (swapsError) {
+    console.error('Error fetching shift swaps for daily view:', swapsError)
+  }
+
+  const swaps = swapsRows || []
+
+  const swapsByKey: Record<string, string> = {}
+  swaps.forEach((swap: any) => {
+    const requesterName = swap.requester?.name || 'Desconhecido'
+    const requestedName = swap.requested?.name || 'Desconhecido'
+
+    const key1 = `${swap.requester_id}_${swap.requester_shift_date}`
+    swapsByKey[key1] = requestedName
+
+    if (swap.requested_shift_date) {
+      const key2 = `${swap.requested_id}_${swap.requested_shift_date}`
+      swapsByKey[key2] = requesterName
+    }
+  })
 
   const nurseIds = Array.from(new Set(shifts.map(s => s.nurse_id).filter(Boolean)))
   const [yearStr, monthStr] = date.split('-')
@@ -656,6 +1267,9 @@ export async function getDailyShifts(date: string) {
 
   // 3) Enriquecer plantões com dados de escala mensal (prioritário) e nomes
   const enrichedShifts = shifts.map((s: any) => {
+    const swapKey = `${s.nurse_id}_${s.date}`
+    const swapWithName = swapsByKey[swapKey] || null
+
     const nurseInfo = nursesById[s.nurse_id] || { name: 'Desconhecido', role: 'Desconhecido', unit_id: null, section_id: null }
     const roster = rosterByNurse[s.nurse_id]
     const sectionTitle = roster?.section_id ? sectionsById[roster.section_id] || null : null
@@ -671,7 +1285,8 @@ export async function getDailyShifts(date: string) {
       nurse_role: nurseInfo.role,
       unit_name: unitTitle ?? unitFallback,
       section_name: sectionTitle ?? sectionFallback,
-      is_in_roster: !!roster
+      is_in_roster: !!roster,
+      swap_with_name: swapWithName
     }
   })
 
@@ -763,8 +1378,8 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         supabase.from('units').select('*'),
         supabase.from('nurses').select('*').order('name'),
         supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year),
-        supabase.from('shifts').select('*').gte('date', startDate).lte('date', endDate),
-        supabase.from('time_off_requests').select('*').eq('status', 'approved').or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
+        supabase.from('shifts').select('id, nurse_id, date, type').gte('date', startDate).lte('date', endDate),
+        supabase.from('time_off_requests').select('id, nurse_id, start_date, end_date, type, status').eq('status', 'approved').or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
         supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year)
     ])
 
@@ -1044,7 +1659,7 @@ export async function getReleasedSchedules() {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('monthly_schedule_metadata')
-      .select('*, units(title)')
+      .select('id,month,year,unit_id,is_released,released_at,footer_text,units(title)')
       .eq('is_released', true)
       .order('year', { ascending: false })
       .order('month', { ascending: false })
@@ -1341,9 +1956,9 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
   if (!endDate) endDate = startDate
 
   const session = cookies().get('session_user')
-  if (!session) return { message: 'Usuário não autenticado' }
+  if (!session) return { success: false, message: 'Usuário não autenticado' }
   const user = JSON.parse(session.value)
-  const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   const targetNurseId = (isAdmin && nurseIdFromForm) ? nurseIdFromForm : user.id
   const initialStatus = (isAdmin && nurseIdFromForm) ? 'approved' : 'pending'

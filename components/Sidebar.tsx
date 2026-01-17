@@ -12,8 +12,7 @@ export default function Sidebar({ user }: { user: any }) {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   const role = user?.role || ''
-  // Ensure isAdmin is strict
-  const isAdmin = role === 'ADMIN' || user?.cpf === '02170025367'
+  const isAdmin = role === 'ADMIN' || role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
 
   const allNavItems = [
     { name: 'Dashboard', href: '/', icon: (
@@ -41,6 +40,11 @@ export default function Sidebar({ user }: { user: any }) {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     )},
+    { name: 'Faltas', href: '/coordenacao', icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zm4-8h6m-6 4h3" />
+      </svg>
+    )},
     { name: 'Baixar Escala', href: '/downloads', icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -53,21 +57,34 @@ export default function Sidebar({ user }: { user: any }) {
     )},
   ]
 
-  const navItems = allNavItems.filter(item => {
-    if (isAdmin) return true
-    
-    if (role === 'COORDENADOR') {
-        return item.name === 'Dashboard' || item.name === 'Baixar Escala' || item.name === 'Folgas' || item.name === 'Trocas' || item.name === 'Coordenação'
-    }
+  const dashboardIcon = allNavItems.find(item => item.name === 'Dashboard')?.icon
+  const folgasIcon = allNavItems.find(item => item.name === 'Folgas')?.icon
+  const trocasIcon = allNavItems.find(item => item.name === 'Trocas')?.icon
+  const downloadsIcon = allNavItems.find(item => item.name === 'Baixar Escala')?.icon
+  const faltasIcon = allNavItems.find(item => item.name === 'Faltas')?.icon
 
-    // 'Escala' only for admins
-    return item.name === 'Dashboard' || item.name === 'Baixar Escala' || item.name === 'Folgas' || item.name === 'Trocas'
-  })
+  let navItems: { name: string; href: string; icon: JSX.Element }[] = []
+
+  if (isAdmin) {
+    navItems = allNavItems.filter(item => item.name !== 'Faltas')
+  } else if (role === 'COORDENADOR') {
+    navItems = [
+      dashboardIcon && { name: 'Dashboard', href: '/', icon: dashboardIcon },
+      faltasIcon && { name: 'Lançar Falta', href: '/coordenacao?tab=falta', icon: faltasIcon },
+      faltasIcon && { name: 'Solicitar Pagamentos', href: '/coordenacao?tab=pagamento', icon: faltasIcon },
+      faltasIcon && { name: 'Outras Solicitações', href: '/coordenacao?tab=outros', icon: faltasIcon },
+      folgasIcon && { name: 'Folgas', href: '/folgas', icon: folgasIcon },
+      trocasIcon && { name: 'Trocas', href: '/trocas', icon: trocasIcon },
+      downloadsIcon && { name: 'Baixar Escala', href: '/downloads', icon: downloadsIcon },
+    ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
+  } else {
+    navItems = allNavItems.filter(item => item.name === 'Dashboard' || item.name === 'Baixar Escala' || item.name === 'Folgas' || item.name === 'Trocas')
+  }
 
   return (
     <>
       {/* Mobile Navbar */}
-      <div className="md:hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-30 flex justify-between items-center shadow-sm w-full">
+      <div className="flex md:!hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-30 justify-between items-center shadow-sm w-full">
         <h2 className="text-xl font-bold text-indigo-600">ENF-HMA</h2>
         <button 
           onClick={() => setIsMobileMenuOpen(true)}
@@ -103,22 +120,70 @@ export default function Sidebar({ user }: { user: any }) {
             </div>
 
             <nav className="flex-1 overflow-y-auto py-4 space-y-2 px-2">
+              {role === 'COORDENADOR' && user?.section_title && (
+                <div className="px-4 pb-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                  {`Login: Coordenador de ${user.section_title}`}
+                </div>
+              )}
               {navItems.map((item) => {
-                const isActive = pathname === item.href
+                const itemPath = item.href.split('?')[0]
+                const isCoord = itemPath === '/coordenacao'
+                const isActive = pathname === itemPath || (isCoord && pathname.startsWith('/coordenacao'))
                 return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                      isActive
-                        ? 'bg-indigo-50 text-indigo-700'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    <span className="mr-3">{item.icon}</span>
-                    {item.name}
-                  </Link>
+                  <div key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-indigo-50 text-indigo-700'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className="mr-3">{item.icon}</span>
+                      {item.name}
+                    </Link>
+                    {isCoord && isAdmin && (
+                      <Link
+                        href="/coordenacao?tab=falta"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                      >
+                        <span className="truncate">Faltas</span>
+                      </Link>
+                    )}
+                    {isCoord && isAdmin && (
+                      <Link
+                        href="/coordenacao?tab=pagamento"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                      >
+                        <span className="truncate">Solicitações de Pagamentos</span>
+                      </Link>
+                    )}
+                    {isCoord && isAdmin && (
+                      <Link
+                        href="/coordenacao?tab=outros"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                      >
+                        <span className="truncate">Outras Solicitações</span>
+                      </Link>
+                    )}
+                    {isCoord && isAdmin && (
+                      <Link
+                        href="/coordenacao/gestao"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
+                          pathname === '/coordenacao/gestao'
+                            ? 'bg-indigo-50 text-indigo-700'
+                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                        }`}
+                      >
+                        <span className="truncate">Gestão de Coordenações</span>
+                      </Link>
+                    )}
+                  </div>
                 )
               })}
             </nav>
@@ -163,22 +228,62 @@ export default function Sidebar({ user }: { user: any }) {
         </div>
 
         <nav className="flex-1 space-y-2 px-2">
+          {role === 'COORDENADOR' && user?.section_title && !isCollapsed && (
+            <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-indigo-600">
+              {`Login: Coordenador de ${user.section_title}`}
+            </div>
+          )}
           {navItems.map((item) => {
-            const isActive = pathname === item.href
+            const itemPath = item.href.split('?')[0]
+            const isCoord = itemPath === '/coordenacao'
+            const isActive = pathname === itemPath || (isCoord && pathname.startsWith('/coordenacao'))
             return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-4'} py-3 text-sm font-medium rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-                title={isCollapsed ? item.name : ''}
-              >
-                <span className={`${isCollapsed ? '' : 'mr-3'}`}>{item.icon}</span>
-                {!isCollapsed && <span className="truncate">{item.name}</span>}
-              </Link>
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-4'} py-3 text-sm font-medium rounded-lg transition-colors ${
+                    isActive
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                  title={isCollapsed ? item.name : ''}
+                >
+                  <span className={`${isCollapsed ? '' : 'mr-3'}`}>{item.icon}</span>
+                  {!isCollapsed && <span className="truncate">{item.name}</span>}
+                </Link>
+                {isCoord && isAdmin && !isCollapsed && (
+                  <>
+                    <Link
+                      href="/coordenacao?tab=falta"
+                      className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                    >
+                      <span className="truncate">Faltas</span>
+                    </Link>
+                    <Link
+                      href="/coordenacao?tab=pagamento"
+                      className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                    >
+                      <span className="truncate">Solicitações de Pagamentos</span>
+                    </Link>
+                    <Link
+                      href="/coordenacao?tab=outros"
+                      className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                    >
+                      <span className="truncate">Outras Solicitações</span>
+                    </Link>
+                    <Link
+                      href="/coordenacao/gestao"
+                      className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
+                        pathname === '/coordenacao/gestao'
+                          ? 'bg-indigo-50 text-indigo-700'
+                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className="truncate">Gestão de Coordenações</span>
+                    </Link>
+                  </>
+                )}
+              </div>
             )
           })}
         </nav>

@@ -5,7 +5,7 @@ import { deleteNurse } from '@/app/actions'
 import NurseCreationModal from './NurseCreationModal'
 import { Pencil, Trash2, Plus } from 'lucide-react'
 
-export default function NurseList({ nurses }: { nurses: any[] }) {
+export default function NurseList({ nurses, sections }: { nurses: any[], sections: any[] }) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [nurseToEdit, setNurseToEdit] = useState<any | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -97,6 +97,7 @@ export default function NurseList({ nurses }: { nurses: any[] }) {
              // Optional: trigger a refresh if needed, but revalidatePath in actions should handle it
         }}
         nurseToEdit={nurseToEdit}
+        sections={sections}
       />
     </>
   )

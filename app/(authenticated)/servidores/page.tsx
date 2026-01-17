@@ -1,4 +1,4 @@
-import { getNurses } from '@/app/actions'
+import { getNurses, getSections } from '@/app/actions'
 import NurseList from '@/components/NurseList'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -8,13 +8,13 @@ export const dynamic = 'force-dynamic'
 export default async function ServidoresPage() {
   const session = cookies().get('session_user')
   const user = session ? JSON.parse(session.value) : null
-  const isAdmin = user?.role === 'ADMIN' || user?.cpf === '02170025367'
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
 
   if (!isAdmin) {
     redirect('/')
   }
 
-  const nurses = await getNurses()
+  const [nurses, sections] = await Promise.all([getNurses(), getSections()])
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -25,7 +25,7 @@ export default async function ServidoresPage() {
         </div>
       </div>
       
-      <NurseList nurses={nurses} />
+      <NurseList nurses={nurses} sections={sections} />
     </div>
   )
 }

@@ -60,6 +60,45 @@ create table if not exists monthly_rosters (
   unique(nurse_id, month, year) -- Um enfermeiro só pode estar em um lugar por mês (regra simplificada)
 );
 
+-- Tabela de Faltas
+create table if not exists absences (
+  id uuid default gen_random_uuid() primary key,
+  nurse_id uuid references nurses(id) not null,
+  created_by uuid references nurses(id),
+  date date not null,
+  reason text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+do $$
+begin
+    if not exists (select 1 from information_schema.columns where table_name = 'absences' and column_name = 'created_by') then
+        alter table absences add column created_by uuid references nurses(id);
+    end if;
+end $$;
+
+-- Tabela de Solicitações de Pagamento (Plantão Extra)
+create table if not exists payment_requests (
+  id uuid default gen_random_uuid() primary key,
+  nurse_id uuid references nurses(id) not null, -- Quem está solicitando (ou para quem)
+  coordinator_id uuid references nurses(id), -- Quem lançou (se diferente)
+  shift_date date not null,
+  shift_hours integer not null check (shift_hours in (12, 24)),
+  location text not null,
+  observation text,
+  status text check (status in ('pending', 'approved', 'rejected')) default 'pending',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Tabela de Outras Solicitações
+create table if not exists general_requests (
+  id uuid default gen_random_uuid() primary key,
+  nurse_id uuid references nurses(id) not null,
+  content text not null,
+  status text check (status in ('pending', 'resolved')) default 'pending',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Adicionar colunas legadas em nurses (mantidas para compatibilidade ou default)
 do $$
 begin
@@ -97,19 +136,3 @@ where not exists (select 1 from schedule_sections where title = 'ENFERMEIROS');
 insert into schedule_sections (title, position)
 select 'TÉCNICOS DE ENFERMAGEM', 2
 where not exists (select 1 from schedule_sections where title = 'TÉCNICOS DE ENFERMAGEM');
-
--- Inserir unidades padrão
-insert into units (title)
-select 'POSTO 1'
-where not exists (select 1 from units where title = 'POSTO 1');
-
-insert into units (title)
-select 'POSTO 2'
-where not exists (select 1 from units where title = 'POSTO 2');
-
--- Atualizar enfermeiros existentes para a seção correta (apenas defaults)
-update nurses set section_id = (select id from schedule_sections where title = 'ENFERMEIROS')
-where role = 'ENFERMEIRO' and section_id is null;
-
-update nurses set section_id = (select id from schedule_sections where title = 'TÉCNICOS DE ENFERMAGEM')
-where role = 'TECNICO' and section_id is null;

@@ -37,8 +37,10 @@ export default function AdminDailySchedule() {
         }
     }
 
+    const dayShifts = shifts.filter((shift: any) => shift.shift_type === 'day')
+
     // Agrupar plantões por setor (Unit)
-    const groupedShifts = shifts.reduce((acc: any, shift: any) => {
+    const groupedShifts = dayShifts.reduce((acc: any, shift: any) => {
         const unit = shift.unit_name || 'Sem Setor'
         if (!acc[unit]) {
             acc[unit] = []
@@ -70,7 +72,7 @@ export default function AdminDailySchedule() {
             <div className="flex-1 overflow-y-auto max-h-96">
                 {loading ? (
                     <div className="text-center py-4 text-gray-500">Carregando...</div>
-                ) : shifts.length === 0 ? (
+                ) : dayShifts.length === 0 ? (
                     <p className="text-gray-500 text-sm text-center py-4">Nenhum profissional escalado para esta data.</p>
                 ) : (
                     <div className="space-y-6">
@@ -88,6 +90,11 @@ export default function AdminDailySchedule() {
                                                 <p className="text-xs text-gray-500">
                                                     {shift.nurse_role} • {shift.unit_name || 'Sem Setor'}
                                                 </p>
+                                                {shift.swap_with_name && (
+                                                    <p className="text-xs text-orange-600 font-semibold">
+                                                        Permuta com {shift.swap_with_name}
+                                                    </p>
+                                                )}
                                             </div>
                                                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${shift.shift_type === 'night' ? 'bg-indigo-100 text-indigo-800' : 'bg-yellow-100 text-yellow-800'}`}>
                                                     {shift.shift_type === 'day' ? 'DIA' : shift.shift_type === 'night' ? 'NOITE' : (shift.shift_type || 'N/A').toUpperCase()}

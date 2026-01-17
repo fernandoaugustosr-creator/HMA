@@ -64,6 +64,12 @@ CREATE TABLE IF NOT EXISTS time_off_requests (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
+CREATE INDEX IF NOT EXISTS idx_shifts_date ON shifts(date);
+CREATE INDEX IF NOT EXISTS idx_shifts_nurse ON shifts(nurse_id);
+CREATE INDEX IF NOT EXISTS idx_time_off_requests_status ON time_off_requests(status);
+CREATE INDEX IF NOT EXISTS idx_time_off_requests_dates ON time_off_requests(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_monthly_rosters_month_year_unit ON monthly_rosters(month, year, unit_id);
+
 -- Table: shift_swaps
 CREATE TABLE IF NOT EXISTS shift_swaps (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
