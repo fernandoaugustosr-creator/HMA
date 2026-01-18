@@ -1461,10 +1461,8 @@ export default function Schedule({
         </div>
       </div>
 
-      {/* Report Header */}
       <div className="mb-1">
-        {/* Logos Header */}
-        <div className={`flex justify-between items-center mb-2 ${printOnly ? 'hidden print:flex' : ''}`}>
+        <div className="flex justify-between items-center mb-2">
             <div className="flex flex-col items-start">
                 {/* Section Manager Dropdown (Replacing Logo) */}
                 <div className="flex items-center gap-4 relative">
@@ -1516,18 +1514,17 @@ export default function Schedule({
             </div>
         </div>
         
-        <div className={`bg-gray-200 border border-black p-0.5 text-center mb-1 ${printOnly ? 'hidden print:block' : ''}`}>
+        <div className="bg-gray-200 border border-black p-0.5 text-center mb-1">
           <h3 className="font-bold text-base uppercase text-black">
             {data.units.find(u => u.id === selectedUnitId)?.title || 'OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO'}
           </h3>
         </div>
-        <div className={`bg-gray-200 border border-black p-0.5 text-center ${printOnly ? 'hidden print:block' : ''}`}>
+        <div className="bg-gray-200 border border-black p-0.5 text-center">
            <h4 className="font-bold text-sm uppercase text-black">{MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
         </div>
       </div>
 
-      {/* Table Container */}
-      <div className={`overflow-x-auto border-none shadow-none max-w-full relative ${printOnly ? 'hidden print:block' : ''}`}>
+      <div className="overflow-x-auto border-none shadow-none max-w-full relative">
         {loading ? (
              <div className="text-center py-4">Carregando...</div>
         ) : (
