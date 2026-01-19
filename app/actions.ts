@@ -748,12 +748,12 @@ export async function getCoordinationRequests() {
     const [absencesRes, myAbsencesRes, paymentsRes, generalRes] = await Promise.all([
       supabase
         .from('absences')
-        .select('id,nurse_id,created_by,date,reason,created_at')
+        .select('id,nurse_id,created_by,date,reason,created_at, nurses!absences_nurse_id_fkey(name)')
         .in('nurse_id', nurseIds)
         .order('date', { ascending: false }),
       supabase
         .from('absences')
-        .select('id,nurse_id,created_by,date,reason,created_at')
+        .select('id,nurse_id,created_by,date,reason,created_at, nurses!absences_nurse_id_fkey(name)')
         .eq('created_by', user.id)
         .order('date', { ascending: false }),
       supabase
@@ -785,8 +785,13 @@ export async function getCoordinationRequests() {
     const uniqueAbsences = Array.from(new Map(allAbsences.map(item => [item.id, item])).values())
     uniqueAbsences.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
+    const mappedAbsences = uniqueAbsences.map((item: any) => ({
+      ...item,
+      nurse_name: item.nurses?.name || 'Desconhecido'
+    }))
+
     return {
-      absences: uniqueAbsences,
+      absences: mappedAbsences,
       paymentRequests: paymentsRes.data || [],
       generalRequests: generalRes.data || [],
       nurses: nursesInSection || [],
@@ -795,7 +800,7 @@ export async function getCoordinationRequests() {
 
   let absencesQuery = supabase
       .from('absences')
-      .select('id,nurse_id,created_by,date,reason,created_at')
+      .select('id,nurse_id,created_by,date,reason,created_at, nurses!absences_nurse_id_fkey(name)')
       .order('date', { ascending: false })
 
   let paymentQuery = supabase
@@ -838,7 +843,10 @@ export async function getCoordinationRequests() {
   }
 
   return {
-    absences: absencesRes.data || [],
+    absences: (absencesRes.data || []).map((item: any) => ({
+      ...item,
+      nurse_name: item.nurses?.name || 'Desconhecido'
+    })),
     paymentRequests: paymentsRes.data || [],
     generalRequests: generalRes.data || [],
     nurses: nursesList,

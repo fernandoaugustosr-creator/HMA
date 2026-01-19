@@ -383,7 +383,7 @@ export default function CoordenacaoClient({
                   {absences.map((item) => (
                     <tr key={item.id}>
                       <td className="px-2 py-1 text-gray-900">
-                        {findNurseName(item.nurse_id)}
+                        {item.nurse_name || findNurseName(item.nurse_id)}
                       </td>
                       <td className="px-2 py-1 text-gray-700">
                         {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '—'}
