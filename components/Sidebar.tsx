@@ -30,7 +30,7 @@ export default function Sidebar({ user }: { user: any }) {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
       </svg>
     )},
-    { name: 'Trocas', href: '/trocas', icon: (
+    { name: 'Permultas', href: '/trocas', icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
       </svg>
@@ -59,7 +59,7 @@ export default function Sidebar({ user }: { user: any }) {
 
   const dashboardIcon = allNavItems.find(item => item.name === 'Dashboard')?.icon
   const folgasIcon = allNavItems.find(item => item.name === 'Folgas')?.icon
-  const trocasIcon = allNavItems.find(item => item.name === 'Trocas')?.icon
+  const trocasIcon = allNavItems.find(item => item.name === 'Permultas')?.icon
   const downloadsIcon = allNavItems.find(item => item.name === 'Baixar Escala')?.icon
   const faltasIcon = allNavItems.find(item => item.name === 'Faltas')?.icon
 
@@ -74,11 +74,11 @@ export default function Sidebar({ user }: { user: any }) {
       faltasIcon && { name: 'Solicitar Pagamentos', href: '/coordenacao?tab=pagamento', icon: faltasIcon },
       faltasIcon && { name: 'Outras Solicitações', href: '/coordenacao?tab=outros', icon: faltasIcon },
       folgasIcon && { name: 'Folgas', href: '/folgas', icon: folgasIcon },
-      trocasIcon && { name: 'Trocas', href: '/trocas', icon: trocasIcon },
+      trocasIcon && { name: 'Permultas', href: '/trocas', icon: trocasIcon },
       downloadsIcon && { name: 'Baixar Escala', href: '/downloads', icon: downloadsIcon },
     ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
   } else {
-    navItems = allNavItems.filter(item => item.name === 'Dashboard' || item.name === 'Baixar Escala' || item.name === 'Folgas' || item.name === 'Trocas')
+    navItems = allNavItems.filter(item => item.name === 'Dashboard' || item.name === 'Baixar Escala' || item.name === 'Folgas' || item.name === 'Permultas' || item.name === 'Faltas')
   }
 
   return (

@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
 import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
-import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown } from 'lucide-react'
+import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
 
@@ -51,11 +51,19 @@ interface TimeOff {
   type: string
 }
 
+interface Absence {
+  id: string
+  nurse_id: string
+  date: string
+  reason: string
+}
+
 interface ScheduleData {
   nurses: Nurse[]
   roster: RosterItem[]
   shifts: Shift[]
   timeOffs: TimeOff[]
+  absences: Absence[]
   sections: Section[]
   units: Unit[]
   releases?: any[]
@@ -201,7 +209,7 @@ export default function Schedule({
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(initialMonth !== undefined ? initialMonth : currentDate.getMonth())
   const [selectedYear, setSelectedYear] = useState(initialYear !== undefined ? initialYear : currentDate.getFullYear())
-  const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], sections: [], units: [] })
+  const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], absences: [], sections: [], units: [] })
   const [loading, setLoading] = useState(true)
   const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
@@ -360,13 +368,7 @@ export default function Schedule({
     fetchData()
   }, [fetchData])
 
-  useEffect(() => {
-    if (!selectedUnitId && data.units && data.units.length > 0) {
-      setSelectedUnitId(data.units[0].id)
-    }
-  }, [data.units, selectedUnitId])
-
-
+ 
   // We need a separate state for "Manually Added" to survive re-renders until saved
   const [manuallyAddedSections, setManuallyAddedSections] = useState<string[]>([])
 
@@ -507,6 +509,12 @@ export default function Schedule({
         alert(res.message)
     }
     setLoading(false)
+  }
+
+  const handlePrintCurrent = () => {
+    if (typeof window !== 'undefined') {
+      window.print()
+    }
   }
 
   const handleClearSchedule = async () => {
@@ -979,6 +987,16 @@ export default function Schedule({
       return lookup
   }, [data.timeOffs, selectedMonth, selectedYear])
 
+  const absencesLookup = React.useMemo(() => {
+      const lookup: Record<string, Absence> = {}
+      if (data.absences) {
+          data.absences.forEach(a => {
+             lookup[`${a.nurse_id}_${a.date}`] = a
+          })
+      }
+      return lookup
+  }, [data.absences])
+
   const nurseObservations = useMemo(() => {
     const map = new Map<string, string>();
     (data.roster || []).forEach(r => {
@@ -1145,14 +1163,25 @@ export default function Schedule({
                 
                 // Find time off
                 const timeOff = timeOffsLookup[`${nurse.id}_${dateStr}`]
+                
+                // Find absence
+                const absence = absencesLookup[`${nurse.id}_${dateStr}`]
 
                 // Find shift
                 const shift = shiftsLookup.lookup[`${nurse.id}_${dateStr}`]
 
-                let cellClass = "border border-black px-0 py-0 h-5 w-6 text-center text-[10px] relative text-black font-bold"
+                let cellClass = "border border-black px-0 py-0 h-5 w-6 text-center text-[10px] leading-none relative text-black font-bold"
                 let content = null
 
-                if (timeOff) {
+                if (shift) {
+                   if (shift.shift_type === 'day') content = 'D'
+                   else if (shift.shift_type === 'night') content = 'N'
+                   else if (shift.shift_type === 'morning') content = 'M'
+                   else if (shift.shift_type === 'afternoon') content = 'T'
+                   else if (shift.shift_type === 'mt') content = 'MT'
+                }
+
+                if (timeOff && !shift) {
                   if (timeOff.type === 'ferias') {
                        cellClass += " bg-gray-50"
                   }
@@ -1164,14 +1193,11 @@ export default function Schedule({
                   else if (timeOff.type === 'cessao') cellClass += " bg-cyan-400"
                   else {
                       // Generic Folga - let it inherit background (white or weekend gray)
-                      content = "F"
+                      // content = "F" 
                   }
-                } else if (shift) {
-                   if (shift.shift_type === 'day') content = 'D'
-                   else if (shift.shift_type === 'night') content = 'N'
-                   else if (shift.shift_type === 'morning') content = 'M'
-                   else if (shift.shift_type === 'afternoon') content = 'T'
-                   else if (shift.shift_type === 'mt') content = 'MT'
+                } else if (absence && !shift) {
+                   // content = "FT"
+                   cellClass += " text-red-600 font-extrabold"
                 }
                 
                 // Highlight weekends (Gray background for entire column, overridden by specific statuses if needed, but image shows gray prevails or mixes)
@@ -1196,7 +1222,7 @@ export default function Schedule({
                   </td>
                 )
               })}
-              <td className="border border-black px-1 py-1 text-center text-xs font-bold">{displayTotal}</td>
+              <td className="border border-black px-1 py-1 text-center w-16 text-xs font-bold">{displayTotal}</td>
             </tr>
           )
         })}
@@ -1299,13 +1325,30 @@ export default function Schedule({
   }
 
   return (
-    <div className="w-full bg-white p-1 schedule-root">
-      {/* Print Header */}
-      <div className="hidden print:flex w-full items-center justify-between mb-4 px-4">
-          <img src="/logo-hma.png" alt="Logo HMA" className="h-16 object-contain" />
-          <div className="flex-1"></div>
-          <img src="/logo-prefeitura.png" alt="Logo Prefeitura" className="h-16 object-contain" />
-      </div>
+    <div 
+      className={`w-full bg-white ${printOnly ? 'p-0' : 'p-1'} schedule-root`}
+    >
+      {!printOnly && (
+        <div className="hidden print:flex w-full items-center justify-between mb-1">
+            <Image 
+              src={`/logo-hma.png?t=${logoTimestamp}`} 
+              alt="Logo HMA" 
+              width={200} 
+              height={64} 
+              className="h-16 object-contain" 
+              unoptimized
+            />
+            <div className="flex-1"></div>
+            <Image 
+              src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
+              alt="Logo Prefeitura" 
+              width={200} 
+              height={64} 
+              className="h-16 object-contain"
+              unoptimized
+            />
+        </div>
+      )}
 
       {/* Header Filters */}
       <div className="flex flex-col items-center gap-4 mb-6 no-print">
@@ -1423,7 +1466,17 @@ export default function Schedule({
                         <span className="hidden md:inline">Copiar Modelo</span>
                     </button>
                 )}
-                {isAdmin && isLaunched && selectedUnitId && (
+                {selectedUnitId && (
+                    <button 
+                        onClick={handlePrintCurrent}
+                        className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-gray-50 transition-colors h-[38px]"
+                        title="Imprimir escala atual"
+                    >
+                        <Printer size={16} />
+                        <span className="hidden md:inline">Imprimir Escala</span>
+                    </button>
+                )}
+                {isAdmin && selectedUnitId && (
                     <button 
                         onClick={handleClearSchedule}
                         className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-red-100 transition-colors h-[38px] w-full md:w-56"
@@ -1461,8 +1514,9 @@ export default function Schedule({
         </div>
       </div>
 
-      <div className="mb-1">
-        <div className="flex justify-between items-center mb-2">
+      <div className="print:scale-[0.9] print:origin-top-left">
+        <div className="mb-1">
+        <div className="flex justify-between items-center mb-2 no-print">
             <div className="flex flex-col items-start">
                 {/* Section Manager Dropdown (Replacing Logo) */}
                 <div className="flex items-center gap-4 relative">
@@ -1513,18 +1567,9 @@ export default function Schedule({
                 </div>
             </div>
         </div>
-        
-        <div className="bg-gray-200 border border-black p-0.5 text-center mb-1">
-          <h3 className="font-bold text-base uppercase text-black">
-            {data.units.find(u => u.id === selectedUnitId)?.title || 'OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO'}
-          </h3>
-        </div>
-        <div className="bg-gray-200 border border-black p-0.5 text-center">
-           <h4 className="font-bold text-sm uppercase text-black">{MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
-        </div>
       </div>
 
-      <div className="overflow-x-auto border-none shadow-none max-w-full relative">
+      <div className={`overflow-x-auto border-none shadow-none max-w-full relative ${printOnly ? 'print:overflow-visible' : ''}`}>
         {loading ? (
              <div className="text-center py-4">Carregando...</div>
         ) : (
@@ -1537,9 +1582,17 @@ export default function Schedule({
                }
                return (
                  <>
+                 <div className="bg-blue-100 border border-black p-0.5 text-center mb-1 print:bg-blue-100 w-full">
+                   <h3 className="font-bold text-base uppercase text-black">
+                     {data.units.find(u => u.id === selectedUnitId)?.title || 'OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO'}
+                   </h3>
+                 </div>
+                 <div className="bg-blue-100 border border-black p-0.5 text-center print:bg-blue-100 w-full">
+                    <h4 className="font-bold text-sm uppercase text-black">{MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
+                 </div>
                  {visibleSections.map(section => (
-                    <div key={section.id} className="">
-                        <table className="min-w-full w-full border-collapse border border-black text-black text-[11px]">
+                    <div key={section.id}>
+                        <table className="min-w-full w-full border-collapse border border-black text-black text-[11px] print:text-[8px]">
                              <thead>
                              {/* Main Headers Row 1 */}
                             <tr className="bg-blue-100 text-black print:bg-blue-100">
@@ -1627,11 +1680,11 @@ export default function Schedule({
                             {/* Main Headers Row 2 */}
                             <tr className="bg-blue-100 text-black print:bg-blue-100">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center ${isWeekend ? 'bg-gray-400 print:bg-gray-400' : ''}`}>
-                                    {day}
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-5 ${isWeekend ? 'bg-gray-400 print:bg-gray-400' : ''}`}>
+                                      {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center font-bold bg-blue-100 print:bg-blue-100">PLANTÃO</th>
+                                <th className="border border-black px-1 py-1 text-center w-16 font-bold bg-blue-100 print:bg-blue-100">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1711,8 +1764,9 @@ export default function Schedule({
              )}
              </>
                )
-             })()
+            })()
         )}
+      </div>
       </div>
       
 
@@ -1763,7 +1817,7 @@ export default function Schedule({
       )}
 
       {/* Footer Legends */}
-      <div className="mt-8 space-y-2">
+      <div className="mt-0 space-y-2 print:mt-0 bg-white">
         {isAdmin && (
         <div className="flex flex-col items-end gap-2 mb-2 no-print">
             <div className="flex flex-wrap gap-2 justify-end">
@@ -1823,13 +1877,20 @@ export default function Schedule({
                          type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
                          type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' : 'CESSÃO'
             
-            const colorClass = type === 'ferias' ? 'bg-yellow-500' : 
-                              type === 'licenca_saude' ? 'bg-red-500' :
-                              type === 'licenca_maternidade' ? 'bg-blue-500' : 'bg-cyan-500'
-            
             // Find nurses with this leave type in this month
+            const pad = (n: number) => n.toString().padStart(2, '0')
+            const monthStart = `${selectedYear}-${pad(selectedMonth + 1)}-01`
+            const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+            const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
+
             const activeLeaves = data.timeOffs
-                .filter(t => t.type === type)
+                .filter(t => {
+                    if (t.type !== type) return false
+                    if (!t.start_date || !t.end_date) return false
+                    if (t.end_date < monthStart) return false
+                    if (t.start_date > monthEnd) return false
+                    return true
+                })
                 .map(t => {
                     const nurse = data.nurses.find(n => n.id === t.nurse_id)
                     return nurse ? nurse.name : ''
@@ -1840,7 +1901,7 @@ export default function Schedule({
             if (!activeLeaves) return null
 
             return (
-                <div key={type} className={`${colorClass} text-white px-2 py-1 text-xs font-bold uppercase flex items-center`}>
+                <div key={type} className="bg-white text-black border border-black px-2 py-1 text-xs font-bold uppercase flex items-center">
                     <span className="mr-2 whitespace-nowrap">{label}:</span>
                     <span className="font-normal truncate">{activeLeaves}</span>
                 </div>
@@ -1849,7 +1910,7 @@ export default function Schedule({
 
         {/* Footer Text Display */}
         {footerText && (
-            <div className="mt-4 text-xs text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
+            <div className="mt-2 text-xs text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
                 {footerText}
             </div>
         )}
@@ -1858,21 +1919,21 @@ export default function Schedule({
       </div>
 
       {/* Signatures Footer */}
-      <div className={`mt-8 mb-4 grid grid-cols-4 gap-4 text-center break-inside-avoid ${printOnly ? 'hidden print:grid' : ''}`}>
+      <div className="mt-2 mb-1 grid grid-cols-4 gap-2 text-center break-inside-avoid print:mt-2 bg-white">
         <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-2"></div>
+            <div className="w-full border-b border-black mb-1"></div>
             <p className="font-bold text-[10px] text-black uppercase">Coordenação de Setor</p>
         </div>
         <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-2"></div>
+            <div className="w-full border-b border-black mb-1"></div>
             <p className="font-bold text-[10px] text-black uppercase">Coordenação Geral de Enfermagem</p>
         </div>
         <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-2"></div>
+            <div className="w-full border-b border-black mb-1"></div>
             <p className="font-bold text-[10px] text-black uppercase">Coordenação do RH/HMA</p>
         </div>
         <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-2"></div>
+            <div className="w-full border-b border-black mb-1"></div>
             <p className="font-bold text-[10px] text-black uppercase">Direção Geral do HMA</p>
         </div>
       </div>
@@ -1968,22 +2029,30 @@ export default function Schedule({
         @media print {
           @page {
             size: landscape;
-            margin: 5mm;
+            margin: 0;
           }
           .no-print {
             display: none !important;
           }
-          body {
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            background-color: #ffffff !important;
           }
-          /* Ensure sticky columns don't mess up print */
           th, td {
             position: static !important;
           }
-          /* Reforçar bordas escuras na impressão */
           table, th, td {
             border-color: #000000 !important;
+          }
+          .schedule-root {
+            margin: 0 auto !important;
+            background-color: #ffffff !important;
+          }
+          .schedule-root * {
+            font-size: 10px !important;
           }
         }
       `}</style>
@@ -2178,7 +2247,7 @@ export default function Schedule({
             <div className="bg-white p-6 rounded shadow-lg w-full max-w-sm">
                 <h3 className="font-bold text-lg mb-4 text-black">Replicar Setor</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                    Você deseja replicar <strong>"{replicationData.value}"</strong> para quem?
+                    Você deseja replicar <strong>&quot;{replicationData.value}&quot;</strong> para quem?
                 </p>
 
                 <div className="flex flex-col gap-2">

@@ -40,12 +40,23 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
     if (isOpen) setSelectedNurseId('')
   }, [isOpen])
 
-  // Filter leaves for this type
+  // Filter leaves for this type and month/year
   const currentLeaves = useMemo(() => {
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    const monthStart = `${selectedYear}-${pad(selectedMonth + 1)}-01`
+    const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+    const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
+
     return existingLeaves
-      .filter(l => l.type === type)
+      .filter(l => {
+        if (l.type !== type) return false
+        if (!l.start_date || !l.end_date) return false
+        if (l.end_date < monthStart) return false
+        if (l.start_date > monthEnd) return false
+        return true
+      })
       .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
-  }, [existingLeaves, type])
+  }, [existingLeaves, type, selectedMonth, selectedYear])
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)

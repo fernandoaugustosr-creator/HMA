@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { getReleasedSchedules } from '@/app/actions'
 import Schedule from '@/components/Schedule'
-import { FileText, ArrowLeft, Download, Calendar } from 'lucide-react'
+import { FileText, ArrowLeft, Download, Calendar, Printer } from 'lucide-react'
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -100,8 +100,8 @@ export default function DownloadsPage() {
   const [currentYear, currentMonth] = selectedMonthYear ? selectedMonthYear.split('-').map(Number) : [0, 0]
 
   return (
-    <div className="p-6">
-      <div className="print:hidden">
+    <>
+      <div className="p-6 print:hidden">
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
                 <h1 className="text-2xl font-bold text-gray-800">Escalas Liberadas</h1>
@@ -153,35 +153,33 @@ export default function DownloadsPage() {
 
                 <div className="space-y-4">
                     {filteredReleases.map(release => (
-                        <div 
-                            key={release.id}
-                            onClick={() => handlePrint(release)}
-                            className={`bg-white p-4 rounded-xl border shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-4 group border-l-4 relative overflow-hidden ${selectedRelease?.id === release.id ? 'border-blue-300 border-l-blue-600 ring-2 ring-blue-100' : 'border-gray-200 border-l-blue-500'}`}
-                        >
-                            <div className="flex items-center gap-4 relative z-10">
-                                <div className="p-3 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors text-blue-600">
-                                    <FileText size={24} />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-lg text-gray-900">{release.unit_name}</h3>
-                                    <p className="text-gray-500 text-xs flex items-center gap-2">
-                                        Liberado em: {release.released_at ? new Date(release.released_at).toLocaleDateString('pt-BR') : '-'}
-                                    </p>
-                                </div>
-                            </div>
-                            
-{/* Print Button removed as requested */}
-{/* 
-                            <div className="relative z-10">
-                                <div className="bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-600 font-bold py-2 px-6 rounded-lg flex items-center gap-2 transition-all duration-300">
-                                    <Download size={18} />
-                                    <span className="hidden md:inline">
-                                        {selectedRelease?.id === release.id ? 'Imprimir novamente' : 'Baixar Escala'}
-                                    </span>
-                                </div>
-                            </div>
-*/}
+                      <div 
+                        key={release.id}
+                        className={`bg-white p-4 rounded-xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 group border-l-4 relative overflow-hidden ${selectedRelease?.id === release.id ? 'border-blue-300 border-l-blue-600 ring-2 ring-blue-100' : 'border-gray-200 border-l-blue-500'}`}
+                      >
+                        <div className="flex items-center gap-4 relative z-10">
+                          <div className="p-3 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors text-blue-600">
+                            <FileText size={24} />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-lg text-gray-900">{release.unit_name}</h3>
+                            <p className="text-gray-500 text-xs flex items-center gap-2">
+                              Liberado em: {release.released_at ? new Date(release.released_at).toLocaleDateString('pt-BR') : '-'}
+                            </p>
+                          </div>
                         </div>
+                        <div className="flex items-center gap-2 relative z-10">
+                          <button
+                            type="button"
+                            onClick={() => handlePrint(release)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
+                            title="Visualizar impressão desta escala"
+                          >
+                            <Printer size={14} />
+                            <span>Visualizar impressão</span>
+                          </button>
+                        </div>
+                      </div>
                     ))}
                 </div>
                 
@@ -194,20 +192,53 @@ export default function DownloadsPage() {
         )}
       </div>
 
-      {/* Hidden Print Area - Only visible when printing */}
-      <div className="hidden print:block fixed inset-0 bg-white z-[9999] print-schedule-root">
-         {selectedRelease && (
-            <Schedule 
-                key={selectedRelease.id} // Force remount on change
+      {/* Hidden Print Area - Only visible quando imprimir */}
+      <div className="hidden print:block bg-white print-schedule-root">
+        {selectedRelease && (
+          <div className="w-full flex justify-center">
+            <div className="w-[95%]">
+              <div className="flex w-full items-center justify-between mb-0">
+                <img 
+                  src="/logo-hma.png" 
+                  alt="Logo HMA" 
+                  className="h-16 object-contain"
+                />
+                <div className="flex-1" />
+                <img 
+                  src="/logo-prefeitura.png" 
+                  alt="Logo Prefeitura" 
+                  className="h-16 object-contain"
+                />
+              </div>
+              <Schedule 
+                key={selectedRelease.id}
                 isAdmin={false} 
                 printOnly={true}
                 initialMonth={selectedRelease.month - 1}
                 initialYear={selectedRelease.year}
                 initialUnitId={selectedRelease.unit_id}
                 onLoaded={handleScheduleLoaded}
-            />
-         )}
+              />
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+      
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 0;
+          }
+          .print-schedule-root {
+            width: 100%;
+            background-color: #ffffff !important;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+          }
+        }
+      `}</style>
+    </>
   )
 }

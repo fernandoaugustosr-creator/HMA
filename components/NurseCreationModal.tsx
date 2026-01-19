@@ -110,24 +110,46 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
             <div>
                 <label className="block text-sm font-medium text-gray-700">COREN</label>
                 <input 
-                type="text" 
-                name="coren" 
-                defaultValue={nurseToEdit?.coren}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                  type="text" 
+                  name="coren" 
+                  defaultValue={nurseToEdit?.coren}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 />
             </div>
             <div>
-                <label className="block text-sm font-medium text-gray-700">Vínculo</label>
-                <select 
-                    name="vinculo" 
-                    multiple
-                    defaultValue={nurseToEdit?.vinculo}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
-                >
-                    <option value="CONCURSO">CONCURSO</option>
-                    <option value="SELETIVO">SELETIVO</option>
-                    <option value="COOPERATIVA">COOPERATIVA</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700">Vínculo (pode marcar mais de um)</label>
+                <div className="mt-1 flex flex-col gap-1 text-sm text-gray-700">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="vinculo"
+                      value="CONCURSO"
+                      defaultChecked={nurseToEdit?.vinculo === 'CONCURSO'}
+                      className="h-4 w-4"
+                    />
+                    <span>CONCURSO</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="vinculo"
+                      value="SELETIVO"
+                      defaultChecked={nurseToEdit?.vinculo === 'SELETIVO'}
+                      className="h-4 w-4"
+                    />
+                    <span>SELETIVO</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="vinculo"
+                      value="COOPERATIVA"
+                      defaultChecked={nurseToEdit?.vinculo === 'COOPERATIVA'}
+                      className="h-4 w-4"
+                    />
+                    <span>COOPERATIVA</span>
+                  </label>
+                </div>
             </div>
           </div>
 

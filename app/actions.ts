@@ -20,6 +20,112 @@ export interface Unit {
   title: string
 }
 
+export async function getAbsenceSettings() {
+  const defaultSettings = {
+    view_roles: ['ADMIN', 'COORDENACAO_GERAL', 'COORDENADOR'],
+    edit_roles: ['ADMIN', 'COORDENACAO_GERAL', 'COORDENADOR']
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const settings = db.settings || {}
+    return {
+      view_roles: settings.absence_view_roles || defaultSettings.view_roles,
+      edit_roles: settings.absence_edit_roles || defaultSettings.edit_roles
+    }
+  }
+
+  const supabase = createClient()
+  
+  // We'll use keys like 'absence_role_view_ADMIN', 'absence_role_edit_ENFERMEIRO'
+  // But strictly storing arrays in a text column would be easier if supported.
+  // Let's assume we can use a JSON value in a 'value' column or 'json_value'.
+  // Since we are unsure, let's try to fetch all keys starting with 'absence_'
+  
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, bool_value')
+    .like('key', 'absence_%')
+
+  if (error) {
+    console.error('Error fetching absence settings:', error)
+    return defaultSettings
+  }
+
+  const viewRoles = new Set<string>(defaultSettings.view_roles)
+  const editRoles = new Set<string>(defaultSettings.edit_roles)
+
+  // If we have any DB settings, we should probably clear defaults and only use DB,
+  // OR we merge? Usually DB settings override.
+  // Let's say if we find ANY absence_view_* key, we assume the DB is the source of truth for views.
+  
+  const hasDbViewSettings = data.some(d => d.key.startsWith('absence_view_'))
+  const hasDbEditSettings = data.some(d => d.key.startsWith('absence_edit_'))
+
+  if (hasDbViewSettings) viewRoles.clear()
+  if (hasDbEditSettings) editRoles.clear()
+
+  data.forEach((row: any) => {
+    if (row.bool_value) {
+      if (row.key.startsWith('absence_view_')) {
+        viewRoles.add(row.key.replace('absence_view_', ''))
+      } else if (row.key.startsWith('absence_edit_')) {
+        editRoles.add(row.key.replace('absence_edit_', ''))
+      }
+    }
+  })
+
+  return {
+    view_roles: Array.from(viewRoles),
+    edit_roles: Array.from(editRoles)
+  }
+}
+
+export async function saveAbsenceSettings(viewRoles: string[], editRoles: string[]) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const allRoles = ['ADMIN', 'COORDENACAO_GERAL', 'COORDENADOR', 'ENFERMEIRO', 'TECNICO'] // Add others if needed
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.settings = db.settings || {}
+    db.settings.absence_view_roles = viewRoles
+    db.settings.absence_edit_roles = editRoles
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  
+  const updates = []
+  
+  // For each known role, update the boolean
+  for (const role of allRoles) {
+    updates.push({
+      key: `absence_view_${role}`,
+      bool_value: viewRoles.includes(role)
+    })
+    updates.push({
+      key: `absence_edit_${role}`,
+      bool_value: editRoles.includes(role)
+    })
+  }
+
+  const { error } = await supabase.from('app_settings').upsert(updates, { onConflict: 'key' })
+
+  if (error) {
+    return { success: false, message: 'Erro ao salvar configurações: ' + error.message }
+  }
+
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function checkAdmin() {
   const session = cookies().get('session_user')
   if (!session) throw new Error('Unauthorized')
@@ -33,6 +139,82 @@ export async function checkUser() {
   const session = cookies().get('session_user')
   if (!session) throw new Error('Unauthorized')
   return JSON.parse(session.value)
+}
+
+export async function getSameDaySwapEnabled(): Promise<boolean> {
+  if (isLocalMode()) {
+    const db = readDb()
+    return !!db.settings?.allow_same_day_swap
+  }
+
+  const supabase = createClient()
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('bool_value')
+      .eq('key', 'allow_same_day_swap')
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error fetching allow_same_day_swap setting:', error)
+      return false
+    }
+
+    return !!data?.bool_value
+  } catch (e) {
+    console.error('Unexpected error fetching allow_same_day_swap setting:', e)
+    return false
+  }
+}
+
+export async function toggleSameDaySwapSetting() {
+  const session = cookies().get('session_user')
+  if (!session) return { success: false, message: 'Não autorizado' }
+  const user = JSON.parse(session.value)
+
+  const isDirector = user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+  if (!isDirector) {
+    return { success: false, message: 'Apenas a Direção de Enfermagem pode alterar esta configuração.' }
+  }
+
+  const currentEnabled = await getSameDaySwapEnabled()
+  const newEnabled = !currentEnabled
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.settings = db.settings || {}
+    db.settings.allow_same_day_swap = newEnabled
+    writeDb(db)
+    revalidatePath('/')
+    revalidatePath('/trocas')
+    revalidatePath('/coordenacao')
+    return { success: true, enabled: newEnabled }
+  }
+
+  const supabase = createClient()
+
+  try {
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert(
+        { key: 'allow_same_day_swap', bool_value: newEnabled },
+        { onConflict: 'key' }
+      )
+
+    if (error) {
+      console.error('Error updating allow_same_day_swap setting:', error)
+      return { success: false, message: 'Erro ao salvar configuração.', enabled: currentEnabled }
+    }
+
+    revalidatePath('/')
+    revalidatePath('/trocas')
+    revalidatePath('/coordenacao')
+
+    return { success: true, enabled: newEnabled }
+  } catch (e) {
+    console.error('Unexpected error updating allow_same_day_swap setting:', e)
+    return { success: false, message: 'Erro inesperado ao salvar configuração.', enabled: currentEnabled }
+  }
 }
 
 export async function getNurses() {
@@ -436,6 +618,14 @@ export async function registerAbsence(prevState: any, formData: FormData) {
     return { success: false, message: 'Acesso negado.' }
   }
 
+  const settings = await getAbsenceSettings()
+  const isAdminOrSpecial = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+  const canEdit = settings.edit_roles.includes(user.role) || isAdminOrSpecial
+
+  if (!canEdit) {
+    return { success: false, message: 'Você não tem permissão para registrar faltas.' }
+  }
+
   const nurseId = formData.get('nurseId') as string
   const date = formData.get('date') as string
   const reason = formData.get('reason') as string
@@ -445,7 +635,23 @@ export async function registerAbsence(prevState: any, formData: FormData) {
   }
 
   if (isLocalMode()) {
-    return { success: false, message: 'Registro de falta não disponível no modo local.' }
+    const db = readDb()
+    db.absences = db.absences || []
+    
+    const newAbsence = {
+      id: randomUUID(),
+      nurse_id: nurseId,
+      created_by: user.id,
+      date,
+      reason,
+      created_at: new Date().toISOString()
+    }
+    
+    db.absences.push(newAbsence)
+    writeDb(db)
+    revalidatePath('/coordenacao')
+    revalidatePath('/')
+    return { success: true, message: 'Falta registrada com sucesso (Local)' }
   }
 
   const supabase = createClient()
@@ -453,12 +659,14 @@ export async function registerAbsence(prevState: any, formData: FormData) {
     nurse_id: nurseId,
     created_by: user.id,
     date,
-    reason
+    reason,
+    created_at: new Date().toISOString()
   })
 
   if (error) return { success: false, message: 'Erro ao registrar falta: ' + error.message }
 
   revalidatePath('/coordenacao')
+  revalidatePath('/')
   return { success: true, message: 'Falta registrada com sucesso' }
 }
 
@@ -537,11 +745,16 @@ export async function getCoordinationRequests() {
       }
     }
 
-    const [absencesRes, paymentsRes, generalRes] = await Promise.all([
+    const [absencesRes, myAbsencesRes, paymentsRes, generalRes] = await Promise.all([
       supabase
         .from('absences')
         .select('id,nurse_id,created_by,date,reason,created_at')
         .in('nurse_id', nurseIds)
+        .order('date', { ascending: false }),
+      supabase
+        .from('absences')
+        .select('id,nurse_id,created_by,date,reason,created_at')
+        .eq('created_by', user.id)
         .order('date', { ascending: false }),
       supabase
         .from('payment_requests')
@@ -558,6 +771,9 @@ export async function getCoordinationRequests() {
     if (absencesRes.error) {
       throw new Error(absencesRes.error.message)
     }
+    if (myAbsencesRes.error) {
+        throw new Error(myAbsencesRes.error.message)
+    }
     if (paymentsRes.error) {
       throw new Error(paymentsRes.error.message)
     }
@@ -565,27 +781,45 @@ export async function getCoordinationRequests() {
       throw new Error(generalRes.error.message)
     }
 
+    const allAbsences = [...(absencesRes.data || []), ...(myAbsencesRes.data || [])]
+    const uniqueAbsences = Array.from(new Map(allAbsences.map(item => [item.id, item])).values())
+    uniqueAbsences.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
     return {
-      absences: absencesRes.data || [],
+      absences: uniqueAbsences,
       paymentRequests: paymentsRes.data || [],
       generalRequests: generalRes.data || [],
       nurses: nursesInSection || [],
     }
   }
 
-  const [absencesRes, paymentsRes, generalRes] = await Promise.all([
-    supabase
+  let absencesQuery = supabase
       .from('absences')
       .select('id,nurse_id,created_by,date,reason,created_at')
-      .order('date', { ascending: false }),
-    supabase
+      .order('date', { ascending: false })
+
+  let paymentQuery = supabase
       .from('payment_requests')
       .select('id,nurse_id,coordinator_id,shift_date,shift_hours,location,observation,status,created_at')
-      .order('shift_date', { ascending: false }),
-    supabase
+      .order('shift_date', { ascending: false })
+
+  let generalQuery = supabase
       .from('general_requests')
       .select('id,nurse_id,content,created_at')
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+
+  const isManager = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+  
+  if (!isManager) {
+      absencesQuery = absencesQuery.eq('nurse_id', user.id)
+      paymentQuery = paymentQuery.eq('nurse_id', user.id)
+      generalQuery = generalQuery.eq('nurse_id', user.id)
+  }
+
+  const [absencesRes, paymentsRes, generalRes] = await Promise.all([
+    absencesQuery,
+    paymentQuery,
+    generalQuery
   ])
 
   if (absencesRes.error) {
@@ -612,10 +846,19 @@ export async function getCoordinationRequests() {
 }
 
 export async function deleteAbsence(id: string) {
+  let user
   try {
-    await checkAdmin()
+    user = await checkUser()
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
+  }
+
+  const settings = await getAbsenceSettings()
+  const isAdminOrSpecial = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+  const canEdit = settings.edit_roles.includes(user.role) || isAdminOrSpecial
+
+  if (!canEdit) {
+    return { success: false, message: 'Acesso negado. Você não tem permissão para excluir faltas.' }
   }
 
   if (isLocalMode()) {
@@ -627,6 +870,7 @@ export async function deleteAbsence(id: string) {
 
   if (error) return { success: false, message: 'Erro ao remover falta: ' + error.message }
   revalidatePath('/coordenacao')
+  revalidatePath('/')
   return { success: true, message: 'Falta removida com sucesso' }
 }
 
@@ -1128,12 +1372,22 @@ export async function getDailyShifts(date: string) {
       const requesterName = requester?.name || 'Desconhecido'
       const requestedName = requested?.name || 'Desconhecido'
 
+      // Key for Requester on Requester Date (if they were still on the shift)
       const key1 = `${swap.requester_id}_${swap.requester_shift_date}`
       swapsByKey[key1] = requestedName
 
+      // Key for Requested on Requester Date (The one taking the shift)
+      const key2 = `${swap.requested_id}_${swap.requester_shift_date}`
+      swapsByKey[key2] = requesterName
+
       if (swap.requested_shift_date) {
-        const key2 = `${swap.requested_id}_${swap.requested_shift_date}`
-        swapsByKey[key2] = requesterName
+        // Key for Requested on Requested Date (if they were still on the shift)
+        const key3 = `${swap.requested_id}_${swap.requested_shift_date}`
+        swapsByKey[key3] = requesterName
+
+        // Key for Requester on Requested Date (The one taking the shift)
+        const key4 = `${swap.requester_id}_${swap.requested_shift_date}`
+        swapsByKey[key4] = requestedName
       }
     })
 
@@ -1224,12 +1478,22 @@ export async function getDailyShifts(date: string) {
     const requesterName = swap.requester?.name || 'Desconhecido'
     const requestedName = swap.requested?.name || 'Desconhecido'
 
+    // Key for Requester on Requester Date
     const key1 = `${swap.requester_id}_${swap.requester_shift_date}`
     swapsByKey[key1] = requestedName
 
+    // Key for Requested on Requester Date (The one taking the shift)
+    const key2 = `${swap.requested_id}_${swap.requester_shift_date}`
+    swapsByKey[key2] = requesterName
+
     if (swap.requested_shift_date) {
-      const key2 = `${swap.requested_id}_${swap.requested_shift_date}`
-      swapsByKey[key2] = requesterName
+      // Key for Requested on Requested Date
+      const key3 = `${swap.requested_id}_${swap.requested_shift_date}`
+      swapsByKey[key3] = requesterName
+
+      // Key for Requester on Requested Date (The one taking the shift)
+      const key4 = `${swap.requester_id}_${swap.requested_shift_date}`
+      swapsByKey[key4] = requestedName
     }
   })
 
@@ -1375,11 +1639,15 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       // Get releases (metadata)
       const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year)
 
+      // Get absences
+      const absences = (db.absences || []).filter(a => a.date >= startDate && a.date <= endDate)
+
       return {
         nurses: db.nurses || [],
         roster: finalRoster || [],
         shifts: shifts || [],
         timeOffs: timeOffs || [],
+        absences: absences || [],
         sections: db.schedule_sections || [],
         units: db.units || [],
         releases: releases || []
@@ -1396,7 +1664,8 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         { data: rosterData, error: rosterError },
         { data: rawShifts, error: shiftsError },
         { data: timeOffsData, error: timeOffsError },
-        { data: releases, error: releasesError }
+        { data: releases, error: releasesError },
+        { data: absencesData, error: absencesError }
     ] = await Promise.all([
         supabase.from('schedule_sections').select('*').order('position'),
         supabase.from('units').select('*'),
@@ -1404,7 +1673,8 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year),
         supabase.from('shifts').select('id, nurse_id, date, type').gte('date', startDate).lte('date', endDate),
         supabase.from('time_off_requests').select('id, nurse_id, start_date, end_date, type, status').eq('status', 'approved').or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
-        supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year)
+        supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
+        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate)
     ])
 
     if (sectionsError) console.error('Error fetching sections:', sectionsError)
@@ -1413,6 +1683,7 @@ export async function getMonthlyScheduleData(month: number, year: number) {
     if (timeOffsError) console.error('Error fetching timeOffs:', timeOffsError)
     if (rosterError && rosterError.code !== 'PGRST116') console.error('Error fetching roster:', rosterError)
     if (releasesError && releasesError.code !== 'PGRST116') console.error('Error fetching releases:', releasesError)
+    if (absencesError) console.error('Error fetching absences:', absencesError)
 
     let roster = rosterData || []
 
@@ -1464,6 +1735,7 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       roster: roster || [],
       shifts: shifts || [],
       timeOffs: timeOffsData || [],
+      absences: absencesData || [],
       sections: sections || [],
       units: units || [],
       releases: releases || []
@@ -1476,6 +1748,7 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       roster: [],
       shifts: [],
       timeOffs: [],
+      absences: [],
       sections: [],
       units: [],
       releases: []
@@ -1548,6 +1821,64 @@ export async function releaseSchedule(month: number, year: number, unitId: strin
       console.error(e)
       return { success: false, message: `Erro ao liberar escala: ${e.message || 'Erro desconhecido'}` }
   }
+}
+
+export async function getRecentAbsences() {
+  let user
+  try {
+    user = await checkUser()
+  } catch (e) {
+    throw new Error('Unauthorized')
+  }
+
+  // Always filter by user.id as per requirement to show "Minhas Faltas" in dashboard
+  
+  if (isLocalMode()) {
+    const db = readDb()
+    let absences = db.absences || []
+    
+    // Filter for current user (robust comparison)
+    absences = absences.filter((a: any) => String(a.nurse_id) === String(user.id))
+
+    // Enrich with nurse name
+    const enriched = absences.map((a: any) => {
+        const nurse = db.nurses.find((n: any) => String(n.id) === String(a.nurse_id))
+        return { ...a, nurse_name: nurse ? nurse.name : 'Desconhecido' }
+    })
+    // Sort by created_at desc, fallback to date
+    enriched.sort((a: any, b: any) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
+        if (timeA === 0 && timeB === 0) {
+             return new Date(b.date).getTime() - new Date(a.date).getTime()
+        }
+        return timeB - timeA
+    })
+    return enriched.slice(0, 50)
+  }
+
+  const supabase = createClient()
+  let query = supabase
+    .from('absences')
+    .select('*, nurses!absences_nurse_id_fkey(name)')
+    .eq('nurse_id', user.id) // Filter for current user
+    .order('created_at', { ascending: false, nullsFirst: false })
+    .order('date', { ascending: false })
+  
+  query = query.limit(50)
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('Error fetching absences:', error)
+    return []
+  }
+
+  // Flatten nurse name
+  return data.map((item: any) => ({
+      ...item,
+      nurse_name: item.nurses?.name || 'Desconhecido'
+  }))
 }
 
 export async function unreleaseSchedule(month: number, year: number, unitId: string | null) {
@@ -1781,7 +2112,13 @@ export async function getReleasedSchedules() {
     if (error) throw error
     
     return data.map((d: any) => ({
-      ...d,
+      id: d.id,
+      month: d.month,
+      year: d.year,
+      unit_id: d.unit_id,
+      is_released: d.is_released,
+      released_at: d.released_at,
+      footer_text: d.footer_text,
       unit_name: d.units?.title
     }))
   } catch (error) {

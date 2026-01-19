@@ -1,4 +1,4 @@
-import { getUserDashboardData, getCoordinationRequests, getTimeOffRequests } from '@/app/actions'
+import { getUserDashboardData, getCoordinationRequests, getTimeOffRequests, getRecentAbsences, getAbsenceSettings } from '@/app/actions'
 import { getSwapRequests } from '@/app/swap-actions'
 import { redirect } from 'next/navigation'
 import AdminDailySchedule from './dashboard/AdminDailySchedule'
@@ -10,6 +10,8 @@ export default async function DashboardPage({
   searchParams?: { month?: string; year?: string }
 }) {
   const data = await getUserDashboardData()
+  const recentAbsences = await getRecentAbsences()
+  const absenceSettings = await getAbsenceSettings()
 
   if (!data) {
     redirect('/login')
@@ -134,52 +136,97 @@ export default async function DashboardPage({
          <AdminDailySchedule />
       </div>
 
+      {/* MyShifts (Moved up, Non-Coordinators only) */}
       {user.role !== 'COORDENADOR' && user.role !== 'COORDENACAO_GERAL' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Meus Plantões */}
-          <MyShifts shifts={shifts} currentUserId={user.id} />
+         <MyShifts shifts={shifts} currentUserId={user.id} />
+      )}
+
+      {/* Grid containing Recent Absences and MyTimeOffs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Recent Absences Section for Everyone (Swapped from top) */}
+          <div className="bg-white shadow rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Faltas
+                </h3>
+                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
+                  {recentAbsences.length}
+                </span>
+              </div>
+              <div className="max-h-80 overflow-auto">
+                {recentAbsences.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nenhuma falta registrada recentemente.</p>
+                ) : (
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-2 py-1 text-left font-medium text-gray-700">Servidor</th>
+                        <th className="px-2 py-1 text-left font-medium text-gray-700">Data</th>
+                        <th className="px-2 py-1 text-left font-medium text-gray-700">Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {recentAbsences.map((item: any) => (
+                        <tr key={item.id}>
+                          <td className="px-2 py-1 text-gray-900">
+                            {item.nurse_name}
+                          </td>
+                          <td className="px-2 py-1 text-gray-700">
+                            {formatDate(item.date)}
+                          </td>
+                          <td className="px-2 py-1 text-gray-500 truncate max-w-xs" title={item.reason}>
+                            {item.reason || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+          </div>
 
           {/* Minhas Folgas (or Admin Approvals) */}
-          <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                {user.isAdmin ? 'Todas as Folgas' : 'Minhas Folgas'}
-              </h2>
-              <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">{timeOffs.length}</span>
+          {user.role !== 'COORDENADOR' && user.role !== 'COORDENACAO_GERAL' && (
+            <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                    <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {user.isAdmin ? 'Todas as Folgas' : 'Minhas Folgas'}
+                  </h2>
+                  <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">{timeOffs.length}</span>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto max-h-96">
+                  {timeOffs.length === 0 ? (
+                    <p className="text-gray-500 text-sm text-center py-4">Nenhuma solicitação.</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {timeOffs.map((req: any) => (
+                        <li key={req.id} className="border-b border-gray-100 pb-2 last:border-0">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              {user.isAdmin && (
+                                  <p className="text-xs font-bold text-indigo-600 mb-0.5">{req.nurse_name}</p>
+                              )}
+                              <p className="text-sm font-medium text-gray-800">
+                                {formatDate(req.start_date)} {req.end_date && req.end_date !== req.start_date ? ` - ${formatDate(req.end_date)}` : ''}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">{req.reason || 'Sem motivo'}</p>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(req.status)}`}>
+                              {getStatusText(req.status)}
+                            </span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
             </div>
-            
-            <div className="flex-1 overflow-y-auto max-h-96">
-              {timeOffs.length === 0 ? (
-                <p className="text-gray-500 text-sm text-center py-4">Nenhuma solicitação.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {timeOffs.map((req: any) => (
-                    <li key={req.id} className="border-b border-gray-100 pb-2 last:border-0">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          {user.isAdmin && (
-                              <p className="text-xs font-bold text-indigo-600 mb-0.5">{req.nurse_name}</p>
-                          )}
-                          <p className="text-sm font-medium text-gray-800">
-                            {formatDate(req.start_date)} {req.end_date && req.end_date !== req.start_date ? ` - ${formatDate(req.end_date)}` : ''}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">{req.reason || 'Sem motivo'}</p>
-                        </div>
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(req.status)}`}>
-                          {getStatusText(req.status)}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+      </div>
 
       {(user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL') && (
         <div className="space-y-4">

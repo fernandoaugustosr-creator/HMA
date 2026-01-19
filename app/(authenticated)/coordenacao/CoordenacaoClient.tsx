@@ -2,7 +2,16 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useFormState } from 'react-dom'
-import { registerAbsence, requestPayment, createGeneralRequest, deleteAbsence, deletePaymentRequest, deleteGeneralRequest } from '@/app/actions'
+import AbsenceSettings from './AbsenceSettings'
+import {
+  registerAbsence,
+  requestPayment,
+  createGeneralRequest,
+  deleteAbsence,
+  deletePaymentRequest,
+  deleteGeneralRequest,
+  toggleSameDaySwapSetting,
+} from '@/app/actions'
 
 const initialState = {
   message: '',
@@ -13,24 +22,44 @@ type CoordenacaoClientProps = {
   nurses: any[]
   sectionTitle?: string
   isAdmin?: boolean
+  isDirector?: boolean
   absences?: any[]
   paymentRequests?: any[]
   generalRequests?: any[]
   initialTab?: 'falta' | 'pagamento' | 'outros'
+  sameDaySwapEnabled?: boolean
+  userRole?: string
+  absenceSettings?: {
+    view_roles: string[]
+    edit_roles: string[]
+  }
 }
 
 export default function CoordenacaoClient({
   nurses,
   sectionTitle,
   isAdmin = false,
+  isDirector = false,
   absences = [],
   paymentRequests = [],
-   generalRequests = [],
+  generalRequests = [],
   initialTab = 'falta',
+  sameDaySwapEnabled = false,
+  userRole,
+  absenceSettings,
 }: CoordenacaoClientProps) {
   const activeTab = initialTab
+  const isManager = isAdmin || userRole === 'COORDENADOR'
+  const canEditAbsence = absenceSettings 
+    ? (absenceSettings.edit_roles.includes(userRole || '') || (isAdmin && absenceSettings.edit_roles.includes('ADMIN')))
+    : isManager
+
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [location, setLocation] = useState(sectionTitle || '')
+  const [sameDayEnabled, setSameDayEnabled] = useState(sameDaySwapEnabled)
+  const [showAbsenceSettings, setShowAbsenceSettings] = useState(false)
+  const [swapToggleLoading, setSwapToggleLoading] = useState(false)
+  const [swapToggleError, setSwapToggleError] = useState<string | null>(null)
 
   const [absenceState, absenceAction] = useFormState(registerAbsence, initialState)
   const [paymentState, paymentAction] = useFormState(requestPayment, initialState)
@@ -63,6 +92,27 @@ export default function CoordenacaoClient({
       setLocation(sectionTitle)
     }
   }, [sectionTitle])
+
+  useEffect(() => {
+    setSameDayEnabled(sameDaySwapEnabled)
+  }, [sameDaySwapEnabled])
+
+  const handleToggleSameDaySwap = async () => {
+    setSwapToggleLoading(true)
+    setSwapToggleError(null)
+    try {
+      const res = await toggleSameDaySwapSetting()
+      if (!res.success) {
+        setSwapToggleError(res.message || 'Erro ao atualizar configuração.')
+      } else {
+        setSameDayEnabled(!!res.enabled)
+      }
+    } catch (e) {
+      setSwapToggleError('Erro inesperado ao atualizar configuração.')
+    } finally {
+      setSwapToggleLoading(false)
+    }
+  }
 
   const findNurseName = (id: string | null | undefined) => {
     if (!id) return '—'
@@ -111,12 +161,43 @@ export default function CoordenacaoClient({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">
-        Painel do Coordenador {sectionTitle ? `- ${sectionTitle}` : ''}
-      </h1>
+      {showAbsenceSettings && absenceSettings && (
+        <AbsenceSettings
+          initialViewRoles={absenceSettings.view_roles}
+          initialEditRoles={absenceSettings.edit_roles}
+          onClose={() => setShowAbsenceSettings(false)}
+        />
+      )}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 className="text-2xl font-bold text-gray-800">
+          Painel do Coordenador {sectionTitle ? `- ${sectionTitle}` : ''}
+        </h1>
+        {isDirector && (
+          <div className="flex flex-col items-start sm:items-end gap-1">
+            <button
+              type="button"
+              onClick={handleToggleSameDaySwap}
+              disabled={swapToggleLoading}
+              className={`px-4 py-2 text-sm font-medium rounded-md border ${
+                sameDayEnabled
+                  ? 'bg-green-600 text-white border-green-600 hover:bg-green-700'
+                  : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
+              } disabled:opacity-50`}
+            >
+              {sameDayEnabled ? 'Desativar permuta no mesmo dia' : 'Ativar permuta no mesmo dia'}
+            </button>
+            <p className="text-xs text-gray-500 max-w-xs text-left sm:text-right">
+              Apenas Direção de Enfermagem. Controla se os servidores podem solicitar permuta no mesmo dia do plantão.
+            </p>
+            {swapToggleError && (
+              <p className="text-xs text-red-600">{swapToggleError}</p>
+            )}
+          </div>
+        )}
+      </div>
       
       <div className="bg-white shadow rounded-lg p-6">
-        {activeTab === 'falta' && (
+        {activeTab === 'falta' && canEditAbsence && (
           <div>
             <h3 className="text-lg font-medium text-gray-900 mb-4">Registro de Falta</h3>
             <p className="text-gray-500 mb-4">Funcionalidade para lançar faltas de servidores.</p>
@@ -188,6 +269,8 @@ export default function CoordenacaoClient({
                     <input
                       type="date"
                       name="shiftDate"
+                      key={todayDate}
+                      defaultValue={todayDate}
                       className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                       required
                     />
@@ -293,7 +376,7 @@ export default function CoordenacaoClient({
                     <th className="px-2 py-1 text-left font-medium text-gray-700">Data</th>
                     <th className="px-2 py-1 text-left font-medium text-gray-700">Motivo</th>
                     <th className="px-2 py-1 text-left font-medium text-gray-700">Registrou</th>
-                    {isAdmin && <th className="px-2 py-1 text-right font-medium text-gray-700">Ações</th>}
+                    {canEditAbsence && <th className="px-2 py-1 text-right font-medium text-gray-700">Ações</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -311,7 +394,7 @@ export default function CoordenacaoClient({
                       <td className="px-2 py-1 text-gray-700">
                         {findNurseName(item.created_by)}
                       </td>
-                      {isAdmin && (
+                      {canEditAbsence && (
                         <td className="px-2 py-1 text-right">
                           <button
                             onClick={() => handleDeleteAbsence(item.id)}

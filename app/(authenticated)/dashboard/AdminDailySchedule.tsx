@@ -4,10 +4,17 @@ import { useState, useEffect } from 'react'
 import { getDailyShifts } from '@/app/actions'
 
 export default function AdminDailySchedule() {
-    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    const day = String(today.getDate()).padStart(2, '0')
+    const initialDate = `${year}-${month}-${day}`
+
+    const [selectedDate, setSelectedDate] = useState<string>(initialDate)
     const [shifts, setShifts] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [openUnits, setOpenUnits] = useState<Record<string, boolean>>({})
+    const [onlyDay, setOnlyDay] = useState(true)
 
     useEffect(() => {
         async function fetchShifts() {
@@ -38,7 +45,9 @@ export default function AdminDailySchedule() {
         }
     }
 
-    const dayShifts = shifts.filter((shift: any) => shift.shift_type === 'day' || shift.shift_type === 'mt')
+    const dayShifts = onlyDay 
+        ? shifts.filter((shift: any) => shift.shift_type === 'day' || shift.shift_type === 'mt')
+        : shifts
 
     // Agrupar plantões por setor (Unit)
     const groupedShifts = dayShifts.reduce((acc: any, shift: any) => {
@@ -68,12 +77,23 @@ export default function AdminDailySchedule() {
     return (
         <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
             <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    Plantões do Dia
-                </h2>
+                <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        PLANTONISTAS DO DIA CONFORME ESCALA OU PERMULTAS
+                    </h2>
+                    <label className="flex items-center gap-1 text-xs text-gray-600">
+                        <input
+                            type="checkbox"
+                            checked={onlyDay}
+                            onChange={(e) => setOnlyDay(e.target.checked)}
+                            className="h-3 w-3"
+                        />
+                        Somente dia
+                    </label>
+                </div>
                 <input 
                     type="date" 
                     value={selectedDate}
@@ -100,11 +120,8 @@ export default function AdminDailySchedule() {
                                         className="w-full flex items-center justify-between text-sm font-bold text-gray-700 bg-gray-50 px-3 py-2 rounded-t-md border-l-4 border-indigo-500"
                                     >
                                         <span>{unit}</span>
-                                        <span className="flex items-center gap-2 text-xs text-gray-500">
-                                            <span className="bg-gray-200 px-2 py-0.5 rounded-full font-semibold">
-                                                {count} prof.
-                                            </span>
-                                            <span>{isOpen ? '▲' : '▼'}</span>
+                                        <span className="text-xs text-gray-500">
+                                            {isOpen ? '▲' : '▼'}
                                         </span>
                                     </button>
                                     {isOpen && (
@@ -119,7 +136,7 @@ export default function AdminDailySchedule() {
                                                             </p>
                                                             {shift.swap_with_name && (
                                                                 <p className="text-xs text-orange-600 font-semibold">
-                                                                    Permuta com {shift.swap_with_name}
+                                                                    Permutado com {shift.swap_with_name}
                                                                 </p>
                                                             )}
                                                         </div>

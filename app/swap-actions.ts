@@ -4,12 +4,14 @@ import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase'
 import { readDb, writeDb, isLocalMode } from '@/lib/local-db'
+import { getSameDaySwapEnabled } from '@/app/actions'
 import { randomUUID } from 'crypto'
 
 export async function getSwapRequests() {
   const session = cookies().get('session_user')
   if (!session) return []
   const user = JSON.parse(session.value)
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
     const db = readDb()
@@ -23,7 +25,7 @@ export async function getSwapRequests() {
     })).filter((swap: any) => 
       swap.requester_id === user.id || 
       swap.requested_id === user.id || 
-      user.role === 'ADMIN'
+      isAdmin
     )
   }
 
@@ -39,7 +41,7 @@ export async function getSwapRequests() {
     `)
     .order('created_at', { ascending: false })
 
-  if (user.role !== 'ADMIN') {
+  if (!isAdmin) {
     query = query.or(`requester_id.eq.${user.id},requested_id.eq.${user.id}`)
   }
 
@@ -109,14 +111,85 @@ export async function createSwapRequest(formData: FormData) {
     return { success: false, message: 'Dados incompletos: selecione enfermeiro e ambas as datas' }
   }
 
+  // 1. Role validation (Same Role Only)
+  if (isLocalMode()) {
+    const db = readDb()
+    const targetNurse = db.nurses.find((n: any) => n.id === requested_id)
+    if (targetNurse && targetNurse.role !== user.role) {
+       // Allow exceptions for admins? User said "trocas só é permitida entre tecnicos e tecnicos e enfermeiros e enfermeiros".
+       // Assuming strict role match for the requester and requested.
+       // However, user.role might be 'COORDENADOR' but acting as nurse. 
+       // Usually Coordinator is a Nurse.
+       // Let's stick to the requested rule literally first.
+       // But wait, if I am a Coordinator (Nurse), can I swap with a Nurse?
+       // Usually yes. But the user said "tecnicos e tecnicos e enfermeiros e enfermeiros".
+       // I'll check if roles match exactly.
+       if (user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL' || user.role === 'ADMIN') {
+           // Admins might be able to swap with anyone or just override?
+           // The prompt says "as trocas só é permitida entre...".
+           // I'll assume this restriction applies to the *creation* of the swap by the user.
+           // If admin is creating, maybe they can do whatever.
+           // But let's enforce it generally for now, unless admin bypass logic exists.
+           // Existing bypass logic is for DATE.
+       }
+       
+       // Refined logic:
+       // If user is 'TECNICO', target must be 'TECNICO'.
+       // If user is 'ENFERMEIRO', target must be 'ENFERMEIRO' (or 'COORDENADOR' if they are nurses?).
+       // Simplest interpretation: strict string equality or compatible groups.
+       
+       // Let's use a helper to normalize roles if needed, but for now strict check.
+       // If user is ADMIN/COORD, they might not have a "clinical" role defined in the same way.
+       // But usually they do.
+       
+       const isUserNurse = user.role === 'ENFERMEIRO' || user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL'
+       const isTargetNurse = targetNurse.role === 'ENFERMEIRO' || targetNurse.role === 'COORDENADOR' || targetNurse.role === 'COORDENACAO_GERAL'
+       
+       const isUserTech = user.role === 'TECNICO'
+       const isTargetTech = targetNurse.role === 'TECNICO'
+       
+       if ((isUserNurse && !isTargetNurse) || (isUserTech && !isTargetTech)) {
+           return { success: false, message: 'Permutas permitidas apenas entre profissionais do mesmo cargo (Enfermeiro x Enfermeiro, Técnico x Técnico).' }
+       }
+    }
+  } else {
+      const supabase = createClient()
+      const { data: targetNurse } = await supabase.from('nurses').select('role').eq('id', requested_id).single()
+      
+      if (targetNurse) {
+       const isUserNurse = user.role === 'ENFERMEIRO' || user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL'
+       const isTargetNurse = targetNurse.role === 'ENFERMEIRO' || targetNurse.role === 'COORDENADOR' || targetNurse.role === 'COORDENACAO_GERAL'
+       
+       const isUserTech = user.role === 'TECNICO'
+       const isTargetTech = targetNurse.role === 'TECNICO'
+       
+       if ((isUserNurse && !isTargetNurse) || (isUserTech && !isTargetTech)) {
+           return { success: false, message: 'Permutas permitidas apenas entre profissionais do mesmo cargo (Enfermeiro x Enfermeiro, Técnico x Técnico).' }
+       }
+      }
+  }
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const requesterDateObj = new Date((requester_shift_date || '') + 'T12:00:00')
+  // Fix: use T00:00:00 to ensure local midnight comparison
+  const requesterDateObj = new Date((requester_shift_date || '') + 'T00:00:00')
   const diffMs = requesterDateObj.getTime() - today.getTime()
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+  const canBypassDateRules =
+    user.role === 'COORDENADOR' ||
+    user.role === 'COORDENACAO_GERAL' ||
+    user.role === 'ADMIN' ||
+    user.cpf === '02170025367'
 
-  if (isNaN(diffDays) || diffDays !== 1) {
-    return { success: false, message: 'Permuta só pode ser solicitada no dia anterior ao plantão.' }
+  if (!canBypassDateRules) {
+    // "sempre 24h antes do plantão" implies strict future validation (diffDays >= 1)
+    // Same day (0) or past (<0) are blocked for regular users
+    if (isNaN(diffDays) || diffDays < 1) {
+      return {
+        success: false,
+        message: 'Permutas só podem ser cadastradas com 24h de antecedência (dia anterior ao plantão). Para exceções, procure a coordenação.'
+      }
+    }
   }
 
   if (isLocalMode()) {
@@ -197,6 +270,7 @@ export async function approveSwapRequest(swapId: string) {
   const session = cookies().get('session_user')
   if (!session) return { success: false, message: 'Não autorizado' }
   const user = JSON.parse(session.value)
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
     const db = readDb()
@@ -206,7 +280,7 @@ export async function approveSwapRequest(swapId: string) {
     const swap = db.shift_swaps[swapIndex]
     
     // Verify permission (must be the requested user or admin)
-    if (swap.requested_id !== user.id && user.role !== 'ADMIN') {
+    if (swap.requested_id !== user.id && !isAdmin) {
       return { success: false, message: 'Sem permissão para aprovar' }
     }
 
@@ -243,7 +317,7 @@ export async function approveSwapRequest(swapId: string) {
   if (fetchError || !swap) return { success: false, message: 'Solicitação não encontrada' }
 
   // 2. Verify permission
-  if (swap.requested_id !== user.id && user.role !== 'ADMIN') {
+  if (swap.requested_id !== user.id && !isAdmin) {
     return { success: false, message: 'Sem permissão para aprovar' }
   }
 
@@ -290,6 +364,7 @@ export async function rejectSwapRequest(swapId: string) {
   const session = cookies().get('session_user')
   if (!session) return { success: false, message: 'Não autorizado' }
   const user = JSON.parse(session.value)
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
     const db = readDb()
@@ -297,7 +372,7 @@ export async function rejectSwapRequest(swapId: string) {
     if (swapIndex === -1) return { success: false, message: 'Solicitação não encontrada' }
     
     const swap = db.shift_swaps[swapIndex]
-    if (swap.requested_id !== user.id && user.role !== 'ADMIN') {
+    if (swap.requested_id !== user.id && !isAdmin) {
       return { success: false, message: 'Sem permissão para rejeitar' }
     }
 
@@ -332,15 +407,15 @@ export async function cancelSwapRequest(id: string) {
   const session = cookies().get('session_user')
   if (!session) return { success: false, message: 'Não autorizado' }
   const user = JSON.parse(session.value)
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
     const db = readDb()
     const index = (db.shift_swaps || []).findIndex((s: any) => s.id === id)
     if (index === -1) return { success: false, message: 'Solicitação não encontrada' }
-    
-    // Only requester or admin can cancel
-    if (db.shift_swaps[index].requester_id !== user.id && user.role !== 'ADMIN') {
-        return { success: false, message: 'Você não tem permissão para cancelar esta solicitação' }
+
+    if (db.shift_swaps[index].requester_id !== user.id && !isAdmin) {
+      return { success: false, message: 'Você não tem permissão para cancelar esta solicitação' }
     }
 
     db.shift_swaps.splice(index, 1)
@@ -360,8 +435,8 @@ export async function cancelSwapRequest(id: string) {
     .single()
     
   if (!swap) return { success: false, message: 'Solicitação não encontrada' }
-  
-  if (swap.requester_id !== user.id && user.role !== 'ADMIN') {
+
+  if (swap.requester_id !== user.id && !isAdmin) {
     return { success: false, message: 'Você não tem permissão para cancelar esta solicitação' }
   }
 
@@ -373,6 +448,42 @@ export async function cancelSwapRequest(id: string) {
   if (error) return { success: false, message: error.message }
   
   revalidatePath('/trocas')
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function deleteAllHistorySwaps() {
+  const session = cookies().get('session_user')
+  if (!session) return { success: false, message: 'Não autorizado' }
+  const user = JSON.parse(session.value)
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+
+  if (!isAdmin) {
+    return { success: false, message: 'Apenas coordenação/direção pode apagar todo o histórico' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.shift_swaps = (db.shift_swaps || []).filter((s: any) => s.status === 'pending')
+    writeDb(db)
+    revalidatePath('/trocas')
+    revalidatePath('/dashboard')
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('shift_swaps')
+    .delete()
+    .neq('status', 'pending')
+
+  if (error) {
+    return { success: false, message: 'Erro ao apagar histórico de permultas' }
+  }
+
+  revalidatePath('/trocas')
+  revalidatePath('/dashboard')
   revalidatePath('/')
   return { success: true }
 }
