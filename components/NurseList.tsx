@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { deleteNurse } from '@/app/actions'
 import NurseCreationModal from './NurseCreationModal'
+import { formatRole } from '@/lib/utils'
 import { Pencil, Trash2, Plus } from 'lucide-react'
 
 export default function NurseList({ nurses, sections }: { nurses: any[], sections: any[] }) {
@@ -62,7 +63,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
               <tr key={nurse.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{nurse.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{nurse.cpf}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{nurse.role}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatRole(nurse.role)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-2">
                   <button 
                     onClick={() => handleEdit(nurse)}

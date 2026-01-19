@@ -17,6 +17,7 @@ interface NurseCreationModalProps {
 export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId, defaultUnitId, nurseToEdit, sections = [] }: NurseCreationModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [useDefaultPassword, setUseDefaultPassword] = useState(false)
 
   if (!isOpen) return null
 
@@ -161,9 +162,9 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                     defaultValue={nurseToEdit?.role || defaultRole}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 >
-                    <option value="ENFERMEIRO">Enfermeiro</option>
-                    <option value="TECNICO">Técnico</option>
-                    <option value="COORDENADOR">Coordenador</option>
+                    <option value="ENFERMEIRO">Enfermeiro(a)</option>
+                    <option value="TECNICO">Técnico de Enfermagem</option>
+                    <option value="COORDENADOR">Coordenador(a)</option>
                 </select>
             </div>
             <div>
@@ -197,9 +198,23 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
              <input 
                type="password" 
                name="password" 
-               placeholder="******"
-               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+               disabled={useDefaultPassword}
+               placeholder={useDefaultPassword ? "Usando senha padrão (123456)" : "******"}
+               className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-black ${useDefaultPassword ? 'bg-gray-100' : 'bg-white'}`}
              />
+             <div className="mt-2 flex items-center">
+                <input
+                  id="modalUseDefaultPassword"
+                  name="useDefaultPassword"
+                  type="checkbox"
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  checked={useDefaultPassword}
+                  onChange={(e) => setUseDefaultPassword(e.target.checked)}
+                />
+                <label htmlFor="modalUseDefaultPassword" className="ml-2 block text-sm text-gray-900">
+                  Usar senha padrão (123456)
+                </label>
+              </div>
           </div>
 
           <div className="flex justify-end gap-2 mt-6">

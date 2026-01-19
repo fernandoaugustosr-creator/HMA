@@ -2,7 +2,7 @@
 
 import { useFormState } from 'react-dom'
 import { createNurse } from '@/app/actions'
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
 const initialState = {
   message: '',
@@ -12,10 +12,12 @@ const initialState = {
 export default function NurseForm({ sections = [] as any[] }: { sections?: any[] }) {
   const [state, formAction] = useFormState(createNurse, initialState)
   const formRef = useRef<HTMLFormElement>(null)
+  const [useDefaultPassword, setUseDefaultPassword] = useState(false)
 
   useEffect(() => {
     if (state.success && formRef.current) {
       formRef.current.reset()
+      setUseDefaultPassword(false)
     }
   }, [state.success])
 
@@ -62,7 +64,7 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
           >
             <option value="ENFERMEIRO">Enfermeiro(a)</option>
-            <option value="TECNICO">Técnico(a) de Enfermagem</option>
+            <option value="TECNICO">Técnico de Enfermagem</option>
             <option value="COORDENADOR">Coordenador(a)</option>
           </select>
         </div>
@@ -100,9 +102,23 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
             type="password"
             name="password"
             id="password"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
-            placeholder="******"
+            disabled={useDefaultPassword}
+            className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 text-black ${useDefaultPassword ? 'bg-gray-100' : 'bg-white'}`}
+            placeholder={useDefaultPassword ? "Usando senha padrão (123456)" : "******"}
           />
+          <div className="mt-2 flex items-center">
+            <input
+              id="useDefaultPassword"
+              name="useDefaultPassword"
+              type="checkbox"
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              checked={useDefaultPassword}
+              onChange={(e) => setUseDefaultPassword(e.target.checked)}
+            />
+            <label htmlFor="useDefaultPassword" className="ml-2 block text-sm text-gray-900">
+              Usar senha padrão (123456)
+            </label>
+          </div>
       </div>
       
       {state.message && (

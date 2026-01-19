@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { formatRole } from '@/lib/utils'
 import { assignNurseToSection } from '@/app/actions'
 import { Search, Plus } from 'lucide-react'
 
@@ -87,7 +88,7 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
                                     <div>
                                         <p className="font-medium text-gray-800 text-sm">{nurse.name}</p>
                                         <p className="text-xs text-gray-500">
-                                            {nurse.role} • COREN: {nurse.coren || '-'}
+                                            {formatRole(nurse.role)} • COREN: {nurse.coren || '-'}
                                         </p>
                                         {nurse.section_id && (
                                             <p className="text-[10px] text-orange-600 bg-orange-50 inline-block px-1 rounded mt-0.5 border border-orange-100">
