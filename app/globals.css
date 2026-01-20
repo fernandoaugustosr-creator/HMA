@@ -76,11 +76,26 @@ html, body {
 @media print {
   @page {
     size: landscape;
-    margin: 5mm;
+    margin: 0;
+  }
+
+  html, body {
+    background-color: #ffffff !important;
+    background-image: none !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important; /* Force single page if content fits */
+  }
+
+  /* Force layout backgrounds to white */
+  .bg-gray-100, .min-h-screen {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
   }
 
   body {
-    background: white;
     color: black;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -124,6 +139,10 @@ html, body {
   .schedule-root {
     transform: none !important;
     width: 100% !important;
+  }
+
+  .sticky {
+    position: static !important;
   }
 
   .print-schedule-root {

@@ -21,6 +21,7 @@ interface Nurse {
   observation?: string
   sector?: string
   list_order?: number | null
+  unique_key?: string
 }
 
 interface RosterItem {
@@ -113,14 +114,17 @@ const ObservationCell = ({
   }
 
   return (
-    <input 
-      type="text" 
-      className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold ${colorClass} ${className}`}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={handleBlur}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-    />
+    <>
+      <input 
+        type="text" 
+        className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold ${colorClass} ${className} print:hidden`}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      />
+      <span className={`text-[10px] uppercase hidden print:block font-bold ${colorClass} ${className}`}>{value}</span>
+    </>
   )
 }
 
@@ -167,12 +171,13 @@ const SectorCell = ({
     <div className="relative group w-full h-full">
         <input 
           type="text" 
-          className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold text-black w-full h-full ${className}`}
+          className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold text-black w-full h-full ${className} print:hidden`}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
         />
+        <span className={`text-[10px] uppercase hidden print:block font-bold text-black w-full h-full ${className}`}>{value}</span>
         {onCopyDown && value && (
             <button
                 onClick={(e) => {
@@ -180,7 +185,7 @@ const SectorCell = ({
                     e.stopPropagation()
                     onCopyDown(value)
                 }}
-                className="absolute right-0 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center justify-center bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-full w-4 h-4 z-20 shadow-sm border border-blue-200"
+                className="absolute right-0 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center justify-center bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-full w-4 h-4 z-20 shadow-sm border border-blue-200 no-print"
                 title="Replicar para todos abaixo"
                 tabIndex={-1}
             >
@@ -250,7 +255,6 @@ export default function Schedule({
   // Sector Title Editing State
   const [editingSectorTitleId, setEditingSectorTitleId] = useState<string | null>(null)
   const [tempSectorTitle, setTempSectorTitle] = useState('')
-  const [hiddenSectorColumns, setHiddenSectorColumns] = useState<string[]>([])
 
   // Logo Upload State
   const [logoTimestamp, setLogoTimestamp] = useState(Date.now())
@@ -267,6 +271,9 @@ export default function Schedule({
       value: string,
       targets: { id: string, group: number }[]
   } | null>(null)
+
+  // SQL Instruction Modal
+  const [showSqlModal, setShowSqlModal] = useState(false)
 
   const handleExecuteReplication = async (targetGroup: number) => {
       if (!replicationData) return
@@ -390,7 +397,31 @@ export default function Schedule({
   }, [data.roster, selectedUnitId, selectedMonth, selectedYear])
 
   const visibleSections = React.useMemo(() => {
-      return data.sections.filter(s => rosterSections.has(s.id) || manuallyAddedSections.includes(s.id))
+      // Identify sections that are in manuallyAddedSections
+      const manualIds = new Set(manuallyAddedSections)
+
+      // 1. Sections that are in roster BUT NOT manually added in this session
+      // These should follow data.sections order (DB position), but we enforce ENFERMEIROS first for consistency
+      const standardSections = data.sections
+        .filter(s => rosterSections.has(s.id) && !manualIds.has(s.id))
+        .sort((a, b) => {
+             const titleA = a.title.toUpperCase()
+             const titleB = b.title.toUpperCase()
+             
+             // Enforce ENFERMEIROS before TÉCNICOS
+             if (titleA.includes('ENFERMEIRO') && !titleB.includes('ENFERMEIRO')) return -1
+             if (titleB.includes('ENFERMEIRO') && !titleA.includes('ENFERMEIRO')) return 1
+             
+             return 0 // Keep existing order for others
+        })
+      
+      // 2. Sections that are manually added (whether in roster or not)
+      // These should follow manuallyAddedSections order
+      const manualSections = manuallyAddedSections
+          .map(id => data.sections.find(s => s.id === id))
+          .filter((s): s is typeof data.sections[0] => !!s)
+          
+      return [...standardSections, ...manualSections]
   }, [data.sections, rosterSections, manuallyAddedSections])
 
 
@@ -564,7 +595,8 @@ export default function Schedule({
     await removeNurseFromRoster(oldId, selectedMonth + 1, selectedYear)
     
     // 3. Add new (using same section and unit), preserving created_at if possible or using old one
-    await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear, rosterItem.observation, rosterItem.created_at)
+    const allowDuplicate = (rosterItem.observation || '').includes('ED')
+    await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear, rosterItem.observation, rosterItem.created_at, allowDuplicate)
     
     clearCache()
     await fetchData(true)
@@ -750,14 +782,21 @@ export default function Schedule({
     const { nurseId, sectionId } = doubleShiftModal
     setDoubleShiftModal(null)
     
+    // Check if it is a Double Shift assignment (ED)
+    const allowDuplicate = observation.includes('ED')
+
     setLoading(true)
     try {
-        const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear, observation)
+        const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear, observation, undefined, allowDuplicate)
         if (res.success) {
             clearCache()
             await fetchData(true)
         } else {
-            alert('Erro ao adicionar: ' + res.message)
+            if (res.message && res.message.includes('script V11')) {
+                setShowSqlModal(true)
+            } else {
+                alert('Erro ao adicionar: ' + res.message)
+            }
         }
     } catch (error) {
         console.error(error)
@@ -889,32 +928,44 @@ export default function Schedule({
   }), [daysInMonth, selectedYear, selectedMonth])
 
   // Optimize roster lookup for O(1) access
-  const rosterLookup = React.useMemo(() => {
-      const lookup: Record<string, any> = {}
+  const rosterMap = React.useMemo(() => {
+      const map: Record<string, any[]> = {}
       if (data.roster) {
           data.roster.forEach(r => {
               if (r.month === selectedMonth + 1 && r.year === selectedYear) {
-                  lookup[r.nurse_id] = r
+                  if (!map[r.nurse_id]) map[r.nurse_id] = []
+                  map[r.nurse_id].push(r)
               }
           })
       }
-      return lookup
+      return map
   }, [data.roster, selectedMonth, selectedYear])
 
   const activeNurses = React.useMemo(() => {
-      return data.nurses.map(nurse => {
-          const rosterEntry = rosterLookup[nurse.id]
-          if (rosterEntry) {
-              return { ...nurse, section_id: rosterEntry.section_id, unit_id: rosterEntry.unit_id, is_rostered: true, roster_created_at: rosterEntry.created_at, observation: rosterEntry.observation, sector: rosterEntry.sector }
+      return data.nurses.flatMap(nurse => {
+          const rosterEntries = rosterMap[nurse.id]
+          if (rosterEntries && rosterEntries.length > 0) {
+              return rosterEntries.map(entry => ({
+                  ...nurse,
+                  unique_key: entry.id, // Use roster entry ID as unique key
+                  section_id: entry.section_id,
+                  unit_id: entry.unit_id,
+                  is_rostered: true,
+                  roster_created_at: entry.created_at,
+                  observation: entry.observation,
+                  sector: entry.sector,
+                  list_order: entry.list_order
+              }))
           }
-          return { ...nurse, is_rostered: false }
+          return [{ ...nurse, unique_key: nurse.id, is_rostered: false }]
       })
-  }, [data.nurses, rosterLookup])
+  }, [data.nurses, rosterMap])
 
   // Optimize: Pre-sort nurses to avoid sorting on every render in the dropdown
-  const sortedActiveNurses = React.useMemo(() => {
-      return [...activeNurses].sort((a, b) => a.name.localeCompare(b.name))
-  }, [activeNurses])
+  // Use data.nurses directly to ensure unique entries in dropdown
+  const sortedUniqueNurses = React.useMemo(() => {
+      return [...data.nurses].sort((a, b) => a.name.localeCompare(b.name))
+  }, [data.nurses])
 
   // Optimize: Group nurses by section to avoid filtering on every render
   const nursesBySection = React.useMemo(() => {
@@ -927,9 +978,19 @@ export default function Schedule({
       })
       Object.keys(grouped).forEach(key => {
           grouped[key].sort((a, b) => {
+              // Primary sort: created_at (to maintain stability regardless of numbering)
               const aTime = a.roster_created_at ? new Date(a.roster_created_at).getTime() : 0
               const bTime = b.roster_created_at ? new Date(b.roster_created_at).getTime() : 0
-              return aTime - bTime
+              if (aTime !== bTime) {
+                  return aTime - bTime
+              }
+
+              // Secondary sort: name
+              const nameCompare = a.name.localeCompare(b.name)
+              if (nameCompare !== 0) return nameCompare
+
+              // Tertiary sort: unique_key (Roster ID) for absolute stability
+              return (a.unique_key || '').localeCompare(b.unique_key || '')
           })
       })
       return grouped
@@ -1011,7 +1072,7 @@ export default function Schedule({
     const map = new Map<string, number>();
     (data.roster || []).forEach(r => {
       if (r.month === selectedMonth + 1 && r.year === selectedYear && r.list_order !== null && r.list_order !== undefined) {
-        map.set(r.nurse_id, r.list_order);
+        map.set(r.id, r.list_order);
       }
     });
     return map;
@@ -1032,14 +1093,28 @@ export default function Schedule({
         index: i,
         firstDay: getFirstShiftDay(p.id),
         isTecnico: (p.role || '').toUpperCase() === 'TECNICO',
-        listOrder: nurseOrderMap.get(p.id)
+        listOrder: nurseOrderMap.get(p.unique_key || '')
     }))
 
     const professionalsWithRowNumber = sortedProfessionals.map((p, index) => {
+      // Handle "Magic Numbering" (groups of 10000)
+      // If listOrder > 10000, it means it's a new numbering group (e.g. 10001 = 1, 20001 = 1)
+      const rawOrder = p.listOrder
+      
+      // FIX: If listOrder is undefined (legacy data), treat as 0 or fallback to index+1
+      // If listOrder is 1, 2, 3... (legacy or low group), use it directly.
+      // If listOrder > 10000, use modulo.
+      let displayOrder = rawOrder
+      if (rawOrder && rawOrder > 10000) {
+          displayOrder = rawOrder % 10000
+          if (displayOrder === 0) displayOrder = 10000 // Edge case if base is 10000
+      }
+
       const rowNumber =
-        p.listOrder !== undefined && p.listOrder !== null
-          ? p.listOrder
+        displayOrder !== undefined && displayOrder !== null && displayOrder > 0
+          ? displayOrder
           : index + 1
+          
       const group = rowNumber
       return {
         ...p,
@@ -1078,15 +1153,19 @@ export default function Schedule({
           const displayTotal = isDiarista ? '' : totalShifts
 
           return (
-            <tr key={nurse.id} className="hover:bg-gray-50">
+            <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="hover:bg-gray-50">
               <td
                 className={`border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8 ${isAdmin ? 'cursor-pointer hover:bg-gray-100' : ''}`}
                 onClick={async () => {
                   if (!isAdmin) return
-                  const ok = confirm('Reiniciar numeração deste grupo começando em 1?')
+                  const ok = confirm('Reiniciar numeração a partir deste item (mantendo os anteriores)?')
                   if (!ok) return
                   setLoading(true)
-                  const res = await resetSectionOrder(section.id, selectedUnitId || null, selectedMonth + 1, selectedYear, nurse.id)
+                  const orderedRosterIds = orderedProfessionals.map(p => p.unique_key || '')
+                  // Pass unique_key as startRosterId to reset only from this item onwards
+                  // The backend will use orderedRosterIds to determine the subset sequence
+                  // If selectedUnitId is empty, pass 'ALL' to update all nurses in the section regardless of unit
+                  const res = await resetSectionOrder(section.id, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, nurse.unique_key, orderedRosterIds)
                   if (!res.success) {
                     alert(res.message || 'Erro ao reiniciar numeração')
                   } else {
@@ -1095,11 +1174,11 @@ export default function Schedule({
                   }
                   setLoading(false)
                 }}
-                title={isAdmin ? 'Clique para reiniciar numeração deste grupo' : undefined}
+                title={isAdmin ? 'Clique para reiniciar numeração a partir daqui' : undefined}
               >
                 {rowNumber}
               </td>
-              <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 w-[300px] border-r-2 border-r-black">
+              <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 w-[300px] print:w-[130px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
                   {isAdmin && (
                   <button 
@@ -1123,31 +1202,66 @@ export default function Schedule({
                     >
                       {data.nurses.map(n => {
                         const obs = (nurseObservations.get(n.id) || '').toUpperCase().trim()
-                        const label = `${n.name} ${obs ? `(${obs})` : ''}`
+                        const vinculo = (n.vinculo || '').toUpperCase().trim()
+                        
+                        const prefixes = []
+                        // if (obs.includes('1ED')) prefixes.push('1ED')
+                        // if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) prefixes.push('SEL')
+                        if (obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) prefixes.push('AB')
+                        
+                        let displayObs = obs
+                        if (displayObs === '1ED') displayObs = ''
+                        if (displayObs === '1 ED AB') displayObs = ''
+                        if (displayObs === 'AB') displayObs = ''
+
+                        let suffix = ''
+                        if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
+                        if (obs.includes('1ED')) suffix += ' (1ED)'
+
+                        const label = `${prefixes.join(' ')} ${n.name}${suffix} ${displayObs ? `(${displayObs})` : ''}`.trim()
                         return <option key={n.id} value={n.id}>{label}</option>
                       })}
                     </select>
                   ) : null}
-                  {!isAdmin && (() => {
+                  <div className={`${isAdmin ? 'hidden print:block' : 'block'}`}>
+                  {(() => {
                      const obs = (nurse.observation || '').toUpperCase().trim()
+                     const vinculo = (nurse.vinculo || '').toUpperCase().trim()
+                     
                      let nameColorClass = "text-black"
                      if (obs === '1ED') {
                          nameColorClass = "text-red-600"
                      } else if (obs === '1 ED AB') {
                          nameColorClass = "text-blue-600"
-                     } else if (nurse.vinculo && nurse.vinculo.toUpperCase().includes('SELETIVO')) {
+                     } else if (vinculo.includes('SELETIVO')) {
                          nameColorClass = "text-green-600"
                      }
+
+                     const prefixes = []
+                     // if (obs.includes('1ED')) prefixes.push('1ED')
+                     // if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) prefixes.push('SEL')
+                     if (obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) prefixes.push('AB')
+                     
+                     let displayObs = obs
+                     if (displayObs === '1ED') displayObs = ''
+                     if (displayObs === '1 ED AB') displayObs = ''
+                     if (displayObs === 'AB') displayObs = ''
                      
                      return <span className={`text-xs font-bold ${nameColorClass} uppercase`}>
-                         {nurse.name} {obs ? obs : ''}
+                         {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
+                         {nurse.name}
+                         {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
+                         {obs.includes('1ED') && <span className="ml-1">(1ED)</span>}
+                         {displayObs ? displayObs : ''}
                      </span>
                    })()}
+                   </div>
                 </div>
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
-              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.vinculo || '-'}</td>
-              {!hiddenSectorColumns.includes(section.id) && (
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
+                {(nurse.observation || '').includes('1ED') ? 'ESCALA DUPLA' : (nurse.vinculo === 'CONCURSO' ? 'ESCALA DUPLA' : (nurse.vinculo || '-'))}
+              </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
                   <SectorCell 
                       initialValue={nurse.sector}
@@ -1156,7 +1270,6 @@ export default function Schedule({
                       isAdmin={isAdmin}
                   />
               </td>
-              )}
               
               {daysArray.map(({ day, weekday, isWeekend }) => {
                 const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -1237,29 +1350,36 @@ export default function Schedule({
                 value=""
              >
                 <option value="" disabled>+ Adicionar Profissional...</option>
-                {sortedActiveNurses
+                {sortedUniqueNurses
                     .map(nurse => {
-                        const isInCurrentContext = nurse.is_rostered && nurse.section_id === section.id && (!selectedUnitId || nurse.unit_id === selectedUnitId);
+                        const rosterEntries = rosterMap[nurse.id] || []
+                        const isInCurrentContext = rosterEntries.some(r => r.section_id === section.id && (!selectedUnitId || r.unit_id === selectedUnitId))
                         
-                        // Find location info
-                        const nurseSection = data.sections.find(s => s.id === nurse.section_id)?.title
-                        const nurseUnit = data.units.find(u => u.id === nurse.unit_id)?.title
+                        // Construct label with location info
+                        const locations = rosterEntries.map(r => {
+                             const sTitle = data.sections.find(s => s.id === r.section_id)?.title
+                             const uTitle = data.units.find(u => u.id === r.unit_id)?.title
+                             return `${sTitle}${uTitle ? ` (${uTitle})` : ''}`
+                        }).filter(Boolean).join(', ')
 
-                        let label = `${nurse.name} ${nurse.coren ? `(${nurse.coren})` : ''}`
+                        const vinculo = (nurse.vinculo || '').toUpperCase().trim()
+                        let suffix = ''
+                        if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
+                        if (rosterEntries.some(r => r.observation?.includes('1ED'))) suffix += ' (1ED)'
+
+                        let label = `${nurse.name}${suffix} ${nurse.coren ? `(${nurse.coren})` : ''}`
                         
                         if (isInCurrentContext) {
                             label += ' (Já nesta lista)'
-                        } else {
-                            if (nurseSection) label += ` - ${nurseSection}`
-                            if (nurseUnit) label += ` (${nurseUnit})`
+                        } else if (locations) {
+                            label += ` - ${locations}`
                         }
                         
                         return (
                             <option 
                                 key={nurse.id} 
                                 value={nurse.id} 
-                                className="text-black not-italic"
-                                disabled={isInCurrentContext}
+                                className={`text-black not-italic ${isInCurrentContext ? 'font-bold text-blue-600' : ''}`}
                             >
                                 {label}
                             </option>
@@ -1270,9 +1390,7 @@ export default function Schedule({
           </td>
           <td className="border border-black px-1 py-1"></td>
           <td className="border border-black px-1 py-1"></td>
-          {!hiddenSectorColumns.includes(section.id) && (
-            <td className="border border-black px-1 py-1"></td>
-          )}
+          <td className="border border-black px-1 py-1"></td>
           {daysArray.map(({ day, isWeekend }) => (
             <td 
               key={`placeholder-${day}`} 
@@ -1328,8 +1446,9 @@ export default function Schedule({
     <div 
       className={`w-full bg-white ${printOnly ? 'p-0' : 'p-1'} schedule-root`}
     >
+      {/* Header logos removed as per request */}
       {!printOnly && (
-        <div className="hidden print:flex w-full items-center justify-between mb-1">
+        <div className="hidden print:hidden w-full items-center justify-between mb-1">
             <Image 
               src={`/logo-hma.png?t=${logoTimestamp}`} 
               alt="Logo HMA" 
@@ -1452,6 +1571,14 @@ export default function Schedule({
                 </div>
              ) : (
                 <>
+                <button 
+                    onClick={() => { clearCache(); fetchData(true) }}
+                    className="bg-white text-gray-700 border border-gray-300 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-gray-50 transition-colors h-[38px]"
+                    title="Recarregar dados da escala"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    <span className="hidden md:inline">Recarregar</span>
+                </button>
                 {isAdmin && (
                     <button 
                         onClick={() => {
@@ -1514,60 +1641,26 @@ export default function Schedule({
         </div>
       </div>
 
-      <div className="print:scale-[0.9] print:origin-top-left">
-        <div className="mb-1">
-        <div className="flex justify-between items-center mb-2 no-print">
-            <div className="flex flex-col items-start">
-                {/* Section Manager Dropdown (Replacing Logo) */}
-                <div className="flex items-center gap-4 relative">
-
-
-                    <div className="relative group cursor-pointer" onClick={() => document.getElementById('logo-upload')?.click()}>
-                        <Image 
-                            src={`/logo-hma.png?t=${logoTimestamp}`} 
-                            alt="HMA Logo" 
-                            width={200}
-                            height={64}
-                            className="h-16 object-contain w-auto" 
-                            title="Clique para alterar logo"
-                            unoptimized
-                        />
-                        <input 
-                            type="file" 
-                            id="logo-upload" 
-                            className="hidden" 
-                            accept="image/png,image/jpeg"
-                            onChange={handleLogoUpload}
-                        />
-                    </div>
-                </div>
-            </div>
-            
-            <div className="flex flex-col items-end">
-                {/* City Hall Logo Placeholder */}
-                <div className="flex items-center gap-2">
-                     <div className="relative group cursor-pointer" onClick={() => document.getElementById('city-logo-upload')?.click()}>
-                        <Image 
-                            src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
-                            alt="City Logo" 
-                            width={200}
-                            height={64}
-                            className="h-16 object-contain w-auto" 
-                            title="Clique para alterar logo"
-                            unoptimized
-                        />
-                        <input 
-                            type="file" 
-                            id="city-logo-upload" 
-                            className="hidden" 
-                            accept="image/png,image/jpeg"
-                            onChange={handleCityLogoUpload}
-                        />
-                    </div>
-                </div>
-            </div>
-        </div>
+      {/* Logo Inputs - Hidden but accessible via ID */}
+      <div className="hidden">
+        <input 
+            type="file" 
+            id="logo-upload" 
+            className="hidden" 
+            accept="image/png,image/jpeg"
+            onChange={handleLogoUpload}
+        />
+        <input 
+            type="file" 
+            id="city-logo-upload" 
+            className="hidden" 
+            accept="image/png,image/jpeg"
+            onChange={handleCityLogoUpload}
+        />
       </div>
+
+      <div className="print:bg-white bg-white">
+        <div className="mb-1"></div>
 
       <div className={`overflow-x-auto border-none shadow-none max-w-full relative ${printOnly ? 'print:overflow-visible' : ''}`}>
         {loading ? (
@@ -1582,29 +1675,65 @@ export default function Schedule({
                }
                return (
                  <>
-                 <div className="bg-blue-100 border border-black p-0.5 text-center mb-1 print:bg-blue-100 w-full">
-                   <h3 className="font-bold text-base uppercase text-black">
-                     {data.units.find(u => u.id === selectedUnitId)?.title || 'OBSERVAÇÃO - INTERNAÇÃO PRONTO-SOCORRO'}
-                   </h3>
-                 </div>
-                 <div className="bg-blue-100 border border-black p-0.5 text-center print:bg-blue-100 w-full">
-                    <h4 className="font-bold text-sm uppercase text-black">{MONTHS[selectedMonth].toUpperCase()} {selectedYear}</h4>
-                 </div>
-                 {visibleSections.map(section => (
+                 {/* Print Header Logos - Only once at top */}
+                <div className="hidden print:flex items-center justify-between mb-2 px-2 break-inside-avoid" style={{ width: '100%' }}>
+                     <div className="relative h-12 w-[150px]">
+                         <img 
+                            src={`/logo-hma.png?t=${logoTimestamp}`} 
+                            alt="HMA Logo" 
+                            className="h-full w-full object-contain"
+                         />
+                     </div>
+
+                     <div className="relative h-12 w-[150px]">
+                         <img 
+                            src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
+                            alt="City Logo" 
+                            className="h-full w-full object-contain"
+                         />
+                     </div>
+                </div>
+
+                 {visibleSections.map((section, index) => (
                     <div key={section.id}>
-                        <table className="min-w-full w-full border-collapse border border-black text-black text-[11px] print:text-[8px]">
+                       <table className="min-w-max w-full border-collapse border border-black text-black text-[9px] print:text-[8px]">
+                             <colgroup>
+                                <col className="w-8" />
+                                <col className="w-[150px]" />
+                                <col className="w-14" />
+                                <col className="w-14" />
+                                <col className="w-14" />
+                                {daysArray.map(d => <col key={d.day} className="w-4" />)}
+                                <col className="w-12" />
+                             </colgroup>
                              <thead>
-                             {/* Main Headers Row 1 */}
-                            <tr className="bg-blue-100 text-black print:bg-blue-100">
-                                <th 
-                                  className="border border-black px-1 py-1 text-center w-8 sticky left-0 bg-blue-100 z-20 font-bold print:bg-blue-100 cursor-pointer select-none"
-                                  rowSpan={2}
+                                {/* Header Row 1: Unit Title - Only for first section */}
+                                {index === 0 && selectedUnitId && (
+                                <tr className="bg-blue-100 text-black">
+                                    <th colSpan={5 + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
+                                        {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
+                                    </th>
+                                </tr>
+                                )}
+                                {/* Header Row 2: Section Title + Month/Year */}
+                                <tr className="bg-blue-100 text-black">
+                                    <th colSpan={5 + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
+                                        ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
+                                    </th>
+                                </tr>
+                                {/* Main Headers Row 3 (Columns) */}
+                                <tr className="bg-blue-100 text-black">
+                                    <th 
+                                      className="border border-black px-1 py-1 text-center sticky left-0 bg-blue-100 z-20 font-bold cursor-pointer select-none"
+                                      rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
                                     const ok = confirm('Reiniciar numeração deste grupo começando em 1?')
                                     if (!ok) return
                                     setLoading(true)
-                                    const res = await resetSectionOrder(section.id, selectedUnitId || null, selectedMonth + 1, selectedYear)
+                                    const currentNurses = (nursesBySection[section.id] || []).filter(n => !selectedUnitId || n.unit_id === selectedUnitId)
+                                    const orderedIds = currentNurses.map(n => n.unique_key || '')
+                                    const res = await resetSectionOrder(section.id, selectedUnitId || null, selectedMonth + 1, selectedYear, undefined, orderedIds)
                                     if (!res.success) {
                                       alert(res.message || 'Erro ao reiniciar numeração')
                                     } else {
@@ -1617,7 +1746,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-[220px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group print:bg-blue-100" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-[150px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center">
                                             <input 
@@ -1635,56 +1764,49 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-20 font-bold bg-blue-100 print:bg-blue-100" rowSpan={2}>COREN</th>
-                                <th className="border border-black px-1 py-1 text-center w-20 font-bold bg-blue-100 print:bg-blue-100" rowSpan={2}>VÍNCULO</th>
-                                {!hiddenSectorColumns.includes(section.id) && (
-                                <th className="border border-black px-1 py-1 text-center w-20 font-bold text-[10px] bg-blue-100 print:bg-blue-100 group relative" rowSpan={2}>
-                                    {isAdmin && (
-                                        <button 
-                                            onClick={() => setHiddenSectorColumns(prev => [...prev, section.id])}
-                                            className="absolute top-0 right-0 p-0.5 text-red-500 hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title="Ocultar coluna"
-                                        >
-                                            <X size={12} />
-                                        </button>
-                                    )}
+                                <th className="border border-black px-1 py-1 text-center w-14 font-bold bg-blue-100" rowSpan={2}>COREN</th>
+                                <th className="border border-black px-1 py-1 text-center w-14 font-bold bg-blue-100" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-1 py-1 text-center w-14 font-bold text-[10px] bg-blue-100 group relative" rowSpan={2}>
                                     {editingSectorTitleId === section.id ? (
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-1 w-full h-full">
                                             <input 
                                                 value={tempSectorTitle}
                                                 onChange={(e) => setTempSectorTitle(e.target.value)}
-                                                className="w-full text-[10px] bg-white text-black border border-gray-300 rounded px-1"
+                                                className="w-full text-[10px] bg-white text-black border border-gray-300 rounded px-1 h-full min-h-[20px]"
                                                 autoFocus
                                                 onBlur={saveSectorTitle}
                                                 onKeyDown={(e) => e.key === 'Enter' && saveSectorTitle()}
+                                                onClick={(e) => e.stopPropagation()}
                                             />
                                         </div>
                                     ) : (
-                                        <span 
-                                            onClick={() => startEditingSectorTitle(section)}
-                                            className={isAdmin ? "cursor-pointer hover:text-blue-600" : ""}
+                                        <div 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                startEditingSectorTitle(section);
+                                            }}
+                                            className={`w-full h-full flex items-center justify-center min-h-[20px] break-words leading-tight ${isAdmin ? "cursor-pointer hover:text-blue-600" : ""}`}
                                             title={isAdmin ? "Clique para editar" : ""}
                                         >
                                             {section.sector_title || 'ENFERMARIAS/LEITOS'}
-                                        </span>
+                                        </div>
                                     )}
                                 </th>
-                                )}
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-5 ${isWeekend ? 'bg-gray-400 print:bg-gray-400' : ''}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 ${isWeekend ? 'bg-gray-400' : ''}`}>
                                     {weekday}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center w-16 font-bold bg-blue-100 print:bg-blue-100">TOTAL</th>
+                                <th className="border border-black px-1 py-1 text-center w-12 font-bold bg-blue-100">TOTAL</th>
                             </tr>
                             {/* Main Headers Row 2 */}
-                            <tr className="bg-blue-100 text-black print:bg-blue-100">
+                            <tr className="bg-blue-100 text-black">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-5 ${isWeekend ? 'bg-gray-400 print:bg-gray-400' : ''}`}>
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 ${isWeekend ? 'bg-gray-400' : ''}`}>
                                       {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center w-16 font-bold bg-blue-100 print:bg-blue-100">PLANTÃO</th>
+                                <th className="border border-black px-1 py-1 text-center w-12 font-bold bg-blue-100">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1693,6 +1815,8 @@ export default function Schedule({
                                 section
                             )}
                         </tbody>
+                        <tfoot>
+                        </tfoot>
                     </table>
                  </div>
              ))}
@@ -1919,24 +2043,26 @@ export default function Schedule({
       </div>
 
       {/* Signatures Footer */}
-      <div className="mt-2 mb-1 grid grid-cols-4 gap-2 text-center break-inside-avoid print:mt-2 bg-white">
+      <div className="mt-16 mb-0 grid grid-cols-4 gap-1 text-center break-inside-avoid print:mt-16 bg-white print:bg-white">
         <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-1"></div>
-            <p className="font-bold text-[10px] text-black uppercase">Coordenação de Setor</p>
+            <div className="w-[80%] border-t border-black mb-1"></div>
+            <p className="font-bold text-[9px] text-black uppercase">Coordenação de Setor</p>
         </div>
         <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-1"></div>
-            <p className="font-bold text-[10px] text-black uppercase">Coordenação Geral de Enfermagem</p>
+            <div className="w-[80%] border-t border-black mb-1"></div>
+            <p className="font-bold text-[9px] text-black uppercase">Coordenação Geral de Enfermagem</p>
         </div>
         <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-1"></div>
-            <p className="font-bold text-[10px] text-black uppercase">Coordenação do RH/HMA</p>
+            <div className="w-[80%] border-t border-black mb-1"></div>
+            <p className="font-bold text-[9px] text-black uppercase">Coordenação do RH/HMA</p>
         </div>
         <div className="flex flex-col items-center">
-            <div className="w-full border-b border-black mb-1"></div>
-            <p className="font-bold text-[10px] text-black uppercase">Direção Geral do HMA</p>
+            <div className="w-[80%] border-t border-black mb-1"></div>
+            <p className="font-bold text-[9px] text-black uppercase">Direção Geral do HMA</p>
         </div>
       </div>
+      
+      <div className="hidden print:block h-0 w-full mb-0 pb-0"></div>
       
       {/* Unit Creation Modal */}
       {isAddingUnit && (
@@ -2049,10 +2175,11 @@ export default function Schedule({
           }
           .schedule-root {
             margin: 0 auto !important;
+            padding: 0 !important;
             background-color: #ffffff !important;
           }
           .schedule-root * {
-            font-size: 10px !important;
+            font-size: 8px !important;
           }
         }
       `}</style>
@@ -2204,40 +2331,55 @@ export default function Schedule({
       {doubleShiftModal && doubleShiftModal.isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4 text-gray-900">Adicionar Profissional</h3>
-            <p className="mb-6 text-gray-700">Este vínculo é uma escala dupla?</p>
+            {(() => {
+                const targetNurse = activeNurses.find(n => n.id === doubleShiftModal.nurseId)
+                const isAlreadyInThisSection = targetNurse?.is_rostered && targetNurse?.section_id === doubleShiftModal.sectionId && (!selectedUnitId || targetNurse?.unit_id === selectedUnitId)
+                
+                return (
+                    <>
+                        <h3 className="text-lg font-bold mb-4 text-gray-900">Adicionar Profissional</h3>
+                        <p className="mb-6 text-gray-700">
+                            {isAlreadyInThisSection 
+                                ? <span className="text-red-600 font-bold">Este profissional já está na lista. Deseja definir como escala dupla (ED)?</span>
+                                : 'Este vínculo é uma escala dupla?'}
+                        </p>
+                        
+                        <div className="flex flex-col gap-3">
+                          <button 
+                            onClick={() => finalizeAssignNurse('1ED')}
+                            className="bg-blue-600 text-white px-4 py-3 rounded hover:bg-blue-700 font-medium text-left flex justify-between items-center"
+                          >
+                            <span>Sim, Hospital</span>
+                            <span className="bg-blue-800 text-xs px-2 py-1 rounded">1ED</span>
+                          </button>
+                          
+                          <button 
+                            onClick={() => finalizeAssignNurse('1 ED AB')}
+                            className="bg-green-600 text-white px-4 py-3 rounded hover:bg-green-700 font-medium text-left flex justify-between items-center"
+                          >
+                            <span>Sim, Atenção Básica</span>
+                            <span className="bg-green-800 text-xs px-2 py-1 rounded">1 ED AB</span>
+                          </button>
+                          
+                          {!isAlreadyInThisSection && (
+                              <button 
+                                onClick={() => finalizeAssignNurse('')}
+                                className="bg-gray-200 text-gray-800 px-4 py-3 rounded hover:bg-gray-300 font-medium text-left"
+                              >
+                                Não (Vínculo Normal)
+                              </button>
+                          )}
             
-            <div className="flex flex-col gap-3">
-              <button 
-                onClick={() => finalizeAssignNurse('1ED')}
-                className="bg-blue-600 text-white px-4 py-3 rounded hover:bg-blue-700 font-medium text-left flex justify-between items-center"
-              >
-                <span>Sim, Hospital</span>
-                <span className="bg-blue-800 text-xs px-2 py-1 rounded">1ED</span>
-              </button>
-              
-              <button 
-                onClick={() => finalizeAssignNurse('1 ED AB')}
-                className="bg-green-600 text-white px-4 py-3 rounded hover:bg-green-700 font-medium text-left flex justify-between items-center"
-              >
-                <span>Sim, Atenção Básica</span>
-                <span className="bg-green-800 text-xs px-2 py-1 rounded">1 ED AB</span>
-              </button>
-              
-              <button 
-                onClick={() => finalizeAssignNurse('')}
-                className="bg-gray-200 text-gray-800 px-4 py-3 rounded hover:bg-gray-300 font-medium text-left"
-              >
-                Não (Vínculo Normal)
-              </button>
-
-              <button 
-                onClick={() => setDoubleShiftModal(null)}
-                className="mt-2 text-red-500 text-sm hover:underline self-center"
-              >
-                Cancelar
-              </button>
-            </div>
+                          <button 
+                            onClick={() => setDoubleShiftModal(null)}
+                            className="mt-2 text-red-500 text-sm hover:underline self-center"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                    </>
+                )
+            })()}
           </div>
         </div>
       )}
@@ -2274,6 +2416,65 @@ export default function Schedule({
                         className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
                     >
                         Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+      {/* SQL Instruction Modal */}
+      {showSqlModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded shadow-lg w-full max-w-2xl">
+                <h3 className="font-bold text-lg mb-4 text-red-600">Atenção: Atualização de Banco de Dados Necessária</h3>
+                <p className="text-sm text-gray-700 mb-4">
+                    Para permitir a duplicidade de servidores (Escala Dupla), é necessário executar um comando no banco de dados.
+                    Como esta é uma operação de segurança, você precisa rodar manualmente no Supabase.
+                </p>
+                
+                <div className="bg-gray-100 p-4 rounded mb-4 overflow-auto max-h-60">
+                    <pre className="text-xs text-black whitespace-pre-wrap font-mono">
+{`-- Execute este código FINAL no SQL Editor do Supabase:
+-- Este script remove TODAS as restrições e índices únicos (exceto chave primária).
+
+DO $$ 
+DECLARE 
+  r RECORD;
+BEGIN 
+  -- 1. Remove constraints UNIQUE (exceto chave primária)
+  FOR r IN (SELECT constraint_name FROM information_schema.table_constraints WHERE table_name = 'monthly_rosters' AND constraint_type = 'UNIQUE') LOOP 
+    EXECUTE 'ALTER TABLE monthly_rosters DROP CONSTRAINT ' || quote_ident(r.constraint_name); 
+  END LOOP; 
+  
+  -- 2. Remove índices UNIQUE soltos (exceto chave primária)
+  FOR r IN (
+    SELECT indexname 
+    FROM pg_indexes 
+    WHERE tablename = 'monthly_rosters' 
+    AND indexdef LIKE '%UNIQUE%'
+    AND indexname NOT LIKE '%pkey'
+    AND indexname != 'monthly_rosters_pkey'
+  ) LOOP
+    EXECUTE 'DROP INDEX IF EXISTS ' || quote_ident(r.indexname);
+  END LOOP;
+END $$;
+`}
+                    </pre>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                    <a 
+                        href="https://supabase.com/dashboard/project/umvjzgurzkldqyxzkkaq/sql/new"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold flex items-center"
+                    >
+                        1. Abrir Supabase SQL
+                    </a>
+                    <button 
+                        onClick={() => setShowSqlModal(false)}
+                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                    >
+                        2. Já executei, fechar
                     </button>
                 </div>
             </div>

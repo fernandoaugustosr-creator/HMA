@@ -55,6 +55,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPF</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vínculo</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
             </tr>
           </thead>
@@ -64,6 +65,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{nurse.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{nurse.cpf}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatRole(nurse.role)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{nurse.vinculo || '-'}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-2">
                   <button 
                     onClick={() => handleEdit(nurse)}

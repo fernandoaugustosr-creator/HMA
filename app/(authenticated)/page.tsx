@@ -1,8 +1,10 @@
 import { getUserDashboardData, getCoordinationRequests, getTimeOffRequests, getRecentAbsences, getAbsenceSettings } from '@/app/actions'
 import { getSwapRequests } from '@/app/swap-actions'
 import { redirect } from 'next/navigation'
-import AdminDailySchedule from './dashboard/AdminDailySchedule'
 import MyShifts from './dashboard/MyShifts'
+import RoleManagement from './dashboard/RoleManagement'
+import AdminDailySchedule from './dashboard/AdminDailySchedule'
+import PendingSwapsList from './dashboard/PendingSwapsList'
 
 export default async function DashboardPage({
   searchParams,
@@ -18,6 +20,7 @@ export default async function DashboardPage({
   }
 
   const { shifts, timeOffs, user } = data
+  const swaps = await getSwapRequests()
 
   const now = new Date()
   const rawMonth = searchParams?.month ? parseInt(searchParams.month, 10) : NaN
@@ -106,6 +109,10 @@ export default async function DashboardPage({
     isSameMonthYear(item.created_at)
   )
 
+  const filteredCoordinatorSwaps = swaps.filter((s: any) => 
+    s.status === 'pending' || isSameMonthYear(s.requester_shift_date)
+  )
+
   const monthOptions = [
     { value: 1, label: 'Janeiro' },
     { value: 2, label: 'Fevereiro' },
@@ -131,10 +138,7 @@ export default async function DashboardPage({
         <p className="text-gray-600">{user.role}</p>
       </div>
 
-      {/* Top Section: Daily Schedule for Everyone */}
-      <div className="h-full">
-         <AdminDailySchedule />
-      </div>
+      <AdminDailySchedule />
 
       {/* MyShifts (Moved up, Non-Coordinators only) */}
       {user.role !== 'COORDENADOR' && user.role !== 'COORDENACAO_GERAL' && (
@@ -143,48 +147,6 @@ export default async function DashboardPage({
 
       {/* Grid containing Recent Absences and MyTimeOffs */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Recent Absences Section for Everyone (Swapped from top) */}
-          <div className="bg-white shadow rounded-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">
-                  Faltas
-                </h3>
-                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
-                  {recentAbsences.length}
-                </span>
-              </div>
-              <div className="max-h-80 overflow-auto">
-                {recentAbsences.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhuma falta registrada recentemente.</p>
-                ) : (
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-2 py-1 text-left font-medium text-gray-700">Servidor</th>
-                        <th className="px-2 py-1 text-left font-medium text-gray-700">Data</th>
-                        <th className="px-2 py-1 text-left font-medium text-gray-700">Motivo</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {recentAbsences.map((item: any) => (
-                        <tr key={item.id}>
-                          <td className="px-2 py-1 text-gray-900">
-                            {item.nurse_name}
-                          </td>
-                          <td className="px-2 py-1 text-gray-700">
-                            {formatDate(item.date)}
-                          </td>
-                          <td className="px-2 py-1 text-gray-500 truncate max-w-xs" title={item.reason}>
-                            {item.reason || '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-          </div>
-
           {/* Minhas Folgas (or Admin Approvals) */}
           {user.role !== 'COORDENADOR' && user.role !== 'COORDENACAO_GERAL' && (
             <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full">
@@ -226,6 +188,9 @@ export default async function DashboardPage({
                 </div>
             </div>
           )}
+
+          {/* Pending Swaps for Approval */}
+          <PendingSwapsList swaps={swaps} currentUserId={user.id} />
       </div>
 
       {(user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL') && (
@@ -273,6 +238,57 @@ export default async function DashboardPage({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white shadow rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Trocas de Plantão</h3>
+                <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">
+                  {filteredCoordinatorSwaps.length}
+                </span>
+              </div>
+              <div className="max-h-80 overflow-auto">
+                {filteredCoordinatorSwaps.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nenhuma troca registrada neste período.</p>
+                ) : (
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-2 py-1 text-left font-medium text-gray-700">Solicitante → Solicitado</th>
+                        <th className="px-2 py-1 text-left font-medium text-gray-700">Data</th>
+                        <th className="px-2 py-1 text-left font-medium text-gray-700">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredCoordinatorSwaps.slice(0, 50).map((swap: any) => (
+                        <tr key={swap.id}>
+                          <td className="px-2 py-1 text-gray-900">
+                             <div className="flex flex-col">
+                                <span className="font-medium">{swap.requester_name || '...'}</span>
+                                <span className="text-xs text-gray-500">→ {swap.requested_name || '...'}</span>
+                             </div>
+                          </td>
+                          <td className="px-2 py-1 text-gray-700">
+                            <div className="flex flex-col">
+                                <span>{formatDate(swap.requester_shift_date)}</span>
+                                {swap.requested_shift_date && <span className="text-xs text-gray-500">({formatDate(swap.requested_shift_date)})</span>}
+                            </div>
+                          </td>
+                          <td className="px-2 py-1">
+                            <span
+                              className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(
+                                swap.status
+                              )}`}
+                            >
+                              {getStatusText(swap.status)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
             <div className="bg-white shadow rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-800">Folgas cadastradas</h3>

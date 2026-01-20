@@ -83,12 +83,19 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
                         </div>
                     ) : (
                         <ul className="divide-y divide-gray-100">
-                            {filteredNurses.map(nurse => (
+                            {filteredNurses.map(nurse => {
+                                const vinculo = (nurse.vinculo || '').toUpperCase().trim()
+                                const isSeletivo = vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')
+                                return (
                                 <li key={nurse.id} className="p-3 hover:bg-blue-50 flex justify-between items-center transition-colors">
                                     <div>
-                                        <p className="font-medium text-gray-800 text-sm">{nurse.name}</p>
+                                        <p className="font-medium text-gray-800 text-sm">
+                                            {nurse.name}
+                                            {isSeletivo && <span className="text-xs font-normal text-gray-500 ml-1">(SEL)</span>}
+                                        </p>
                                         <p className="text-xs text-gray-500">
                                             {formatRole(nurse.role)} • COREN: {nurse.coren || '-'}
+                                            {nurse.vinculo && ` • ${nurse.vinculo}`}
                                         </p>
                                         {nurse.section_id && (
                                             <p className="text-[10px] text-orange-600 bg-orange-50 inline-block px-1 rounded mt-0.5 border border-orange-100">
@@ -105,7 +112,8 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
                                         <Plus size={20} />
                                     </button>
                                 </li>
-                            ))}
+                                )
+                            })}
                         </ul>
                     )}
                 </div>

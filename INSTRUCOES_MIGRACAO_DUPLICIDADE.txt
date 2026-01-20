@@ -1,0 +1,21 @@
+
+PARA HABILITAR A INCLUSÃO DE DUPLICIDADE (MÚLTIPLOS VÍNCULOS/ED):
+
+O sistema foi atualizado para permitir adicionar o mesmo servidor duas vezes na mesma escala (ex: para plantões ED), mas o banco de dados Supabase precisa de uma pequena atualização para permitir isso.
+
+Como não foi possível rodar automaticamente por restrições de segurança, por favor siga estes passos:
+
+1. Acesse o painel do Supabase do seu projeto.
+2. Vá em "SQL Editor" (ícone de terminal no menu lateral).
+3. Clique em "New Query" (Nova Consulta).
+4. Cole o código abaixo e clique em "RUN":
+
+-----------------------------------------------------------------------
+-- Remove unique constraint from monthly_rosters to allow Double Shifts (Escala Dupla)
+ALTER TABLE monthly_rosters DROP CONSTRAINT IF EXISTS monthly_rosters_nurse_id_month_year_key;
+
+-- Also drop index if it exists explicitly
+DROP INDEX IF EXISTS idx_monthly_rosters_month_year_unit;
+-----------------------------------------------------------------------
+
+Após rodar este comando, o erro "O sistema bloqueou a duplicidade" não ocorrerá mais ao adicionar um servidor com a observação "ED".

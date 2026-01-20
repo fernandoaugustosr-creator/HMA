@@ -15,6 +15,7 @@ export default function DownloadsPage() {
   const [loading, setLoading] = useState(true)
   const [selectedRelease, setSelectedRelease] = useState<any | null>(null)
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('')
+  const [isPrinting, setIsPrinting] = useState(false)
   const printTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -84,15 +85,25 @@ export default function DownloadsPage() {
     printTimeoutRef.current = setTimeout(() => {
         window.print()
         printTimeoutRef.current = null
+        // Release lock after print dialog opens (or a bit later)
+        setTimeout(() => setIsPrinting(false), 1000)
     }, 500)
   }, [])
 
   const handlePrint = (release: any) => {
+    if (isPrinting) return
+
     if (selectedRelease?.id === release.id) {
         // If already loaded, just print
-        window.print()
+        setIsPrinting(true)
+        setTimeout(() => {
+            window.print()
+            // Reset after a delay to prevent double-clicks immediately after dialog closes
+            setTimeout(() => setIsPrinting(false), 1000)
+        }, 100)
     } else {
         // Triggers render of Schedule -> onLoaded -> print
+        setIsPrinting(true)
         setSelectedRelease(release)
     }
   }
@@ -172,11 +183,16 @@ export default function DownloadsPage() {
                           <button
                             type="button"
                             onClick={() => handlePrint(release)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
+                            disabled={isPrinting}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-white text-xs font-semibold transition-colors ${isPrinting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                             title="Visualizar impressão desta escala"
                           >
-                            <Printer size={14} />
-                            <span>Visualizar impressão</span>
+                            {isPrinting && selectedRelease?.id === release.id ? (
+                                <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></span>
+                            ) : (
+                                <Printer size={14} />
+                            )}
+                            <span>{isPrinting && selectedRelease?.id === release.id ? 'Gerando...' : 'Visualizar impressão'}</span>
                           </button>
                         </div>
                       </div>
@@ -197,7 +213,8 @@ export default function DownloadsPage() {
         {selectedRelease && (
           <div className="w-full flex justify-center">
             <div className="w-[95%]">
-              <div className="flex w-full items-center justify-between mb-0">
+              {/* Header logos removed as per request to save space */}
+              {/* <div className="flex w-full items-center justify-between mb-0">
                 <img 
                   src="/logo-hma.png" 
                   alt="Logo HMA" 
@@ -209,7 +226,7 @@ export default function DownloadsPage() {
                   alt="Logo Prefeitura" 
                   className="h-16 object-contain"
                 />
-              </div>
+              </div> */}
               <Schedule 
                 key={selectedRelease.id}
                 isAdmin={false} 

@@ -128,7 +128,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                       defaultChecked={nurseToEdit?.vinculo === 'CONCURSO'}
                       className="h-4 w-4"
                     />
-                    <span>CONCURSO</span>
+                    <span>ESCALA DUPLA</span>
                   </label>
                   <label className="inline-flex items-center gap-2">
                     <input
@@ -207,6 +207,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                   id="modalUseDefaultPassword"
                   name="useDefaultPassword"
                   type="checkbox"
+                  value="on"
                   className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                   checked={useDefaultPassword}
                   onChange={(e) => setUseDefaultPassword(e.target.checked)}

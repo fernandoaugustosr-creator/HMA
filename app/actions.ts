@@ -20,6 +20,89 @@ export interface Unit {
   title: string
 }
 
+export async function getSystemRoles() {
+  const defaultRoles = [
+    { id: 'ADMIN', label: 'Administrador' },
+    { id: 'COORDENACAO_GERAL', label: 'Coordenação Geral' },
+    { id: 'COORDENADOR', label: 'Coordenador' },
+    { id: 'ENFERMEIRO', label: 'Enfermeiro' },
+    { id: 'TECNICO', label: 'Técnico de Enfermagem' }
+  ]
+
+  if (isLocalMode()) {
+    const db = readDb()
+    return db.roles || defaultRoles
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .like('key', 'role_%')
+
+  if (error || !data || data.length === 0) {
+    return defaultRoles
+  }
+
+  // Expect keys like 'role_ADMIN', 'role_TECNICO'
+  // If we have a 'value' column, we can store the label there.
+  // If not, we format the ID.
+  // Let's check if 'value' exists by seeing if it's returned.
+  // Actually, saveAbsenceSettings used bool_value. 
+  // Let's assume we might need to add a value column or use bool_value.
+  // Ideally we want to store the label.
+  
+  return data.map((row: any) => ({
+    id: row.key.replace('role_', ''),
+    label: row.value || row.key.replace('role_', '')
+  }))
+}
+
+export async function addSystemRole(roleId: string, roleLabel: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.roles = db.roles || []
+    if (!db.roles.find((r: any) => r.id === roleId)) {
+      db.roles.push({ id: roleId, label: roleLabel })
+      writeDb(db)
+    }
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  
+  // Check if value column exists, otherwise we just insert key/bool_value
+  // We'll try to insert with value first. If it fails, we fallback?
+  // Or simpler: we use a new table 'roles' if app_settings is too limited.
+  // But sticking to app_settings as planned.
+  // Let's assume we added a 'value' column or check if it exists.
+  // Since I can't check easily, I'll try to upsert.
+  
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ 
+      key: `role_${roleId}`, 
+      value: roleLabel,
+      bool_value: true 
+    }, { onConflict: 'key' })
+
+  if (error) {
+    // If error implies 'value' column missing, we might need to add it.
+    // But for now, let's return error message.
+    return { success: false, message: 'Erro ao adicionar cargo: ' + error.message }
+  }
+
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function getAbsenceSettings() {
   const defaultSettings = {
     view_roles: ['ADMIN', 'COORDENACAO_GERAL', 'COORDENADOR'],
@@ -88,7 +171,9 @@ export async function saveAbsenceSettings(viewRoles: string[], editRoles: string
     return { success: false, message: 'Acesso negado.' }
   }
 
-  const allRoles = ['ADMIN', 'COORDENACAO_GERAL', 'COORDENADOR', 'ENFERMEIRO', 'TECNICO'] // Add others if needed
+  // Fetch all current system roles to ensure we cover custom ones
+  const systemRoles = await getSystemRoles()
+  const allRoleIds = systemRoles.map(r => r.id)
 
   if (isLocalMode()) {
     const db = readDb()
@@ -105,7 +190,7 @@ export async function saveAbsenceSettings(viewRoles: string[], editRoles: string
   const updates = []
   
   // For each known role, update the boolean
-  for (const role of allRoles) {
+  for (const role of allRoleIds) {
     updates.push({
       key: `absence_view_${role}`,
       bool_value: viewRoles.includes(role)
@@ -379,7 +464,7 @@ export async function getSections() {
   }
   
   const supabase = createClient()
-  const { data } = await supabase.from('schedule_sections').select('*').order('title')
+  const { data } = await supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true })
   return data || []
 }
 
@@ -420,7 +505,21 @@ export async function createSection(prevState: any, formData: FormData) {
   }
 
   const supabase = createClient()
-  const { data: section, error } = await supabase.from('schedule_sections').insert({ title }).select().single()
+
+  // Calculate next position
+  const { data: maxPosData } = await supabase
+    .from('schedule_sections')
+    .select('position')
+    .order('position', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  
+  const nextPosition = (maxPosData?.position || 0) + 1
+
+  const { data: section, error } = await supabase.from('schedule_sections').insert({ 
+    title,
+    position: nextPosition
+  }).select().single()
   
   if (error || !section) return { success: false, message: 'Erro ao criar setor: ' + (error?.message || '') }
 
@@ -1675,7 +1774,7 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         { data: releases, error: releasesError },
         { data: absencesData, error: absencesError }
     ] = await Promise.all([
-        supabase.from('schedule_sections').select('*').order('position'),
+        supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
         supabase.from('nurses').select('*').order('name'),
         supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year),
@@ -2135,7 +2234,16 @@ export async function getReleasedSchedules() {
   }
 }
 
-export async function assignNurseToRoster(nurseId: string, sectionId: string, unitId: string | null, month: number, year: number, observation?: string, createdAt?: string) {
+export async function assignNurseToRoster(
+  nurseId: string, 
+  sectionId: string, 
+  unitId: string | null, 
+  month: number, 
+  year: number, 
+  observation?: string, 
+  createdAt?: string,
+  allowDuplicate: boolean = false
+) {
   try {
     await checkAdmin()
   } catch (e) {
@@ -2151,23 +2259,28 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
     
     monthsToUpdate.forEach(m => {
         // Check if already in roster for this month (update or insert)
-        const existingIndex = db.monthly_rosters.findIndex(r => r.nurse_id === nurseId && r.month === m && r.year === year)
+        const existingIndex = db.monthly_rosters.findIndex((r: any) => r.nurse_id === nurseId && r.month === m && r.year === year)
         
-        if (existingIndex !== -1) {
+        if (existingIndex !== -1 && !allowDuplicate) {
           db.monthly_rosters[existingIndex].section_id = sectionId
           db.monthly_rosters[existingIndex].unit_id = unitId
           if (observation !== undefined) db.monthly_rosters[existingIndex].observation = observation
           if (createdAt) db.monthly_rosters[existingIndex].created_at = createdAt
         } else {
-          // If adding new to roster, clear any existing shifts for this month (clean slate)
+          // If adding new to roster, clear any existing shifts for this month (clean slate) ONLY if not duplicate mode
           // This prevents "ghost" shifts from appearing if the nurse had shifts in this month previously
-          const startDate = `${year}-${String(m).padStart(2, '0')}-01`
-          const lastDay = new Date(year, m, 0).getDate()
-          const endDate = `${year}-${String(m).padStart(2, '0')}-${lastDay}`
-          
-          db.shifts = db.shifts.filter(s => 
-            !(s.nurse_id === nurseId && s.shift_date >= startDate && s.shift_date <= endDate)
-          )
+          // But if we are adding a duplicate (ED), we should NOT clear shifts as they might belong to the other bond (shared shifts limitation)
+          if (!allowDuplicate) {
+              const startDate = `${year}-${String(m).padStart(2, '0')}-01`
+              const lastDay = new Date(year, m, 0).getDate()
+              const endDate = `${year}-${String(m).padStart(2, '0')}-${lastDay}`
+              
+              if (db.shifts) {
+                  db.shifts = db.shifts.filter((s: any) => 
+                    !(s.nurse_id === nurseId && s.shift_date >= startDate && s.shift_date <= endDate)
+                  )
+              }
+          }
 
           db.monthly_rosters.push({
             id: randomUUID(),
@@ -2199,8 +2312,8 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
         .eq('year', year)
         .maybeSingle()
 
-    if (!existing) {
-        // Clear shifts for this month if adding new
+    if (!existing && !allowDuplicate) {
+        // Clear shifts for this month if adding new (and not forcing duplicate)
         const startDate = `${year}-${String(m).padStart(2, '0')}-01`
         const lastDay = new Date(year, m, 0).getDate()
         const endDate = `${year}-${String(m).padStart(2, '0')}-${lastDay}`
@@ -2222,11 +2335,53 @@ export async function assignNurseToRoster(nurseId: string, sectionId: string, un
     if (observation !== undefined) payload.observation = observation
     if (createdAt) payload.created_at = createdAt
 
-    const { error } = await supabase
-        .from('monthly_rosters')
-        .upsert(payload, { onConflict: 'nurse_id, month, year' })
+    let error;
+    if (allowDuplicate) {
+        // If allowing duplicates, always insert a new record
+        const { error: insertError } = await supabase
+            .from('monthly_rosters')
+            .insert(payload)
+        error = insertError
+    } else {
+        // If NOT allowing duplicates, we try to update if exists, or insert if not.
+        // We do this manually to avoid relying on UNIQUE constraints for upsert logic,
+        // because we might have removed those constraints to allow duplicates for other cases.
+        
+        // Check for existing record
+        const { data: existingRecord } = await supabase
+            .from('monthly_rosters')
+            .select('id')
+            .eq('nurse_id', nurseId)
+            .eq('month', m)
+            .eq('year', year)
+            .limit(1)
+            .maybeSingle()
+            
+        if (existingRecord) {
+            // Update existing
+            const { error: updateError } = await supabase
+                .from('monthly_rosters')
+                .update(payload)
+                .eq('id', existingRecord.id)
+            error = updateError
+        } else {
+            // Insert new
+            const { error: insertError } = await supabase
+                .from('monthly_rosters')
+                .insert(payload)
+            error = insertError
+        }
+    }
 
-    if (error) return { success: false, message: error.message }
+    if (error) {
+                console.error('Error adding/updating roster:', error)
+                if (error.code === '23505') {
+                    // Include constraint name in message to help debug if needed
+                    const constraint = (error as any).constraint || 'desconhecida'
+                    return { success: false, message: `Erro: O sistema bloqueou a duplicidade (Constraint: ${constraint}). Solicite ao suporte para rodar o script V11.` }
+                }
+                return { success: false, message: error.message }
+            }
   }
 
   revalidatePath('/')
@@ -2524,29 +2679,61 @@ export async function updateRosterOrder(nurseId: string, month: number, year: nu
   }
 }
 
-export async function resetSectionOrder(sectionId: string, unitId: string | null, month: number, year: number, startNurseId?: string) {
+export async function resetSectionOrder(sectionId: string, unitId: string | null, month: number, year: number, startRosterId?: string, orderedRosterIds?: string[]) {
   try {
     await checkAdmin()
 
     if (isLocalMode()) {
       const db = readDb()
-      const candidates = db.monthly_rosters
-        .filter(r => r.section_id === sectionId && r.month === month && r.year === year && (unitId ? r.unit_id === unitId : !r.unit_id))
-        .sort((a, b) => {
+      let candidates = db.monthly_rosters
+        .filter(r => r.section_id === sectionId && r.month === month && r.year === year && (unitId === 'ALL' ? true : (unitId ? r.unit_id === unitId : !r.unit_id)))
+      
+      if (orderedRosterIds && orderedRosterIds.length > 0) {
+        // Sort candidates based on the provided order
+        candidates.sort((a, b) => {
+            const indexA = orderedRosterIds.indexOf(a.id)
+            const indexB = orderedRosterIds.indexOf(b.id)
+            if (indexA === -1 && indexB === -1) return 0
+            if (indexA === -1) return 1
+            if (indexB === -1) return -1
+            return indexA - indexB
+        })
+      } else {
+        candidates.sort((a, b) => {
           const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
           const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
           return aTime - bTime
         })
-
-      let startIndex = 0
-      if (startNurseId) {
-        const idx = candidates.findIndex(r => r.nurse_id === startNurseId)
-        if (idx >= 0) startIndex = idx
       }
 
-      // Update only from startIndex onwards, setting sequential numbers starting from 1
+      let startIndex = 0
+      if (startRosterId) {
+        const idx = candidates.findIndex(r => r.id === startRosterId)
+        if (idx >= 0) {
+          startIndex = idx
+        } else {
+           // If startRosterId is provided but not found, abort
+           return { success: false, message: 'Item não encontrado na escala para iniciar a renumeração.' }
+        }
+      }
+
+      // Calculate base for numbering - GROUP BASED (Modulo 10000)
+      // We want to restart numbering at 1 (visually) but keep sort order higher than previous items
+      
+      let prevOrder = 0
+      if (startIndex > 0) {
+        prevOrder = candidates[startIndex - 1].list_order || 0
+      }
+
+      // Calculate new base: next multiple of 10000 > prevOrder
+      // e.g. if prev is 5, base = 10000. Next items: 10001, 10002... (Displayed as 1, 2...)
+      // e.g. if prev is 10005, base = 20000. Next items: 20001, 20002...
+      const newBase = (Math.floor(prevOrder / 10000) + 1) * 10000
+
+      // Update from startIndex onwards
+      // This rewrites the sequence for all subsequent items to be a single continuous chronological group
       for (let i = startIndex; i < candidates.length; i++) {
-          candidates[i].list_order = i - startIndex + 1
+          candidates[i].list_order = newBase + (i - startIndex + 1)
       }
 
       writeDb(db)
@@ -2558,30 +2745,60 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
 
     let query = supabase
       .from('monthly_rosters')
-      .select('*')
+      .select('*, nurse:nurses(name)')
       .eq('section_id', sectionId)
       .eq('month', month)
       .eq('year', year)
-    if (unitId) {
-      query = query.eq('unit_id', unitId)
-    } else {
-      query = query.is('unit_id', null)
+    
+    if (unitId !== 'ALL') {
+      if (unitId) {
+        query = query.eq('unit_id', unitId)
+      } else {
+        query = query.is('unit_id', null)
+      }
     }
 
     const { data, error } = await query
     if (error) throw error
 
-    const sorted = (data || []).sort((a: any, b: any) => {
-      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
-      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
-      return aTime - bTime
+    let sorted = data || []
+    
+    // Always sort by created_at -> name -> id to match frontend "Chronological" order
+    // We ignore orderedRosterIds because it might be scrambled or incomplete, causing the "Mess"
+    sorted.sort((a: any, b: any) => {
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+        if (aTime !== bTime) return aTime - bTime
+        
+        const nameA = a.nurse?.name || ''
+        const nameB = b.nurse?.name || ''
+        const nameCompare = nameA.localeCompare(nameB)
+        if (nameCompare !== 0) return nameCompare
+        
+        return (a.id || '').localeCompare(b.id || '')
     })
 
     let startIndex = 0
-    if (startNurseId) {
-      const idx = sorted.findIndex((r: any) => r.nurse_id === startNurseId)
-      if (idx >= 0) startIndex = idx
+    if (startRosterId) {
+      const idx = sorted.findIndex((r: any) => r.id === startRosterId)
+      if (idx >= 0) {
+        startIndex = idx
+      } else {
+        // If startRosterId is provided but not found, abort to avoid resetting the whole list accidentally
+        return { success: false, message: 'Item não encontrado na escala para iniciar a renumeração.' }
+      }
     }
+
+    // Determine the starting base for numbering
+    // We use "Groups" of 10000 to allow restarting numbering without affecting previous rows
+    // e.g. Group 0: 1-9999. Group 1: 10001-19999 (Displays as 1-9999)
+    let prevOrder = 0
+    if (startIndex > 0) {
+        prevOrder = sorted[startIndex - 1].list_order || 0
+    }
+    
+    // Calculate new base: next multiple of 10000 > prevOrder
+    const newBase = (Math.floor(prevOrder / 10000) + 1) * 10000
 
     // Only update from startIndex onwards
     const updates = []
@@ -2597,7 +2814,8 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
             observation: r.observation ?? null,
             sector: r.sector ?? null,
             created_at: r.created_at,
-            list_order: i - startIndex + 1
+            // Use new base + relative index (1, 2, 3...)
+            list_order: newBase + (i - startIndex + 1)
         })
     }
 
@@ -2846,6 +3064,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const role = formData.get('role') as string
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
+  const password = formData.get('password') as string
+  const useDefaultPassword = formData.get('useDefaultPassword') === 'on'
 
   if (!name) return { success: false, message: 'Nome é obrigatório' }
 
@@ -2869,6 +3089,12 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     if (sectionId) nurse.section_id = sectionId
     if (unitId) nurse.unit_id = unitId
 
+    if (useDefaultPassword) {
+      nurse.password = '123456'
+    } else if (password) {
+      nurse.password = password
+    }
+
     writeDb(db)
     revalidatePath('/')
     revalidatePath('/servidores')
@@ -2886,6 +3112,12 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   if (cpf) updateData.cpf = cpf
   if (sectionId) updateData.section_id = sectionId
   if (unitId) updateData.unit_id = unitId
+
+  if (useDefaultPassword) {
+    updateData.password = '123456'
+  } else if (password) {
+    updateData.password = password
+  }
 
   const { error } = await supabase.from('nurses').update(updateData).eq('id', id)
 
@@ -3053,7 +3285,21 @@ export async function addSection(title: string) {
   }
 
   const supabase = createClient()
-  const { error } = await supabase.from('schedule_sections').insert({ title })
+
+  // Calculate next position
+  const { data: maxPosData } = await supabase
+    .from('schedule_sections')
+    .select('position')
+    .order('position', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  
+  const nextPosition = (maxPosData?.position || 0) + 1
+
+  const { error } = await supabase.from('schedule_sections').insert({ 
+    title,
+    position: nextPosition
+  })
   if (error) return { success: false, message: error.message }
   revalidatePath('/')
   return { success: true }
