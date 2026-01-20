@@ -401,27 +401,27 @@ export default function Schedule({
       const manualIds = new Set(manuallyAddedSections)
 
       // 1. Sections that are in roster BUT NOT manually added in this session
-      // These should follow data.sections order (DB position), but we enforce ENFERMEIROS first for consistency
       const standardSections = data.sections
         .filter(s => rosterSections.has(s.id) && !manualIds.has(s.id))
-        .sort((a, b) => {
-             const titleA = a.title.toUpperCase()
-             const titleB = b.title.toUpperCase()
-             
-             // Enforce ENFERMEIROS before TÉCNICOS
-             if (titleA.includes('ENFERMEIRO') && !titleB.includes('ENFERMEIRO')) return -1
-             if (titleB.includes('ENFERMEIRO') && !titleA.includes('ENFERMEIRO')) return 1
-             
-             return 0 // Keep existing order for others
-        })
       
       // 2. Sections that are manually added (whether in roster or not)
-      // These should follow manuallyAddedSections order
       const manualSections = manuallyAddedSections
           .map(id => data.sections.find(s => s.id === id))
           .filter((s): s is typeof data.sections[0] => !!s)
           
-      return [...standardSections, ...manualSections]
+      const combined = [...standardSections, ...manualSections]
+
+      // Final Sort: Enforce ENFERMEIROS first, preserve others order
+      return combined.sort((a, b) => {
+             const titleA = a.title.toUpperCase()
+             const titleB = b.title.toUpperCase()
+             
+             // Enforce ENFERMEIROS before TÉCNICOS (and others)
+             if (titleA.includes('ENFERMEIRO') && !titleB.includes('ENFERMEIRO')) return -1
+             if (titleB.includes('ENFERMEIRO') && !titleA.includes('ENFERMEIRO')) return 1
+             
+             return 0 // Keep existing order for others
+      })
   }, [data.sections, rosterSections, manuallyAddedSections])
 
 
