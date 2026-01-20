@@ -1058,15 +1058,6 @@ export default function Schedule({
       return lookup
   }, [data.absences])
 
-  const nurseObservations = useMemo(() => {
-    const map = new Map<string, string>();
-    (data.roster || []).forEach(r => {
-        if (r.month === selectedMonth + 1 && r.year === selectedYear && r.observation) {
-            map.set(r.nurse_id, r.observation);
-        }
-    });
-    return map;
-  }, [data.roster, selectedMonth, selectedYear]);
 
   const nurseOrderMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -1201,24 +1192,15 @@ export default function Schedule({
                       }`}
                     >
                       {data.nurses.map(n => {
-                        const obs = (nurseObservations.get(n.id) || '').toUpperCase().trim()
                         const vinculo = (n.vinculo || '').toUpperCase().trim()
                         
                         const prefixes = []
-                        // if (obs.includes('1ED')) prefixes.push('1ED')
-                        // if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) prefixes.push('SEL')
-                        if (obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) prefixes.push('AB')
+                        if (vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) prefixes.push('AB')
                         
-                        let displayObs = obs
-                        if (displayObs === '1ED') displayObs = ''
-                        if (displayObs === '1 ED AB') displayObs = ''
-                        if (displayObs === 'AB') displayObs = ''
-
                         let suffix = ''
                         if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
-                        if (obs.includes('1ED')) suffix += ' (1ED)'
 
-                        const label = `${prefixes.join(' ')} ${n.name}${suffix} ${displayObs ? `(${displayObs})` : ''}`.trim()
+                        const label = `${prefixes.join(' ')} ${n.name}${suffix}`.trim()
                         return <option key={n.id} value={n.id}>{label}</option>
                       })}
                     </select>
@@ -1260,7 +1242,7 @@ export default function Schedule({
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
-                {(nurse.observation || '').includes('1ED') ? 'ESCALA DUPLA' : (nurse.vinculo === 'CONCURSO' ? 'ESCALA DUPLA' : (nurse.vinculo || '-'))}
+                {(nurse.observation || '').includes('1ED') ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
                   <SectorCell 
