@@ -2013,6 +2013,18 @@ export default function Schedule({
                     if (!t.start_date || !t.end_date) return false
                     if (t.end_date < monthStart) return false
                     if (t.start_date > monthEnd) return false
+
+                    // Filter by selected unit if applicable
+                    if (selectedUnitId) {
+                        const isInUnit = data.roster.some(r => 
+                            r.nurse_id === t.nurse_id && 
+                            r.month === selectedMonth + 1 && 
+                            r.year === selectedYear && 
+                            r.unit_id === selectedUnitId
+                        )
+                        if (!isInUnit) return false
+                    }
+
                     return true
                 })
                 .map(t => {
