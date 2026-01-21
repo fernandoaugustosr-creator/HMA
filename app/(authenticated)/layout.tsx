@@ -26,7 +26,6 @@ export default function AuthenticatedLayout({
         <div className="flex-1 p-2 overflow-y-auto">
             {children}
         </div>
-        <SupabaseStatus />
       </main>
     </div>
   )

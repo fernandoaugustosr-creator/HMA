@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { logout } from '@/app/actions'
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
@@ -85,7 +86,11 @@ export default function Sidebar({ user }: { user: any }) {
     <>
       {/* Mobile Navbar */}
       <div className="flex md:!hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-30 justify-between items-center shadow-sm w-full">
-        <h2 className="text-xl font-bold text-indigo-600">ENF-HMA</h2>
+        <div className="flex items-center gap-2">
+          <Image src="/logo-hma.png" alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
+          <Image src="/logo-prefeitura.png" alt="Prefeitura Logo" width={32} height={32} className="h-8 w-auto object-contain" />
+          <h2 className="text-xl font-bold text-indigo-600">ENF-HMA</h2>
+        </div>
         <button 
           onClick={() => setIsMobileMenuOpen(true)}
           className="text-gray-600 focus:outline-none p-2"
@@ -108,7 +113,11 @@ export default function Sidebar({ user }: { user: any }) {
           {/* Sidebar Content */}
           <div className="relative flex flex-col w-64 max-w-xs h-full bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-indigo-600">ENF-HMA</h2>
+              <div className="flex items-center gap-2">
+                <Image src="/logo-hma.png" alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
+                <Image src="/logo-prefeitura.png" alt="Prefeitura Logo" width={32} height={32} className="h-8 w-auto object-contain" />
+                <h2 className="text-xl font-bold text-indigo-600">ENF-HMA</h2>
+              </div>
               <button 
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -217,7 +226,11 @@ export default function Sidebar({ user }: { user: any }) {
       {/* Desktop Sidebar */}
       <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-screen bg-white border-r border-gray-200 sticky top-0 transition-all duration-300`}>
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
-            {!isCollapsed && <h2 className="text-2xl font-bold text-indigo-600 truncate">ENF-HMA</h2>}
+            {!isCollapsed && (
+              <div className="flex items-center gap-3">
+                <h2 className="text-2xl font-bold text-green-600 truncate">ENF-HMA</h2>
+              </div>
+            )}
             <button 
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className="p-1 rounded-full hover:bg-gray-100 text-gray-500"

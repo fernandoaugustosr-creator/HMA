@@ -16,6 +16,7 @@ interface Props {
   type: LeaveType
   selectedMonth: number
   selectedYear: number
+  unitId?: string
 }
 
 const MONTHS = [
@@ -30,7 +31,7 @@ const TYPE_CONFIG: Record<LeaveType, { title: string, color: string, bg: string,
   'cessao': { title: 'Cessão', color: 'text-cyan-600', bg: 'bg-cyan-50', border: 'border-cyan-200' }
 }
 
-export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, existingLeaves = [], type, selectedMonth, selectedYear }: Props) {
+export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, existingLeaves = [], type, selectedMonth, selectedYear, unitId }: Props) {
   const [loading, setLoading] = useState(false)
   const [selectedNurseId, setSelectedNurseId] = useState('')
   const config = TYPE_CONFIG[type]
@@ -81,6 +82,7 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
         
         formData.append('startDate', startStr)
         formData.append('endDate', endStr)
+        if (unitId) formData.append('unitId', unitId)
 
         const res = await assignLeave(null, formData)
         if (res.success) {
@@ -148,6 +150,12 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
                           className="mt-1"
                         />
                     </div>
+
+                    {unitId && (
+                        <div className="text-xs text-gray-500 bg-white p-2 rounded border border-gray-200">
+                            ℹ️ Esta ausência será aplicada apenas a esta escala.
+                        </div>
+                    )}
 
                     <div className="bg-white p-3 rounded border border-gray-200">
                         <p className="text-sm text-gray-600">

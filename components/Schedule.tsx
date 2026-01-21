@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
@@ -40,8 +40,9 @@ interface RosterItem {
 interface Shift {
   id: string
   nurse_id: string
+  roster_id?: string
   shift_date: string
-  shift_type: 'day' | 'night' | 'morning' | 'afternoon' | 'mt'
+  shift_type: 'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn'
 }
 
 interface TimeOff {
@@ -164,20 +165,20 @@ const SectorCell = ({
   }
 
   if (!isAdmin) {
-    return <span className={`text-[10px] uppercase block font-bold text-black ${className}`}>{value}</span>
+    return <span className={`text-[10px] uppercase block font-bold text-black text-center ${className}`}>{value}</span>
   }
 
   return (
     <div className="relative group w-full h-full">
         <input 
           type="text" 
-          className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold text-black w-full h-full ${className} print:hidden`}
+          className={`bg-transparent focus:outline-none uppercase text-[10px] font-bold text-black w-full h-full text-center ${className} print:hidden`}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
         />
-        <span className={`text-[10px] uppercase hidden print:block font-bold text-black w-full h-full ${className}`}>{value}</span>
+        <span className={`text-[10px] uppercase hidden print:block font-bold text-black w-full h-full text-center ${className}`}>{value}</span>
         {onCopyDown && value && (
             <button
                 onClick={(e) => {
@@ -245,7 +246,7 @@ export default function Schedule({
 
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
-  const [shiftModalData, setShiftModalData] = useState<{nurseId: string, nurseName: string, date: string} | null>(null)
+  const [shiftModalData, setShiftModalData] = useState<{nurseId: string, rosterId?: string, nurseName: string, date: string} | null>(null)
   const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'delete'>('day')
   const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6' | 'custom'>('off4')
   const [customRecurrenceDays, setCustomRecurrenceDays] = useState<string>('')
@@ -388,7 +389,9 @@ export default function Schedule({
       const sections = new Set<string>()
       if (data.roster) {
           data.roster.forEach(r => {
-              if ((!selectedUnitId || r.unit_id === selectedUnitId) && r.month === selectedMonth + 1 && r.year === selectedYear) {
+              // Allow showing roster entries that match the unit OR have no unit (legacy/global)
+              // This prevents "lost data" for entries created before unit strictness
+              if ((!selectedUnitId || !r.unit_id || r.unit_id === selectedUnitId) && r.month === selectedMonth + 1 && r.year === selectedYear) {
                   sections.add(r.section_id)
               }
           })
@@ -564,39 +567,38 @@ export default function Schedule({
     setLoading(false)
   }
 
-  async function handleRemoveFromRoster(nurseId: string) {
+  async function handleRemoveFromRoster(rosterId: string) {
     if (!confirm('Tem certeza que deseja remover este servidor desta escala mensal?')) return
     setLoading(true)
-    const res = await removeNurseFromRoster(nurseId, selectedMonth + 1, selectedYear)
+    const res = await removeRosterEntry(rosterId)
     if (!res.success) alert(res.message)
     clearCache()
     await fetchData(true)
   }
 
-  async function handleReassign(oldId: string, newId: string) {
+  async function handleReassign(rosterId: string, newId: string) {
     // For roster, reassign implies changing the nurse assigned to this slot?
     // Or just swapping? For simplicity, we can remove old and add new.
     // But `reassignNurse` action was for global change. 
     // Here we should probably just remove old from roster and add new to roster.
     
-    if (oldId === newId) return
-    if (!confirm('Tem certeza que deseja substituir o servidor nesta escala?')) return
-    
-    setLoading(true)
-    // 1. Get current roster item
-    const rosterItem = data.roster.find(r => r.nurse_id === oldId && r.month === selectedMonth + 1 && r.year === selectedYear)
+    const rosterItem = data.roster.find(r => r.id === rosterId)
     if (!rosterItem) {
         alert('Erro: Servidor não encontrado na escala.')
-        setLoading(false)
         return
     }
 
+    if (rosterItem.nurse_id === newId) return
+    if (!confirm('Tem certeza que deseja substituir o servidor nesta escala?')) return
+    
+    setLoading(true)
+
     // 2. Remove old
-    await removeNurseFromRoster(oldId, selectedMonth + 1, selectedYear)
+    await removeRosterEntry(rosterId)
     
     // 3. Add new (using same section and unit), preserving created_at if possible or using old one
     const allowDuplicate = (rosterItem.observation || '').includes('ED')
-    await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear, rosterItem.observation, rosterItem.created_at, allowDuplicate)
+    await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear, rosterItem.observation, rosterItem.created_at, allowDuplicate, rosterItem.list_order)
     
     clearCache()
     await fetchData(true)
@@ -782,8 +784,18 @@ export default function Schedule({
     const { nurseId, sectionId } = doubleShiftModal
     setDoubleShiftModal(null)
     
-    // Check if it is a Double Shift assignment (ED)
-    const allowDuplicate = observation.includes('ED')
+    // Check if nurse is already in THIS section (and unit if applicable)
+    // We check directly in data.roster to decide if we need to force a duplicate entry
+    const isAlreadyInThisSection = data.roster.some(r => 
+        r.nurse_id === nurseId && 
+        r.section_id === sectionId && 
+        r.month === selectedMonth + 1 && 
+        r.year === selectedYear &&
+        (!selectedUnitId || r.unit_id === selectedUnitId)
+    )
+
+    // Check if it is a Double Shift assignment (ED) or if we are adding a duplicate entry to the same section
+    const allowDuplicate = observation.includes('ED') || isAlreadyInThisSection
 
     setLoading(true)
     try {
@@ -807,8 +819,23 @@ export default function Schedule({
   }
 
   const handleCellClick = (nurse: Nurse, dateStr: string) => {
+    // Robust rosterId resolution
+    let rosterId = nurse.is_rostered ? nurse.unique_key : undefined
+    
+    // Fallback: If rosterId is missing but nurse is in roster, try to find it
+    if (!rosterId && data.roster) {
+        const entry = data.roster.find(r => 
+            r.nurse_id === nurse.id && 
+            r.month === selectedMonth + 1 && 
+            r.year === selectedYear &&
+            (!selectedUnitId || !r.unit_id || r.unit_id === selectedUnitId)
+        )
+        if (entry) rosterId = entry.id
+    }
+
     setShiftModalData({
         nurseId: nurse.id,
+        rosterId: rosterId,
         nurseName: nurse.name,
         date: dateStr
     })
@@ -824,7 +851,7 @@ export default function Schedule({
     setLoading(true)
     
     try {
-        const shiftsToSave: { nurseId: string, date: string, type: string }[] = []
+        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
         
         if (shiftType === 'delete' && deleteWholeMonth) {
             // Delete whole month logic
@@ -833,6 +860,7 @@ export default function Schedule({
                 const dateString = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                 shiftsToSave.push({
                     nurseId: shiftModalData.nurseId,
+                    rosterId: shiftModalData.rosterId,
                     date: dateString,
                     type: 'DELETE'
                 })
@@ -864,6 +892,7 @@ export default function Schedule({
                 
                 shiftsToSave.push({
                     nurseId: shiftModalData.nurseId,
+                    rosterId: shiftModalData.rosterId,
                     date: dateString,
                     type: shiftType === 'delete' ? 'DELETE' : shiftType
                 })
@@ -998,29 +1027,52 @@ export default function Schedule({
 
   // Optimize data access with lookups
   const shiftsLookup = React.useMemo(() => {
-      const lookup: Record<string, Shift> = {} // Key: "nurseId_date"
-      const countLookup: Record<string, number> = {} // Key: nurseId
-      const weekendCountLookup: Record<string, number> = {} // Key: nurseId
+      const lookup: Record<string, Shift> = {} // Key: "rosterId_date" (or nurseId for unrostered)
+      const countLookup: Record<string, number> = {} // Key: rosterId
+      const weekendCountLookup: Record<string, number> = {} // Key: rosterId
       
       const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`
       
       if (data.shifts) {
           data.shifts.forEach(s => {
               if (s.shift_date.startsWith(monthPrefix)) {
-                  lookup[`${s.nurse_id}_${s.shift_date}`] = s
-                  countLookup[s.nurse_id] = (countLookup[s.nurse_id] || 0) + 1
+                  let rosterKey = s.roster_id
+
+                  if (!rosterKey) {
+                      // Legacy shift (no roster_id)
+                      // Logic: Assign legacy shifts to the FIRST roster entry found for this nurse.
+                      const rosterEntries = rosterMap[s.nurse_id]
+                      if (rosterEntries && rosterEntries.length > 0) {
+                          const sortedEntries = [...rosterEntries].sort((a, b) => {
+                              const tA = new Date(a.created_at).getTime()
+                              const tB = new Date(b.created_at).getTime()
+                              return tA - tB
+                          })
+                          rosterKey = sortedEntries[0].id
+                      } else {
+                           // Fallback if not rostered
+                           rosterKey = s.nurse_id
+                      }
+                  }
+
+                  // Populate lookup
+                  lookup[`${rosterKey}_${s.shift_date}`] = s
+
+                  // Populate counts by rosterKey (Line-specific counts)
+                  const weight = s.shift_type === 'dn' ? 2 : 1
+                  countLookup[rosterKey] = (countLookup[rosterKey] || 0) + weight
 
                   // Check if weekend
                   const date = new Date(s.shift_date + 'T12:00:00')
                   const day = date.getDay()
                   if (day === 0 || day === 6) { // 0=Sun, 6=Sat
-                      weekendCountLookup[s.nurse_id] = (weekendCountLookup[s.nurse_id] || 0) + 1
+                      weekendCountLookup[rosterKey] = (weekendCountLookup[rosterKey] || 0) + weight
                   }
               }
           })
       }
       return { lookup, countLookup, weekendCountLookup }
-  }, [data.shifts, selectedMonth, selectedYear])
+  }, [data.shifts, selectedMonth, selectedYear, rosterMap])
 
   const timeOffsLookup = React.useMemo(() => {
       const lookup: Record<string, TimeOff> = {}
@@ -1031,6 +1083,18 @@ export default function Schedule({
 
         data.timeOffs.forEach(t => {
             if (t.end_date < monthStart || t.start_date > monthEnd) return
+            // Filter by unit if selected (Strict isolation: only show leaves for this unit)
+            // If unit is selected, show leaves with that unit_id.
+            // If global leaves (unit_id null) should be shown everywhere, keep them. 
+            // But user said "NOMENTE NESSA ESCALA". So if I am in Unit A, I only see Unit A leaves?
+            // What if a leave was created before this feature (unit_id null)? It should probably show.
+            // So: show if t.unit_id matches OR t.unit_id is null/undefined.
+            // BUT user said "NAO VAI APARECER NAS OUTRAS". This implies strictness.
+            // If I create in Unit A, it has Unit A ID.
+            // If I create in Global, it has Null ID.
+            // If I am in Unit B, I should NOT see Unit A.
+            // So: if (selectedUnitId && t.unit_id && t.unit_id !== selectedUnitId) return.
+            if (selectedUnitId && t.unit_id && t.unit_id !== selectedUnitId) return
 
             const startStr = t.start_date < monthStart ? monthStart : t.start_date
             const endStr = t.end_date > monthEnd ? monthEnd : t.end_date
@@ -1074,7 +1138,7 @@ export default function Schedule({
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
         const shift = shiftsLookup.lookup[`${nurseId}_${dateStr}`]
-        if (shift && (shift.shift_type === 'day' || shift.shift_type === 'mt')) return day
+        if (shift && (shift.shift_type === 'day' || shift.shift_type === 'mt' || shift.shift_type === 'dn')) return day
       }
       return 999
     }
@@ -1134,8 +1198,8 @@ export default function Schedule({
     return (
       <>
         {orderedProfessionals.map(({ nurse, firstDay, isTecnico, rowNumber }, index) => {
-          const totalShifts = shiftsLookup.countLookup[nurse.id] || 0
-          const weekendShifts = shiftsLookup.weekendCountLookup[nurse.id] || 0
+          const totalShifts = shiftsLookup.countLookup[nurse.unique_key || nurse.id] || 0
+          const weekendShifts = shiftsLookup.weekendCountLookup[nurse.unique_key || nurse.id] || 0
           
           // Logic: If someone has > 15 shifts but ZERO weekend shifts, they are likely a "Diarista" (Mon-Fri)
           // Diaristas are not paid by shift (Plantão), so their count should be blank.
@@ -1173,7 +1237,7 @@ export default function Schedule({
                 <div className="flex items-center gap-1">
                   {isAdmin && (
                   <button 
-                    onClick={() => handleRemoveFromRoster(nurse.id)} 
+                    onClick={() => handleRemoveFromRoster(nurse.unique_key || '')} 
                     className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors no-print"
                     title="Remover desta escala mensal"
                   >
@@ -1183,11 +1247,11 @@ export default function Schedule({
                   {isAdmin ? (
                     <select 
                       value={nurse.id} 
-                      onChange={(e) => handleReassign(nurse.id, e.target.value)}
+                      onChange={(e) => handleReassign(nurse.unique_key || '', e.target.value)}
                       className={`w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold cursor-pointer outline-none uppercase no-print ${
+                        (nurse.vinculo && nurse.vinculo.toUpperCase().includes('SELETIVO')) ? 'text-green-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
-                        (nurse.vinculo && nurse.vinculo.toUpperCase().includes('SELETIVO')) ? 'text-green-600' :
                         'text-black'
                       }`}
                     >
@@ -1209,14 +1273,15 @@ export default function Schedule({
                   {(() => {
                      const obs = (nurse.observation || '').toUpperCase().trim()
                      const vinculo = (nurse.vinculo || '').toUpperCase().trim()
+                     const isSeletivo = vinculo.includes('SELETIVO')
                      
                      let nameColorClass = "text-black"
-                     if (obs === '1ED') {
+                     if (isSeletivo) {
+                         nameColorClass = "text-green-600"
+                     } else if (obs === '1ED') {
                          nameColorClass = "text-red-600"
                      } else if (obs === '1 ED AB') {
                          nameColorClass = "text-blue-600"
-                     } else if (vinculo.includes('SELETIVO')) {
-                         nameColorClass = "text-green-600"
                      }
 
                      const prefixes = []
@@ -1233,7 +1298,7 @@ export default function Schedule({
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
-                         {obs.includes('1ED') && <span className="ml-1">(1ED)</span>}
+                         {obs.includes('1ED') && !isSeletivo && <span className="ml-1">(1ED)</span>}
                          {displayObs ? displayObs : ''}
                      </span>
                    })()}
@@ -1242,7 +1307,7 @@ export default function Schedule({
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
-                {(nurse.observation || '').includes('1ED') ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
+                {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
                   <SectorCell 
@@ -1263,34 +1328,49 @@ export default function Schedule({
                 const absence = absencesLookup[`${nurse.id}_${dateStr}`]
 
                 // Find shift
-                const shift = shiftsLookup.lookup[`${nurse.id}_${dateStr}`]
+                const shift = shiftsLookup.lookup[`${nurse.unique_key}_${dateStr}`] || shiftsLookup.lookup[`${nurse.id}_${dateStr}`]
 
                 let cellClass = "border border-black px-0 py-0 h-5 w-6 text-center text-[10px] leading-none relative text-black font-bold"
                 let content = null
 
-                if (shift) {
+                // Priority: Special Leaves > Shift > Absence > Generic Folga (implicit)
+                 const isSpecialLeave = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].includes(timeOff.type)
+
+                 if (isSpecialLeave) {
+                   const isPending = timeOff.status === 'pending'
+                   const pendingClass = isPending ? " opacity-70 border-2 border-dashed border-gray-400" : ""
+                   const pendingSuffix = isPending ? "*" : ""
+
+                   if (timeOff.type === 'ferias') {
+                        cellClass += " bg-yellow-100 font-bold text-yellow-800" + pendingClass
+                        content = "FE" + pendingSuffix
+                   }
+                   else if (timeOff.type === 'licenca_saude') {
+                       cellClass += " bg-green-100 font-bold text-green-800" + pendingClass
+                       content = "LS" + pendingSuffix
+                   }
+                   else if (timeOff.type === 'licenca_maternidade') {
+                       cellClass += " bg-pink-100 font-bold text-pink-800" + pendingClass
+                       content = "LM" + pendingSuffix
+                   }
+                   else if (timeOff.type === 'cessao') {
+                       cellClass += " bg-cyan-100 font-bold text-cyan-800" + pendingClass
+                       content = "CED" + pendingSuffix
+                   }
+                   else if (timeOff.type === 'folga') {
+                       cellClass += " bg-blue-100 font-bold text-blue-800" + pendingClass
+                       content = "FO" + pendingSuffix
+                   }
+                 }
+                 else if (shift) {
                    if (shift.shift_type === 'day') content = 'D'
                    else if (shift.shift_type === 'night') content = 'N'
                    else if (shift.shift_type === 'morning') content = 'M'
                    else if (shift.shift_type === 'afternoon') content = 'T'
                    else if (shift.shift_type === 'mt') content = 'MT'
+                   else if (shift.shift_type === 'dn') content = 'DN'
                 }
-
-                if (timeOff && !shift) {
-                  if (timeOff.type === 'ferias') {
-                       cellClass += " bg-gray-50"
-                  }
-                  else if (timeOff.type === 'licenca_saude') {
-                      cellClass += " bg-green-500 text-white" 
-                      content = "LS"
-                  }
-                  else if (timeOff.type === 'licenca_maternidade') cellClass += " bg-blue-400"
-                  else if (timeOff.type === 'cessao') cellClass += " bg-cyan-400"
-                  else {
-                      // Generic Folga - let it inherit background (white or weekend gray)
-                      // content = "F" 
-                  }
-                } else if (absence && !shift) {
+                else if (absence) {
                    // content = "FT"
                    cellClass += " text-red-600 font-extrabold"
                 }
@@ -1299,7 +1379,7 @@ export default function Schedule({
                 // In image, weekend cells are gray. If there is a shift, it's just text on gray.
                 if (isWeekend) {
                    // Apply gray if it's NOT a special colored leave
-                   const hasSpecialColor = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'].includes(timeOff.type)
+                   const hasSpecialColor = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].includes(timeOff.type)
                    
                    if (!hasSpecialColor) {
                        cellClass += " bg-gray-400"
@@ -1706,14 +1786,14 @@ export default function Schedule({
                                 {/* Main Headers Row 3 (Columns) */}
                                 <tr className="bg-blue-100 text-black">
                                     <th 
-                                      className="border border-black px-1 py-1 text-center sticky left-0 bg-blue-100 z-20 font-bold cursor-pointer select-none"
+                                      className="border border-black px-1 py-1 text-center sticky left-0 bg-blue-100 z-20 font-bold cursor-pointer select-none text-xs"
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
                                     const ok = confirm('Reiniciar numeração deste grupo começando em 1?')
                                     if (!ok) return
                                     setLoading(true)
-                                    const currentNurses = (nursesBySection[section.id] || []).filter(n => !selectedUnitId || n.unit_id === selectedUnitId)
+                                    const currentNurses = (nursesBySection[section.id] || []).filter(n => !selectedUnitId || !n.unit_id || n.unit_id === selectedUnitId)
                                     const orderedIds = currentNurses.map(n => n.unique_key || '')
                                     const res = await resetSectionOrder(section.id, selectedUnitId || null, selectedMonth + 1, selectedYear, undefined, orderedIds)
                                     if (!res.success) {
@@ -1728,7 +1808,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-[150px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-sm group" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-[150px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-xs group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center">
                                             <input 
@@ -1746,9 +1826,9 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-14 font-bold bg-blue-100" rowSpan={2}>COREN</th>
-                                <th className="border border-black px-1 py-1 text-center w-14 font-bold bg-blue-100" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-1 py-1 text-center w-14 font-bold text-[10px] bg-blue-100 group relative" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-14 font-bold text-xs bg-blue-100" rowSpan={2}>COREN</th>
+                                <th className="border border-black px-1 py-1 text-center w-14 font-bold text-xs bg-blue-100" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-1 py-1 text-center w-14 font-bold text-xs bg-blue-100 group relative" rowSpan={2}>
                                     {editingSectorTitleId === section.id ? (
                                         <div className="flex items-center gap-1 w-full h-full">
                                             <input 
@@ -1775,25 +1855,25 @@ export default function Schedule({
                                     )}
                                 </th>
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 ${isWeekend ? 'bg-gray-400' : ''}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 text-xs ${isWeekend ? 'bg-gray-400' : ''}`}>
                                     {weekday}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center w-12 font-bold bg-blue-100">TOTAL</th>
+                                <th className="border border-black px-1 py-1 text-center w-12 font-bold text-xs bg-blue-100">TOTAL</th>
                             </tr>
                             {/* Main Headers Row 2 */}
                             <tr className="bg-blue-100 text-black">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 ${isWeekend ? 'bg-gray-400' : ''}`}>
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 text-xs ${isWeekend ? 'bg-gray-400' : ''}`}>
                                       {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center w-12 font-bold bg-blue-100">PLANTÃO</th>
+                                <th className="border border-black px-1 py-1 text-center w-12 font-bold text-xs bg-blue-100">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
                             {renderGrid(
-                                (nursesBySection[section.id] || []).filter(n => !selectedUnitId || n.unit_id === selectedUnitId),
+                                (nursesBySection[section.id] || []).filter(n => !selectedUnitId || !n.unit_id || n.unit_id === selectedUnitId),
                                 section
                             )}
                         </tbody>
@@ -1893,6 +1973,7 @@ export default function Schedule({
         type={leaveModalType || 'ferias'}
         selectedMonth={selectedMonth}
         selectedYear={selectedYear}
+        unitId={selectedUnitId}
       />
 
       {/* Footer / Actions */}
@@ -1978,10 +2059,11 @@ export default function Schedule({
         )}
 
         {/* Dynamic Legend List - Shows who is on leave */}
-        {['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'].map(type => {
+        {['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].map(type => {
             const label = type === 'ferias' ? 'FÉRIAS' : 
                          type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
-                         type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' : 'CESSÃO'
+                         type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' : 
+                         type === 'folga' ? 'FOLGA' : 'CESSÃO'
             
             // Find nurses with this leave type in this month
             const pad = (n: number) => n.toString().padStart(2, '0')
@@ -1998,6 +2080,8 @@ export default function Schedule({
 
                     // Filter by selected unit if applicable
                     if (selectedUnitId) {
+                        if (t.unit_id && t.unit_id !== selectedUnitId) return false
+                        
                         const isInUnit = data.roster.some(r => 
                             r.nurse_id === t.nurse_id && 
                             r.month === selectedMonth + 1 && 
@@ -2011,7 +2095,7 @@ export default function Schedule({
                 })
                 .map(t => {
                     const nurse = data.nurses.find(n => n.id === t.nurse_id)
-                    return nurse ? nurse.name : ''
+                    return nurse ? `${nurse.name}${t.status === 'pending' ? '*' : ''}` : ''
                 })
                 .filter(Boolean)
                 .join(', ')
@@ -2223,9 +2307,16 @@ export default function Schedule({
                             MT
                         </button>
                         <button 
+                            onClick={() => setShiftType('dn')}
+                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'dn' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            DN
+                        </button>
+                        <button 
                             onClick={() => {
                                 setShiftType('delete')
                                 setDeleteWholeMonth(false)
+                                setRecurrence('none') // Force single day deletion by default
                             }}
                             className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'delete' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
                         >
@@ -2326,15 +2417,22 @@ export default function Schedule({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
             {(() => {
-                const targetNurse = activeNurses.find(n => n.id === doubleShiftModal.nurseId)
-                const isAlreadyInThisSection = targetNurse?.is_rostered && targetNurse?.section_id === doubleShiftModal.sectionId && (!selectedUnitId || targetNurse?.unit_id === selectedUnitId)
+                const targetNurse = data.nurses.find(n => n.id === doubleShiftModal.nurseId)
+                // Check directly in roster to handle multiple entries correctly
+                const isAlreadyInThisSection = data.roster.some(r => 
+                    r.nurse_id === doubleShiftModal.nurseId && 
+                    r.section_id === doubleShiftModal.sectionId && 
+                    r.month === selectedMonth + 1 && 
+                    r.year === selectedYear &&
+                    (!selectedUnitId || r.unit_id === selectedUnitId)
+                )
                 
                 return (
                     <>
                         <h3 className="text-lg font-bold mb-4 text-gray-900">Adicionar Profissional</h3>
                         <p className="mb-6 text-gray-700">
                             {isAlreadyInThisSection 
-                                ? <span className="text-red-600 font-bold">Este profissional já está na lista. Deseja definir como escala dupla (ED)?</span>
+                                ? <span className="text-red-600 font-bold">Este profissional já está na lista. Escolha o tipo de vínculo para a nova entrada:</span>
                                 : 'Este vínculo é uma escala dupla?'}
                         </p>
                         
@@ -2355,14 +2453,12 @@ export default function Schedule({
                             <span className="bg-green-800 text-xs px-2 py-1 rounded">1 ED AB</span>
                           </button>
                           
-                          {!isAlreadyInThisSection && (
-                              <button 
-                                onClick={() => finalizeAssignNurse('')}
-                                className="bg-gray-200 text-gray-800 px-4 py-3 rounded hover:bg-gray-300 font-medium text-left"
-                              >
-                                Não (Vínculo Normal)
-                              </button>
-                          )}
+                          <button 
+                            onClick={() => finalizeAssignNurse('')}
+                            className="bg-gray-200 text-gray-800 px-4 py-3 rounded hover:bg-gray-300 font-medium text-left"
+                          >
+                            Não (Vínculo Normal)
+                          </button>
             
                           <button 
                             onClick={() => setDoubleShiftModal(null)}

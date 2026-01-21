@@ -128,6 +128,16 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                       defaultChecked={nurseToEdit?.vinculo === 'CONCURSO'}
                       className="h-4 w-4"
                     />
+                    <span>CONCURSO</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="vinculo"
+                      value="ESCALA DUPLA"
+                      defaultChecked={nurseToEdit?.vinculo === 'ESCALA DUPLA' || (nurseToEdit?.observation || '').includes('1ED')}
+                      className="h-4 w-4"
+                    />
                     <span>ESCALA DUPLA</span>
                   </label>
                   <label className="inline-flex items-center gap-2">

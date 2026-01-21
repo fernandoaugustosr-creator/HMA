@@ -169,13 +169,22 @@ export default function AdminDailySchedule() {
                                     </button>
                                     
                                     {isOpen && (
-                                        <div className="border-t border-gray-50 bg-gray-50/30 p-3">
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                                                {groupedShifts[unit].map((shift: any, index: number) => (
+                                        <div className="border-t border-gray-50 bg-gray-50/30 p-4">
+                                            {(() => {
+                                                const unitShifts = groupedShifts[unit] || []
+                                                const nurses = unitShifts.filter((s: any) => (s.nurse_role || '').toUpperCase().includes('ENFERMEIRO'))
+                                                const technicians = unitShifts.filter((s: any) => (s.nurse_role || '').toUpperCase().includes('TECNICO') || (s.nurse_role || '').toUpperCase().includes('TÉCNICO'))
+                                                const others = unitShifts.filter((s: any) => 
+                                                    !(s.nurse_role || '').toUpperCase().includes('ENFERMEIRO') && 
+                                                    !(s.nurse_role || '').toUpperCase().includes('TECNICO') &&
+                                                    !(s.nurse_role || '').toUpperCase().includes('TÉCNICO')
+                                                )
+
+                                                const renderCard = (shift: any, index: number) => (
                                                     <div key={shift.id || index} className="bg-white rounded-md border border-gray-200 shadow-sm flex overflow-hidden h-20 hover:shadow-md transition-shadow">
                                                         {/* Left Color Block */}
                                                         <div className={`w-12 flex flex-col items-center justify-center text-white shrink-0 ${
-                                                            shift.shift_type === 'night' ? 'bg-slate-700' : 'bg-rose-600'
+                                                            shift.shift_type === 'night' ? 'bg-slate-700' : 'bg-emerald-600'
                                                         }`}>
                                                             <span className="text-xl font-bold leading-none">
                                                                 {shift.shift_type === 'night' ? 'N' : 'D'}
@@ -209,8 +218,38 @@ export default function AdminDailySchedule() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                ))}
-                                            </div>
+                                                )
+
+                                                return (
+                                                    <div className="flex flex-col lg:flex-row gap-6">
+                                                        {/* Enfermeiros Column */}
+                                                        {nurses.length > 0 && (
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-indigo-100">
+                                                                    <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Enfermeiros</span>
+                                                                    <span className="text-xs text-gray-400 font-medium">{nurses.length} profissionais</span>
+                                                                </div>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
+                                                                    {nurses.map((shift: any, i: number) => renderCard(shift, i))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Técnicos Column */}
+                                                        {(technicians.length > 0 || others.length > 0) && (
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-rose-100">
+                                                                    <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Técnicos</span>
+                                                                    <span className="text-xs text-gray-400 font-medium">{technicians.length + others.length} profissionais</span>
+                                                                </div>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
+                                                                    {[...technicians, ...others].map((shift: any, i: number) => renderCard(shift, i))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })()}
                                         </div>
                                     )}
                                 </div>

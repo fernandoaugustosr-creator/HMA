@@ -1778,8 +1778,8 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         supabase.from('units').select('*'),
         supabase.from('nurses').select('*').order('name'),
         supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year),
-        supabase.from('shifts').select('id, nurse_id, date, type').gte('date', startDate).lte('date', endDate),
-        supabase.from('time_off_requests').select('id, nurse_id, start_date, end_date, type, status').eq('status', 'approved').or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
+        supabase.from('shifts').select('id, nurse_id, date, type, roster_id').gte('date', startDate).lte('date', endDate),
+        supabase.from('time_off_requests').select('id, nurse_id, start_date, end_date, type, status, unit_id').in('status', ['approved', 'pending']).or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
         supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
         supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate)
     ])
@@ -2242,7 +2242,8 @@ export async function assignNurseToRoster(
   year: number, 
   observation?: string, 
   createdAt?: string,
-  allowDuplicate: boolean = false
+  allowDuplicate: boolean = false,
+  listOrder?: number | null
 ) {
   try {
     await checkAdmin()
@@ -2266,6 +2267,7 @@ export async function assignNurseToRoster(
           db.monthly_rosters[existingIndex].unit_id = unitId
           if (observation !== undefined) db.monthly_rosters[existingIndex].observation = observation
           if (createdAt) db.monthly_rosters[existingIndex].created_at = createdAt
+          if (listOrder !== undefined) db.monthly_rosters[existingIndex].list_order = listOrder
         } else {
           // If adding new to roster, clear any existing shifts for this month (clean slate) ONLY if not duplicate mode
           // This prevents "ghost" shifts from appearing if the nurse had shifts in this month previously
@@ -2290,7 +2292,8 @@ export async function assignNurseToRoster(
             month: m,
             year,
             observation: observation || '',
-            created_at: createdAt || new Date().toISOString()
+            created_at: createdAt || new Date().toISOString(),
+            list_order: listOrder
           })
         }
     })
@@ -2334,6 +2337,7 @@ export async function assignNurseToRoster(
     }
     if (observation !== undefined) payload.observation = observation
     if (createdAt) payload.created_at = createdAt
+    if (listOrder !== undefined) payload.list_order = listOrder
 
     let error;
     if (allowDuplicate) {
@@ -2413,6 +2417,34 @@ export async function removeNurseFromRoster(nurseId: string, month: number, year
     .eq('nurse_id', nurseId)
     .eq('year', year)
     .eq('month', month)
+
+  if (error) return { success: false, message: error.message }
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function removeRosterEntry(rosterId: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    if (db.monthly_rosters) {
+        db.monthly_rosters = db.monthly_rosters.filter(r => r.id !== rosterId)
+        writeDb(db)
+    }
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('monthly_rosters')
+    .delete()
+    .eq('id', rosterId)
 
   if (error) return { success: false, message: error.message }
   revalidatePath('/')
@@ -2512,78 +2544,120 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
   if (fetchError) return { success: false, message: fetchError.message }
   if (!sourceRoster || sourceRoster.length === 0) return { success: true, message: 'Nenhum servidor encontrado no mês de origem.' }
 
-  const toInsert = sourceRoster.map(item => ({
-      nurse_id: item.nurse_id,
-      section_id: item.section_id,
-      unit_id: item.unit_id,
-      month: targetMonth,
-      year: targetYear,
-      observation: item.observation || null,
-      sector: item.sector || null,
-      list_order: item.list_order ?? null,
-      created_at: item.created_at || new Date().toISOString()
-  }))
-
-  // Insert ignoring duplicates (onConflict do nothing)
-  const { error: insertError } = await supabase
-    .from('monthly_rosters')
-    .upsert(toInsert, { onConflict: 'nurse_id, month, year', ignoreDuplicates: true })
-
-  if (insertError) return { success: false, message: insertError.message }
-
+  // Fetch source shifts
   const nurseIds = sourceRoster.map(r => r.nurse_id)
-  
-  if (nurseIds.length > 0) {
-      const sourceStartDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-01`
-      const sourceLastDay = new Date(sourceYear, sourceMonth, 0).getDate()
-      const sourceEndDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-${sourceLastDay}`
+  const sourceStartDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-01`
+  const sourceLastDay = new Date(sourceYear, sourceMonth, 0).getDate()
+  const sourceEndDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-${sourceLastDay}`
 
-      const { data: sourceShifts } = await supabase
-          .from('shifts')
-          .select('*')
-          .in('nurse_id', nurseIds)
-          .gte('date', sourceStartDate)
-          .lte('date', sourceEndDate)
+  const { data: sourceShifts, error: shiftsError } = await supabase
+      .from('shifts')
+      .select('*')
+      .in('nurse_id', nurseIds)
+      .gte('date', sourceStartDate)
+      .lte('date', sourceEndDate)
+      
+  if (shiftsError) return { success: false, message: shiftsError.message }
 
-      if (sourceShifts && sourceShifts.length > 0) {
-          const shiftsToInsert: any[] = []
-          const targetLastDay = new Date(targetYear, targetMonth, 0).getDate()
+  // Group shifts by roster_id (preferred) and nurse_id (legacy fallback)
+  const shiftsByRosterId: Record<string, any[]> = {}
+  const shiftsByNurseIdLegacy: Record<string, any[]> = {}
 
-          const targetStartDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`
-          const targetEndDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${targetLastDay}`
-          
-          // Limpar plantões existentes desses profissionais no mês de destino
-          await supabase
-              .from('shifts')
-              .delete()
-              .in('nurse_id', nurseIds)
-              .gte('date', targetStartDate)
-              .lte('date', targetEndDate)
+  if (sourceShifts) {
+      sourceShifts.forEach(s => {
+          if (s.roster_id) {
+              if (!shiftsByRosterId[s.roster_id]) shiftsByRosterId[s.roster_id] = []
+              shiftsByRosterId[s.roster_id].push(s)
+          } else {
+              if (!shiftsByNurseIdLegacy[s.nurse_id]) shiftsByNurseIdLegacy[s.nurse_id] = []
+              shiftsByNurseIdLegacy[s.nurse_id].push(s)
+          }
+      })
+  }
 
-          sourceShifts.forEach(shift => {
-              const day = parseInt((shift.date as string).split('-')[2], 10)
-              if (day > targetLastDay) return
+  // 1. Limpar o mês de destino para garantir uma cópia fiel (evitar duplicatas e misturas)
+  let deleteQuery = supabase.from('monthly_rosters').delete().eq('month', targetMonth).eq('year', targetYear)
+  if (unitId) deleteQuery = deleteQuery.eq('unit_id', unitId)
+  await deleteQuery
+
+  // 2. Ordenar a lista de origem para preservar a ordem visual
+  const sortedSourceRoster = [...sourceRoster].sort((a, b) => {
+      // Prioridade: list_order
+      if (a.list_order !== null && b.list_order !== null) {
+          return a.list_order - b.list_order
+      }
+      if (a.list_order !== null) return -1
+      if (b.list_order !== null) return 1
+      
+      // Fallback: created_at
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+
+  const targetLastDay = new Date(targetYear, targetMonth, 0).getDate()
+  let addedCount = 0
+
+  // 3. Processar sequencialmente para garantir ordem
+  const processedLegacyNurses = new Set<string>()
+
+  for (const sourceEntry of sortedSourceRoster) {
+      // Create target roster entry
+      const targetEntry = {
+          nurse_id: sourceEntry.nurse_id,
+          section_id: sourceEntry.section_id,
+          unit_id: sourceEntry.unit_id,
+          month: targetMonth,
+          year: targetYear,
+          observation: sourceEntry.observation || null,
+          sector: sourceEntry.sector || null,
+          list_order: sourceEntry.list_order ?? null,
+          created_at: new Date().toISOString()
+      }
+
+      // Insert and get ID
+      const { data: insertedRoster, error: insertError } = await supabase
+          .from('monthly_rosters')
+          .insert(targetEntry)
+          .select()
+          .single()
+      
+      if (insertError) {
+          console.error('Error inserting roster:', insertError)
+          continue
+      }
+      
+      addedCount++
+
+      // Find associated shifts
+      let myShifts = shiftsByRosterId[sourceEntry.id] || []
+      
+      // Legacy handling: Attach legacy shifts to the FIRST occurrence of this nurse
+      if (!processedLegacyNurses.has(sourceEntry.nurse_id) && shiftsByNurseIdLegacy[sourceEntry.nurse_id]) {
+          myShifts = [...myShifts, ...shiftsByNurseIdLegacy[sourceEntry.nurse_id]]
+          processedLegacyNurses.add(sourceEntry.nurse_id)
+      }
+
+      if (myShifts.length > 0) {
+          const shiftsToInsert = myShifts.map(s => {
+              const day = parseInt((s.date as string).split('-')[2], 10)
+              if (day > targetLastDay) return null
 
               const newDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-              shiftsToInsert.push({
-                  nurse_id: shift.nurse_id as string,
+              return {
+                  nurse_id: s.nurse_id,
                   date: newDate,
-                  type: shift.type as string | null
-              })
-          })
+                  type: s.type,
+                  roster_id: insertedRoster.id
+              }
+          }).filter(Boolean)
 
           if (shiftsToInsert.length > 0) {
-              const { error: shiftInsertError } = await supabase
-                  .from('shifts')
-                  .insert(shiftsToInsert)
-              
-              if (shiftInsertError) console.error('Error copying shifts:', shiftInsertError)
+              await supabase.from('shifts').insert(shiftsToInsert)
           }
       }
   }
   
   revalidatePath('/')
-  return { success: true, message: 'Cópia realizada com sucesso (incluindo plantões).' }
+  return { success: true, message: `${addedCount} servidores copiados com sucesso.` }
 }
 
 export async function updateRosterObservation(nurseId: string, month: number, year: number, observation: string) {
@@ -2868,7 +2942,7 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   const targetNurseId = (isAdmin && nurseIdFromForm) ? nurseIdFromForm : user.id
-  const initialStatus = (isAdmin && nurseIdFromForm) ? 'approved' : 'pending'
+  const initialStatus = isAdmin ? 'approved' : 'pending'
 
   if (isLocalMode()) {
     const db = readDb()
@@ -2894,7 +2968,8 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
     start_date: startDate,
     end_date: endDate,
     reason,
-    status: initialStatus
+    status: initialStatus,
+    type: 'folga'
   })
 
   if (error) return { message: 'Erro ao solicitar folga: ' + error.message }
@@ -2913,6 +2988,7 @@ export async function assignLeave(prevState: any, formData: FormData) {
   const startDate = formData.get('startDate') as string
   const endDate = formData.get('endDate') as string
   const type = formData.get('type') as string || 'ferias'
+  const unitId = formData.get('unitId') as string || null
   
   const reasonMap: Record<string, string> = {
     'ferias': 'Férias programadas',
@@ -2929,7 +3005,7 @@ export async function assignLeave(prevState: any, formData: FormData) {
 
   if (isLocalMode()) {
     const db = readDb()
-    const newRequest = {
+    const newRequest: any = {
       id: randomUUID(),
       nurse_id: nurseId,
       start_date: startDate,
@@ -2939,6 +3015,8 @@ export async function assignLeave(prevState: any, formData: FormData) {
       status: 'approved',
       created_at: new Date().toISOString()
     }
+    if (unitId) newRequest.unit_id = unitId
+    
     db.time_off_requests.push(newRequest)
     writeDb(db)
     revalidatePath('/')
@@ -2946,14 +3024,17 @@ export async function assignLeave(prevState: any, formData: FormData) {
   }
 
   const supabase = createClient()
-  const { error } = await supabase.from('time_off_requests').insert({
+  const payload: any = {
     nurse_id: nurseId,
     start_date: startDate,
     end_date: endDate,
     reason,
     type,
     status: 'approved'
-  })
+  }
+  if (unitId) payload.unit_id = unitId
+
+  const { error } = await supabase.from('time_off_requests').insert(payload)
 
   if (error) return { success: false, message: 'Erro ao cadastrar ausência: ' + error.message }
   revalidatePath('/')
@@ -3360,7 +3441,7 @@ export async function deleteSection(id: string) {
   return { success: true }
 }
 
-export async function saveShifts(shifts: { nurseId: string, date: string, type: string }[]) {
+export async function saveShifts(shifts: { nurseId: string, rosterId?: string, date: string, type: string }[]) {
   try {
     await checkAdmin()
   } catch (e) {
@@ -3377,9 +3458,50 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
     const db = readDb()
     
     shifts.forEach(shift => {
-      // Check if exists
-      const existingIndex = db.shifts.findIndex(s => s.nurse_id === shift.nurseId && s.shift_date === shift.date)
+      // Check if exists - match nurse, date AND roster_id (if present)
+      let existingIndex = db.shifts.findIndex(s => 
+        s.nurse_id === shift.nurseId && 
+        s.shift_date === shift.date &&
+        (shift.rosterId ? s.roster_id === shift.rosterId : !s.roster_id)
+      )
       
+      // If we are saving a specific roster shift, handle legacy shift splitting
+      if (shift.rosterId) {
+        const legacyIndex = db.shifts.findIndex(s => 
+          s.nurse_id === shift.nurseId && 
+          s.shift_date === shift.date && 
+          !s.roster_id
+        )
+        
+        if (legacyIndex !== -1) {
+           const legacyShift = db.shifts[legacyIndex]
+           
+           // Find other rosters for this nurse to preserve the shift there
+           const otherRosters = (db.monthly_rosters || [])
+              .filter((r: any) => r.nurse_id === shift.nurseId && r.id !== shift.rosterId)
+           
+           // Create copies for other rosters
+           otherRosters.forEach((r: any) => {
+               db.shifts.push({
+                   ...legacyShift,
+                   id: randomUUID(),
+                   roster_id: r.id,
+                   updated_at: new Date().toISOString()
+               })
+           })
+           
+           // Remove the legacy shift
+           db.shifts.splice(legacyIndex, 1)
+           
+           // Re-calculate existingIndex because splice might have shifted indices
+           existingIndex = db.shifts.findIndex(s => 
+            s.nurse_id === shift.nurseId && 
+            s.shift_date === shift.date &&
+            (shift.rosterId ? s.roster_id === shift.rosterId : !s.roster_id)
+           )
+        }
+      }
+
       if (shift.type === 'DELETE') {
         if (existingIndex !== -1) {
           db.shifts.splice(existingIndex, 1)
@@ -3388,6 +3510,7 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
         const newShift = {
           id: existingIndex !== -1 ? db.shifts[existingIndex].id : randomUUID(),
           nurse_id: shift.nurseId,
+          roster_id: shift.rosterId || undefined,
           shift_date: shift.date,
           shift_type: shift.type,
           updated_at: new Date().toISOString()
@@ -3409,7 +3532,6 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
   const supabase = createClient()
   
   // Handle Upserts and Deletes logic safely
-  // We assume shifts are mostly for the same nurse, but we should handle mixed cases if any.
   // Group by nurse to optimize
   const shiftsByNurse: Record<string, typeof shifts> = {}
   shifts.forEach(s => {
@@ -3419,38 +3541,115 @@ export async function saveShifts(shifts: { nurseId: string, date: string, type: 
 
   for (const nurseId of Object.keys(shiftsByNurse)) {
     const nurseShifts = shiftsByNurse[nurseId]
-    const dates = nurseShifts.map(s => s.date)
+    
+    // Further group by rosterId to ensure targeted operations
+    const shiftsByRoster: Record<string, typeof nurseShifts> = {}
+    nurseShifts.forEach(s => {
+        const key = s.rosterId || 'legacy'
+        if (!shiftsByRoster[key]) shiftsByRoster[key] = []
+        shiftsByRoster[key].push(s)
+    })
 
-    // 1. Delete existing shifts for these dates (prevents duplicates if constraint is missing)
-    const { error: deleteError } = await supabase
-      .from('shifts')
-      .delete()
-      .eq('nurse_id', nurseId)
-      .in('date', dates)
+    for (const rKey in shiftsByRoster) {
+        const batch = shiftsByRoster[rKey]
+        const dates = batch.map(s => s.date)
+        const rosterId = rKey === 'legacy' ? null : rKey
 
-    if (deleteError) {
-      console.error('Error deleting old shifts:', deleteError)
-      return { success: false, message: 'Erro ao limpar turnos antigos: ' + deleteError.message }
-    }
+        if (rosterId) {
+            // Check for legacy shifts to split (preserve for other rosters)
+            const { data: legacyShifts } = await supabase
+                .from('shifts')
+                .select('*')
+                .eq('nurse_id', nurseId)
+                .is('roster_id', null)
+                .in('date', dates)
 
-    // 2. Insert new shifts (filtering out DELETE type)
-    const toInsert = nurseShifts
-      .filter(s => s.type !== 'DELETE')
-      .map(s => ({
-        nurse_id: s.nurseId,
-        date: s.date,
-        type: s.type
-      }))
+            if (legacyShifts && legacyShifts.length > 0) {
+                 const { data: nurseRosters } = await supabase
+                    .from('monthly_rosters')
+                    .select('id')
+                    .eq('nurse_id', nurseId)
+                 
+                 const otherRosterIds = nurseRosters?.map(r => r.id).filter(id => id !== rosterId) || []
+                 
+                 if (otherRosterIds.length > 0) {
+                     const splitShifts: any[] = []
+                     legacyShifts.forEach(ls => {
+                         otherRosterIds.forEach(rid => {
+                             splitShifts.push({
+                                 nurse_id: nurseId,
+                                 roster_id: rid,
+                                 date: ls.date,
+                                 type: ls.type
+                             })
+                         })
+                     })
+                     
+                     if (splitShifts.length > 0) {
+                         await supabase.from('shifts').insert(splitShifts)
+                     }
+                 }
+            }
 
-    if (toInsert.length > 0) {
-      const { error: insertError } = await supabase
-        .from('shifts')
-        .insert(toInsert)
-      
-      if (insertError) {
-        console.error('Error inserting new shifts:', insertError)
-        return { success: false, message: 'Erro ao salvar novos turnos: ' + insertError.message }
-      }
+            // 1. Delete existing shifts for this SPECIFIC roster entry
+            const { error: deleteSpecificError } = await supabase
+                .from('shifts')
+                .delete()
+                .eq('roster_id', rosterId)
+                .in('date', dates)
+
+            if (deleteSpecificError) {
+                console.error('Error deleting specific shifts:', deleteSpecificError)
+                return { success: false, message: 'Erro ao limpar turnos: ' + deleteSpecificError.message }
+            }
+
+            // 2. Delete LEGACY shifts (roster_id IS NULL) to prevent interference/duplication
+            // This ensures that when we set a shift for a roster row, we don't have a "ghost" legacy shift showing up via fallback
+            const { error: deleteLegacyError } = await supabase
+                .from('shifts')
+                .delete()
+                .eq('nurse_id', nurseId)
+                .is('roster_id', null)
+                .in('date', dates)
+            
+            if (deleteLegacyError) {
+                console.error('Error cleaning legacy shifts:', deleteLegacyError)
+            }
+        } else {
+            // Legacy/Fallback behavior: Delete by nurse_id where roster_id is null
+            const { error: deleteError } = await supabase
+                .from('shifts')
+                .delete()
+                .eq('nurse_id', nurseId)
+                .is('roster_id', null) // Be explicit to avoid deleting roster-specific shifts
+                .in('date', dates)
+
+            if (deleteError) {
+                console.error('Error deleting old shifts:', deleteError)
+                return { success: false, message: 'Erro ao limpar turnos antigos: ' + deleteError.message }
+            }
+        }
+
+        // 3. Insert new shifts (filtering out DELETE type)
+        const toInsert = batch
+            .filter(s => s.type !== 'DELETE')
+            .map(s => ({
+                nurse_id: s.nurseId,
+                roster_id: rosterId, // Can be null
+                date: s.date,
+                type: s.type
+            }))
+
+        if (toInsert.length > 0) {
+            const { error: insertError } = await supabase
+                .from('shifts')
+                .insert(toInsert)
+            
+            if (insertError) {
+                console.error('Error inserting new shifts:', insertError)
+                return { success: false, message: 'Erro ao salvar novos turnos: ' + insertError.message }
+            }
+        }
     }
   }
   
