@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
-import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer } from 'lucide-react'
+import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
 
@@ -231,7 +231,7 @@ export default function Schedule({
   const [renameHiddenSectionTitle, setRenameHiddenSectionTitle] = useState('')
   
   // Double Shift Modal State
-  const [doubleShiftModal, setDoubleShiftModal] = useState<{ isOpen: boolean, nurseId: string, sectionId: string } | null>(null)
+  const [doubleShiftModal, setDoubleShiftModal] = useState<{ isOpen: boolean, nurseId: string, sectionId: string, rosterId?: string } | null>(null)
   
   // Unit Management State
   const [isAddingUnit, setIsAddingUnit] = useState(false)
@@ -302,7 +302,7 @@ export default function Schedule({
 
       // Server Update
       try {
-          await Promise.all(targetsToUpdate.map(t => updateRosterSector(t.id, selectedMonth + 1, selectedYear, replicationData.value)))
+          await Promise.all(targetsToUpdate.map(t => updateRosterSector(t.id, replicationData.value)))
           setReplicationModalOpen(false)
           setReplicationData(null)
       } catch (e) {
@@ -389,9 +389,9 @@ export default function Schedule({
       const sections = new Set<string>()
       if (data.roster) {
           data.roster.forEach(r => {
-              // Allow showing roster entries that match the unit OR have no unit (legacy/global)
+              // Allow showing roster entries that match the unit
               // This prevents "lost data" for entries created before unit strictness
-              if ((!selectedUnitId || !r.unit_id || r.unit_id === selectedUnitId) && r.month === selectedMonth + 1 && r.year === selectedYear) {
+              if ((!selectedUnitId || r.unit_id === selectedUnitId) && r.month === selectedMonth + 1 && r.year === selectedYear) {
                   sections.add(r.section_id)
               }
           })
@@ -489,14 +489,46 @@ export default function Schedule({
       }
   }
 
+  const handleClearAllUnitRosters = async () => {
+    if (!selectedUnitId) return
+    const unitName = data.units.find(u => u.id === selectedUnitId)?.title
+    if (!confirm(`ATENÇÃO: Deseja EXCLUIR TODO O HISTÓRICO DE ESCALAS do setor "${unitName}"?\n\nIsso apagará TODAS as escalas (passadas, presentes e futuras) deste setor.\n\nO setor em si NÃO será excluído.`)) return
+    
+    // Double confirmation
+    const confirmName = prompt(`Para confirmar, digite o nome do setor: ${unitName}`)
+    if (confirmName !== unitName) {
+        alert('Nome incorreto. Ação cancelada.')
+        return
+    }
+
+    setLoading(true)
+    const res = await clearAllUnitRosters(selectedUnitId)
+    if (res.success) {
+        alert('Histórico de escalas excluído com sucesso!')
+        clearCache()
+        fetchData(true)
+    } else {
+        alert(res.message || 'Erro ao limpar histórico')
+    }
+    setLoading(false)
+  }
+
   const handleDeleteUnit = async () => {
       if (!selectedUnitId) return
-      if (!confirm('Tem certeza que deseja excluir este setor? Esta ação não pode ser desfeita.')) return
+      const unitName = data.units.find(u => u.id === selectedUnitId)?.title
+      if (!confirm(`ATENÇÃO CRÍTICA: Deseja EXCLUIR O SETOR "${unitName}"?\n\nIsso apagará o setor E TODO O SEU HISTÓRICO de escalas e plantões.\n\nEsta ação é IRREVERSÍVEL.`)) return
       
+      const confirmName = prompt(`Para confirmar a exclusão do setor, digite o nome do setor: ${unitName}`)
+      if (confirmName !== unitName) {
+          alert('Nome incorreto. Ação cancelada.')
+          return
+      }
+
       setLoading(true)
       try {
           const res = await deleteUnit(selectedUnitId)
           if (res.success) {
+              alert('Setor excluído com sucesso!')
               setSelectedUnitId('')
               clearCache()
               await fetchData(true)
@@ -576,12 +608,7 @@ export default function Schedule({
     await fetchData(true)
   }
 
-  async function handleReassign(rosterId: string, newId: string) {
-    // For roster, reassign implies changing the nurse assigned to this slot?
-    // Or just swapping? For simplicity, we can remove old and add new.
-    // But `reassignNurse` action was for global change. 
-    // Here we should probably just remove old from roster and add new to roster.
-    
+  const handleReassign = (rosterId: string, newId: string) => {
     const rosterItem = data.roster.find(r => r.id === rosterId)
     if (!rosterItem) {
         alert('Erro: Servidor não encontrado na escala.')
@@ -589,73 +616,75 @@ export default function Schedule({
     }
 
     if (rosterItem.nurse_id === newId) return
-    if (!confirm('Tem certeza que deseja substituir o servidor nesta escala?')) return
     
-    setLoading(true)
-
-    // 2. Remove old
-    await removeRosterEntry(rosterId)
-    
-    // 3. Add new (using same section and unit), preserving created_at if possible or using old one
-    const allowDuplicate = (rosterItem.observation || '').includes('ED')
-    await assignNurseToRoster(newId, rosterItem.section_id, rosterItem.unit_id, selectedMonth + 1, selectedYear, rosterItem.observation, rosterItem.created_at, allowDuplicate, rosterItem.list_order)
-    
-    clearCache()
-    await fetchData(true)
-    setLoading(false)
+    // Open Modal to confirm bond type
+    setDoubleShiftModal({ 
+        isOpen: true, 
+        nurseId: newId, 
+        sectionId: rosterItem.section_id,
+        rosterId: rosterId 
+    })
   }
 
-  const handleUpdateObservation = async (nurseId: string, observation: string) => {
+  const handleUpdateObservation = async (rosterId: string, observation: string) => {
     // Optimistic update locally
     setData(prev => ({
         ...prev,
         roster: prev.roster.map(r => 
-            r.nurse_id === nurseId && r.month === selectedMonth + 1 && r.year === selectedYear 
+            r.id === rosterId 
             ? { ...r, observation } 
             : r
         )
     }))
 
-    const res = await updateRosterObservation(nurseId, selectedMonth + 1, selectedYear, observation)
+    const res = await updateRosterObservation(rosterId, observation)
     if (!res.success) {
         alert('Erro ao salvar observação')
-        // Revert? simpler to just fetch data
+        await fetchData(true)
+    } else {
+        // Ensure consistency
         await fetchData(true)
     }
   }
 
-  const handleUpdateSector = async (nurseId: string, sector: string) => {
+  const handleUpdateSector = async (rosterId: string, sector: string) => {
     // Optimistic update locally
     setData(prev => ({
         ...prev,
         roster: prev.roster.map(r => 
-            (r.nurse_id === nurseId && r.month === selectedMonth + 1 && r.year === selectedYear)
+            r.id === rosterId
             ? { ...r, sector }
             : r
         )
     }))
 
-    const res = await updateRosterSector(nurseId, selectedMonth + 1, selectedYear, sector)
+    const res = await updateRosterSector(rosterId, sector)
     if (!res.success) {
         alert('Erro ao salvar setor')
+        await fetchData(true)
+    } else {
+        // Ensure consistency
         await fetchData(true)
     }
   }
 
-  const handleUpdateOrder = async (nurseId: string, listOrder: number | null) => {
+  const handleUpdateOrder = async (rosterId: string, listOrder: number | null) => {
     setData(prev => ({
       ...prev,
       roster: prev.roster.map(r =>
-        r.nurse_id === nurseId && r.month === selectedMonth + 1 && r.year === selectedYear
+        r.id === rosterId
           ? { ...r, list_order: listOrder }
           : r
       )
     }))
 
-    const res = await updateRosterOrder(nurseId, selectedMonth + 1, selectedYear, listOrder)
+    const res = await updateRosterOrder(rosterId, listOrder)
     if (!res.success) {
       alert('Erro ao salvar numeração')
       await fetchData(true)
+    } else {
+        // Ensure consistency
+        await fetchData(true)
     }
   }
 
@@ -781,46 +810,85 @@ export default function Schedule({
 
   const finalizeAssignNurse = async (observation: string) => {
     if (!doubleShiftModal) return
-    const { nurseId, sectionId } = doubleShiftModal
+    const { nurseId, sectionId, rosterId } = doubleShiftModal
     setDoubleShiftModal(null)
     
-    // Check if nurse is already in THIS section (and unit if applicable)
-    // We check directly in data.roster to decide if we need to force a duplicate entry
-    const isAlreadyInThisSection = data.roster.some(r => 
-        r.nurse_id === nurseId && 
-        r.section_id === sectionId && 
-        r.month === selectedMonth + 1 && 
-        r.year === selectedYear &&
-        (!selectedUnitId || r.unit_id === selectedUnitId)
-    )
-
-    // Check if it is a Double Shift assignment (ED) or if we are adding a duplicate entry to the same section
-    const allowDuplicate = observation.includes('ED') || isAlreadyInThisSection
-
     setLoading(true)
     try {
-        const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear, observation, undefined, allowDuplicate)
-        if (res.success) {
-            clearCache()
-            await fetchData(true)
+        if (rosterId) {
+             // REASSIGN LOGIC
+             const rosterItem = data.roster.find(r => r.id === rosterId)
+             if (!rosterItem) {
+                 alert('Erro: Servidor original não encontrado.')
+                 setLoading(false)
+                 return
+             }
+             
+             // Remove old
+             const removeRes = await removeRosterEntry(rosterId)
+             if (!removeRes.success) {
+                 alert('Erro ao remover servidor anterior: ' + removeRes.message)
+                 setLoading(false)
+                 return
+             }
+
+             // Add new
+             const allowDuplicate = observation.includes('ED')
+             
+             const res = await assignNurseToRoster(
+                 nurseId, 
+                 rosterItem.section_id, 
+                 rosterItem.unit_id, 
+                 selectedMonth + 1, 
+                 selectedYear, 
+                 observation, 
+                 rosterItem.created_at, 
+                 allowDuplicate, 
+                 rosterItem.list_order
+             )
+             
+             if (res.success) {
+                clearCache()
+                await fetchData(true)
+             } else {
+                 alert('Erro ao adicionar novo servidor: ' + res.message)
+             }
         } else {
-            if (res.message && res.message.includes('script V11')) {
-                setShowSqlModal(true)
+            // ADD LOGIC
+            const isAlreadyInThisSection = data.roster.some(r => 
+                r.nurse_id === nurseId && 
+                r.section_id === sectionId && 
+                r.month === selectedMonth + 1 && 
+                r.year === selectedYear &&
+                (!selectedUnitId || r.unit_id === selectedUnitId)
+            )
+
+            const allowDuplicate = observation.includes('ED') || isAlreadyInThisSection
+
+            const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear, observation, undefined, allowDuplicate)
+            if (res.success) {
+                clearCache()
+                await fetchData(true)
             } else {
-                alert('Erro ao adicionar: ' + res.message)
+                if (res.message && res.message.includes('script V11')) {
+                    setShowSqlModal(true)
+                } else {
+                    alert('Erro ao adicionar: ' + res.message)
+                }
             }
         }
     } catch (error) {
         console.error(error)
-        alert('Erro ao adicionar')
+        alert('Erro ao processar')
     } finally {
         setLoading(false)
     }
   }
 
-  const handleCellClick = (nurse: Nurse, dateStr: string) => {
+  const handleCellClick = (nurse: Nurse, dateStr: string, explicitRosterId?: string) => {
     // Robust rosterId resolution
-    let rosterId = nurse.is_rostered ? nurse.unique_key : undefined
+    // Priority: Explicit ID (from clicked row) > Nurse Property > Fallback Search
+    let rosterId = explicitRosterId || (nurse.is_rostered ? nurse.unique_key : undefined)
     
     // Fallback: If rosterId is missing but nurse is in roster, try to find it
     if (!rosterId && data.roster) {
@@ -828,7 +896,7 @@ export default function Schedule({
             r.nurse_id === nurse.id && 
             r.month === selectedMonth + 1 && 
             r.year === selectedYear &&
-            (!selectedUnitId || !r.unit_id || r.unit_id === selectedUnitId)
+            (!selectedUnitId || r.unit_id === selectedUnitId)
         )
         if (entry) rosterId = entry.id
     }
@@ -840,8 +908,12 @@ export default function Schedule({
         date: dateStr
     })
     setShiftType('day')
+    // Restore last recurrence preference
+    const savedRecurrence = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_recurrence') as any || 'none') : 'none'
+    setRecurrence(savedRecurrence)
     setLimitShifts('')
-    setCustomRecurrenceDays('')
+    const savedCustomDays = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_custom_days') || '') : ''
+    setCustomRecurrenceDays(savedCustomDays)
     setDeleteWholeMonth(false)
     setIsShiftModalOpen(true)
   }
@@ -927,6 +999,43 @@ export default function Schedule({
             }
         }
 
+        // CONFLICT DETECTION
+        // Only if adding/updating (not deleting)
+        if (shiftType !== 'delete') {
+            const conflictingDates: string[] = []
+            
+            shiftsToSave.forEach(newShift => {
+                // Check if nurse has a shift on this date in ANOTHER roster
+                const conflict = data.shifts?.some(s => 
+                    s.nurse_id === newShift.nurseId && 
+                    s.shift_date === newShift.date && 
+                    // Conflict if roster_id is DIFFERENT (meaning another unit or another line)
+                    // If s.roster_id is null, it's legacy. If legacy is bound to another unit, it's a conflict.
+                    // But we don't know easily where legacy is bound here without re-running binding logic.
+                    // Simplest check: s.roster_id exists AND is different from newShift.rosterId
+                    (s.roster_id && s.roster_id !== newShift.rosterId)
+                )
+                
+                if (conflict) {
+                    // Double check if the conflicting roster belongs to a DIFFERENT unit (optional, but requested "OUTRA ESCALA")
+                    // If it's the same unit but different line (ED), user might still want warning.
+                    // User said "DUPLICIDADE" (Duplicity).
+                    conflictingDates.push(newShift.date.split('-').reverse().join('/'))
+                }
+            })
+
+            if (conflictingDates.length > 0) {
+                // Unique dates
+                const uniqueDates = Array.from(new Set(conflictingDates))
+                const message = `ATENÇÃO: O profissional já possui plantão em OUTRA ESCALA nas seguintes datas:\n\n${uniqueDates.join(', ')}\n\nDeseja realmente inserir duplicidade?`
+                
+                if (!confirm(message)) {
+                    setLoading(false)
+                    return
+                }
+            }
+        }
+
         const res = await saveShifts(shiftsToSave)
 
         if (!res.success) {
@@ -970,6 +1079,19 @@ export default function Schedule({
       return map
   }, [data.roster, selectedMonth, selectedYear])
 
+  // Identify valid roster IDs for the current unit context
+  const currentUnitRosterIds = React.useMemo(() => {
+      const set = new Set<string>()
+      if (data.roster) {
+          data.roster.forEach(r => {
+              if (r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId)) {
+                  set.add(r.id)
+              }
+          })
+      }
+      return set
+  }, [data.roster, selectedMonth, selectedYear, selectedUnitId])
+
   const activeNurses = React.useMemo(() => {
       return data.nurses.flatMap(nurse => {
           const rosterEntries = rosterMap[nurse.id]
@@ -1007,18 +1129,25 @@ export default function Schedule({
       })
       Object.keys(grouped).forEach(key => {
           grouped[key].sort((a, b) => {
-              // Primary sort: created_at (to maintain stability regardless of numbering)
+              // Primary sort: List Order (if available)
+              if (a.list_order != null && b.list_order != null) {
+                  return a.list_order - b.list_order
+              }
+              if (a.list_order != null) return -1
+              if (b.list_order != null) return 1
+
+              // Secondary sort: created_at (to maintain stability regardless of numbering)
               const aTime = a.roster_created_at ? new Date(a.roster_created_at).getTime() : 0
               const bTime = b.roster_created_at ? new Date(b.roster_created_at).getTime() : 0
               if (aTime !== bTime) {
                   return aTime - bTime
               }
 
-              // Secondary sort: name
+              // Tertiary sort: name
               const nameCompare = a.name.localeCompare(b.name)
               if (nameCompare !== 0) return nameCompare
 
-              // Tertiary sort: unique_key (Roster ID) for absolute stability
+              // Quaternary sort: unique_key (Roster ID) for absolute stability
               return (a.unique_key || '').localeCompare(b.unique_key || '')
           })
       })
@@ -1038,41 +1167,99 @@ export default function Schedule({
               if (s.shift_date.startsWith(monthPrefix)) {
                   let rosterKey = s.roster_id
 
+                  // Strict Isolation: Only include shifts that belong to the current unit context
+                  if (s.roster_id && !currentUnitRosterIds.has(s.roster_id)) {
+                      return // Skip shifts from other units
+                  }
+
                   if (!rosterKey) {
                       // Legacy shift (no roster_id)
-                      // Logic: Assign legacy shifts to the FIRST roster entry found for this nurse.
+                      // Logic: Assign legacy shifts to the FIRST roster entry found for this nurse IN THIS UNIT.
                       const rosterEntries = rosterMap[s.nurse_id]
                       if (rosterEntries && rosterEntries.length > 0) {
-                          const sortedEntries = [...rosterEntries].sort((a, b) => {
-                              const tA = new Date(a.created_at).getTime()
-                              const tB = new Date(b.created_at).getTime()
-                              return tA - tB
-                          })
-                          rosterKey = sortedEntries[0].id
+                          // Filter entries to match current unit
+                          const unitEntries = rosterEntries.filter(r => currentUnitRosterIds.has(r.id))
+                          
+                          if (unitEntries.length > 0) {
+                              const sortedEntries = [...unitEntries].sort((a, b) => {
+                                  const tA = new Date(a.created_at).getTime()
+                                  const tB = new Date(b.created_at).getTime()
+                                  return tA - tB
+                              })
+                              rosterKey = sortedEntries[0].id
+                          } else {
+                              // Nurse has roster entries but NONE in this unit.
+                              // Skip this shift for this view.
+                              return
+                          }
                       } else {
-                           // Fallback if not rostered
+                           // Fallback if not rostered anywhere? 
+                           // If not rostered, currentUnitRosterIds won't have the nurse_id either (it has roster IDs).
+                           // If we want to show "unassigned" shifts in a global view, we keep them.
+                           // If selectedUnitId is set, we skip.
+                           if (selectedUnitId) return
                            rosterKey = s.nurse_id
                       }
                   }
 
                   // Populate lookup
-                  lookup[`${rosterKey}_${s.shift_date}`] = s
+                  const key = `${rosterKey}_${s.shift_date}`
+                  const existing = lookup[key]
 
-                  // Populate counts by rosterKey (Line-specific counts)
-                  const weight = s.shift_type === 'dn' ? 2 : 1
-                  countLookup[rosterKey] = (countLookup[rosterKey] || 0) + weight
-
-                  // Check if weekend
-                  const date = new Date(s.shift_date + 'T12:00:00')
-                  const day = date.getDay()
-                  if (day === 0 || day === 6) { // 0=Sun, 6=Sat
-                      weekendCountLookup[rosterKey] = (weekendCountLookup[rosterKey] || 0) + weight
+                  // Priority Logic:
+                  // 1. Roster-Specific Shift (s.roster_id defined) ALWAYS overwrites Legacy Shift (existing.roster_id undefined)
+                  // 2. If both are Roster-Specific or both Legacy, last one wins (or based on created_at if we had it, but simple overwrite is standard)
+                  // 3. If existing is Roster-Specific and new is Legacy, IGNORE new.
+                  
+                  if (existing) {
+                      if (existing.roster_id && !s.roster_id) {
+                          // Keep existing roster-specific shift, ignore legacy
+                      } else {
+                          // Overwrite (New is roster-specific OR both are same type)
+                          lookup[key] = s
+                      }
+                  } else {
+                      lookup[key] = s
                   }
+              }
+          })
+
+          // Second pass: Calculate counts based on "Winning" shifts only
+          Object.values(lookup).forEach(s => {
+              // Re-resolve rosterKey for the winning shift (same logic as above)
+              let rosterKey = s.roster_id
+              if (!rosterKey) {
+                  const rosterEntries = rosterMap[s.nurse_id]
+                  if (rosterEntries && rosterEntries.length > 0) {
+                       // Sort by created_at to be consistent
+                      const sortedEntries = [...rosterEntries].sort((a, b) => {
+                          const tA = new Date(a.created_at).getTime()
+                          const tB = new Date(b.created_at).getTime()
+                          return tA - tB
+                      })
+                      rosterKey = sortedEntries[0].id
+                  } else {
+                      rosterKey = s.nurse_id
+                  }
+              }
+
+              // Populate counts by rosterKey (Line-specific counts)
+              // Fix: Ignore FOLGA_VAZIA and other non-working types in counts
+              const isWorkingShift = ['day', 'night', 'morning', 'afternoon', 'mt', 'dn'].includes(s.shift_type)
+              const weight = !isWorkingShift ? 0 : (s.shift_type === 'dn' ? 2 : 1)
+              
+              countLookup[rosterKey] = (countLookup[rosterKey] || 0) + weight
+
+              // Check if weekend
+              const date = new Date(s.shift_date + 'T12:00:00')
+              const day = date.getDay()
+              if (day === 0 || day === 6) { // 0=Sun, 6=Sat
+                  weekendCountLookup[rosterKey] = (weekendCountLookup[rosterKey] || 0) + weight
               }
           })
       }
       return { lookup, countLookup, weekendCountLookup }
-  }, [data.shifts, selectedMonth, selectedYear, rosterMap])
+  }, [data.shifts, selectedMonth, selectedYear, rosterMap, currentUnitRosterIds, selectedUnitId])
 
   const timeOffsLookup = React.useMemo(() => {
       const lookup: Record<string, TimeOff> = {}
@@ -1255,17 +1442,41 @@ export default function Schedule({
                         'text-black'
                       }`}
                     >
-                      {data.nurses.map(n => {
+                      {sortedUniqueNurses.map(n => {
+                        const rosterEntries = rosterMap[n.id] || []
+                        const isInCurrentContext = rosterEntries.some(r => r.section_id === section.id && (!selectedUnitId || r.unit_id === selectedUnitId))
+
+                        // Construct label with location info
+                        const locations = rosterEntries.map(r => {
+                             const sTitle = data.sections.find(s => s.id === r.section_id)?.title
+                             const uTitle = data.units.find(u => u.id === r.unit_id)?.title
+                             return `${sTitle}${uTitle ? ` (${uTitle})` : ''}`
+                        }).filter(Boolean).join(', ')
+
                         const vinculo = (n.vinculo || '').toUpperCase().trim()
-                        
-                        const prefixes = []
-                        if (vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) prefixes.push('AB')
-                        
                         let suffix = ''
                         if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
+                        if (rosterEntries.some(r => r.observation?.includes('1ED'))) suffix += ' (1ED)'
+                        if (rosterEntries.some(r => r.observation?.includes('AB')) || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
 
-                        const label = `${prefixes.join(' ')} ${n.name}${suffix}`.trim()
-                        return <option key={n.id} value={n.id}>{label}</option>
+                        let label = `${n.name}${suffix}`
+
+                        if (isInCurrentContext) {
+                            // label += ' (Já nesta lista)'
+                        } else if (locations) {
+                            label += ` - ${locations}`
+                        }
+
+                        return (
+                            <option 
+                                key={n.id} 
+                                value={n.id}
+                                className={`text-black not-italic normal-case ${isInCurrentContext ? 'font-bold text-blue-600' : 'font-normal'} ${n.id === nurse.id ? 'hidden' : ''}`}
+                                style={{ color: isInCurrentContext ? undefined : 'black' }}
+                            >
+                                {label}
+                            </option>
+                        )
                       })}
                     </select>
                   ) : null}
@@ -1285,9 +1496,6 @@ export default function Schedule({
                      }
 
                      const prefixes = []
-                     // if (obs.includes('1ED')) prefixes.push('1ED')
-                     // if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) prefixes.push('SEL')
-                     if (obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) prefixes.push('AB')
                      
                      let displayObs = obs
                      if (displayObs === '1ED') displayObs = ''
@@ -1299,7 +1507,8 @@ export default function Schedule({
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
                          {obs.includes('1ED') && !isSeletivo && <span className="ml-1">(1ED)</span>}
-                         {displayObs ? displayObs : ''}
+                        {(obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) && <span className="ml-1">(AB)</span>}
+                        {displayObs ? displayObs : ''}
                      </span>
                    })()}
                    </div>
@@ -1312,7 +1521,7 @@ export default function Schedule({
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
                   <SectorCell 
                       initialValue={nurse.sector}
-                      onSave={(val) => handleUpdateSector(nurse.id, val)}
+                      onSave={(val) => handleUpdateSector(nurse.unique_key || nurse.id, val)}
                       onCopyDown={(val) => handleCopySectorDown(index, val)}
                       isAdmin={isAdmin}
                   />
@@ -1390,7 +1599,7 @@ export default function Schedule({
                   <td 
                     key={day} 
                     className={`${cellClass} ${isAdmin ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`}
-                    onClick={isAdmin ? () => handleCellClick(nurse, dateStr) : undefined}
+                    onClick={isAdmin ? () => handleCellClick(nurse, dateStr, nurse.unique_key) : undefined}
                     title={isAdmin ? "Clique para gerenciar plantão" : undefined}
                   >
                     {content}
@@ -1428,11 +1637,12 @@ export default function Schedule({
                         let suffix = ''
                         if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
                         if (rosterEntries.some(r => r.observation?.includes('1ED'))) suffix += ' (1ED)'
+                        if (rosterEntries.some(r => r.observation?.includes('AB')) || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
 
-                        let label = `${nurse.name}${suffix} ${nurse.coren ? `(${nurse.coren})` : ''}`
+                        let label = `${nurse.name}${suffix}`
                         
                         if (isInCurrentContext) {
-                            label += ' (Já nesta lista)'
+                            // label += ' (Já nesta lista)'
                         } else if (locations) {
                             label += ` - ${locations}`
                         }
@@ -1582,6 +1792,13 @@ export default function Schedule({
                                 title="Editar nome do setor"
                             >
                                 <Pencil size={16} />
+                            </button>
+                            <button 
+                                onClick={handleClearAllUnitRosters}
+                                className="text-orange-600 p-2 hover:bg-gray-100 rounded"
+                                title="Limpar todo o histórico de escalas deste setor"
+                            >
+                                <Eraser size={16} />
                             </button>
                             <button 
                                 onClick={handleDeleteUnit}
@@ -1873,7 +2090,7 @@ export default function Schedule({
                         </thead>
                         <tbody>
                             {renderGrid(
-                                (nursesBySection[section.id] || []).filter(n => !selectedUnitId || !n.unit_id || n.unit_id === selectedUnitId),
+                                (nursesBySection[section.id] || []).filter(n => !selectedUnitId || n.unit_id === selectedUnitId),
                                 section
                             )}
                         </tbody>
@@ -2347,7 +2564,11 @@ export default function Schedule({
                         <label className="block text-sm font-medium text-black mb-2">Frequência (Preenchimento Automático)</label>
                         <select 
                             value={recurrence} 
-                            onChange={(e) => setRecurrence(e.target.value as any)}
+                            onChange={(e) => {
+                                const val = e.target.value as any
+                                setRecurrence(val)
+                                if (typeof window !== 'undefined') localStorage.setItem('enf_hma_last_recurrence', val)
+                            }}
                             className="w-full border p-2 rounded text-black bg-white"
                         >
                             <option value="none">Apenas este dia</option>
@@ -2368,7 +2589,11 @@ export default function Schedule({
                                 <input 
                                     type="number"
                                     value={customRecurrenceDays}
-                                    onChange={e => setCustomRecurrenceDays(e.target.value)}
+                                    onChange={e => {
+                                        const val = e.target.value
+                                        setCustomRecurrenceDays(val)
+                                        if (typeof window !== 'undefined') localStorage.setItem('enf_hma_last_custom_days', val)
+                                    }}
                                     placeholder="Ex: 8 para folga de 7 dias"
                                     className="w-full border p-2 rounded text-black bg-white text-sm"
                                     min="1"
@@ -2429,11 +2654,15 @@ export default function Schedule({
                 
                 return (
                     <>
-                        <h3 className="text-lg font-bold mb-4 text-gray-900">Adicionar Profissional</h3>
+                        <h3 className="text-lg font-bold mb-4 text-gray-900">
+                            {doubleShiftModal.rosterId ? 'Substituir Profissional' : 'Adicionar Profissional'}
+                        </h3>
                         <p className="mb-6 text-gray-700">
                             {isAlreadyInThisSection 
                                 ? <span className="text-red-600 font-bold">Este profissional já está na lista. Escolha o tipo de vínculo para a nova entrada:</span>
-                                : 'Este vínculo é uma escala dupla?'}
+                                : (doubleShiftModal.rosterId 
+                                    ? 'Escolha o tipo de vínculo para o novo profissional:' 
+                                    : 'Este vínculo é uma escala dupla?')}
                         </p>
                         
                         <div className="flex flex-col gap-3">

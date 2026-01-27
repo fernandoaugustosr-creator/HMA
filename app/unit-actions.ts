@@ -66,6 +66,23 @@ export async function deleteUnit(id: string) {
 
   if (isLocalMode()) {
         const db = readDb()
+        
+        // Delete rosters and shifts first (Cleanup)
+        const rostersToDelete = db.monthly_rosters.filter((r: any) => r.unit_id === id)
+        const rosterIds = rostersToDelete.map((r: any) => r.id)
+        
+        if (rosterIds.length > 0) {
+             db.shifts = db.shifts.filter((s: any) => {
+                if (s.roster_id && rosterIds.includes(s.roster_id)) return false
+                return true
+             })
+             db.monthly_rosters = db.monthly_rosters.filter((r: any) => !rosterIds.includes(r.id))
+        }
+
+        if (db.monthly_schedule_metadata) {
+             db.monthly_schedule_metadata = db.monthly_schedule_metadata.filter((m: any) => m.unit_id !== id)
+        }
+
         db.units = db.units.filter(u => u.id !== id)
         // Reset nurses unit_id?
         db.nurses.forEach(n => {
@@ -77,6 +94,18 @@ export async function deleteUnit(id: string) {
     }
 
     const supabase = createClient()
+    
+    // Cleanup rosters first
+    const { data: rosters } = await supabase.from('monthly_rosters').select('id').eq('unit_id', id)
+    const rosterIds = rosters?.map(r => r.id) || []
+    
+    if (rosterIds.length > 0) {
+         await supabase.from('shifts').delete().in('roster_id', rosterIds)
+         await supabase.from('monthly_rosters').delete().in('id', rosterIds)
+    }
+    
+    await supabase.from('monthly_schedule_metadata').delete().eq('unit_id', id)
+
     const { error } = await supabase.from('units').delete().eq('id', id)
     if (error) return { success: false, message: error.message }
     revalidatePath('/')

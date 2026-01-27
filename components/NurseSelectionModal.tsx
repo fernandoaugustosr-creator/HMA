@@ -2,57 +2,37 @@
 
 import { useState, useMemo } from 'react'
 import { formatRole } from '@/lib/utils'
-import { assignNurseToSection } from '@/app/actions'
-import { Search, Plus } from 'lucide-react'
+import { Search } from 'lucide-react'
 
 interface Nurse {
   id: string
   name: string
   coren: string
   role: string
+  vinculo: string
   section_id?: string
 }
 
 interface NurseSelectionModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSelect: (nurseId: string) => void
   nurses: Nurse[]
-  sectionId: string
   sectionTitle?: string
-  unitId?: string
+  existingNurseIds?: string[]
 }
 
-export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses, sectionId, sectionTitle, unitId }: NurseSelectionModalProps) {
-  const [loading, setLoading] = useState(false)
+export default function NurseSelectionModal({ isOpen, onClose, onSelect, nurses, sectionTitle, existingNurseIds = [] }: NurseSelectionModalProps) {
   const [searchTerm, setSearchTerm] = useState('')
 
   const filteredNurses = useMemo(() => {
     return nurses
       .filter(n => n.name.toLowerCase().includes(searchTerm.toLowerCase()) || n.coren?.includes(searchTerm))
-      .filter(n => n.section_id !== sectionId) // Exclude nurses already in this section
+      .filter(n => !existingNurseIds.includes(n.id)) // Exclude nurses already in the list (if provided)
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [nurses, searchTerm, sectionId])
+  }, [nurses, searchTerm, existingNurseIds])
 
   if (!isOpen) return null
-
-  async function handleAssign(nurseId: string) {
-    setLoading(true)
-    try {
-        const res = await assignNurseToSection(nurseId, sectionId, unitId)
-        if (res.success) {
-            onSuccess()
-            onClose()
-        } else {
-            alert('Erro ao adicionar: ' + res.message)
-        }
-    } catch (error) {
-        console.error(error)
-        alert('Erro ao adicionar')
-    } finally {
-        setLoading(false)
-    }
-  }
 
   return (
     <>
@@ -72,6 +52,7 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm bg-white text-black focus:ring-2 focus:ring-blue-500 outline-none"
+                        autoFocus
                     />
                 </div>
 
@@ -87,7 +68,7 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
                                 const vinculo = (nurse.vinculo || '').toUpperCase().trim()
                                 const isSeletivo = vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')
                                 return (
-                                <li key={nurse.id} className="p-3 hover:bg-blue-50 flex justify-between items-center transition-colors">
+                                <li key={nurse.id} className="p-3 hover:bg-blue-50 flex justify-between items-center transition-colors cursor-pointer" onClick={() => onSelect(nurse.id)}>
                                     <div>
                                         <p className="font-medium text-gray-800 text-sm">
                                             {nurse.name}
@@ -97,19 +78,11 @@ export default function NurseSelectionModal({ isOpen, onClose, onSuccess, nurses
                                             {formatRole(nurse.role)} • COREN: {nurse.coren || '-'}
                                             {nurse.vinculo && ` • ${nurse.vinculo}`}
                                         </p>
-                                        {nurse.section_id && (
-                                            <p className="text-[10px] text-orange-600 bg-orange-50 inline-block px-1 rounded mt-0.5 border border-orange-100">
-                                                Já em outro bloco
-                                            </p>
-                                        )}
                                     </div>
                                     <button 
-                                        onClick={() => handleAssign(nurse.id)}
-                                        disabled={loading}
-                                        className="text-blue-600 hover:bg-blue-100 p-2 rounded-full transition-colors"
-                                        title="Adicionar a este bloco"
+                                        className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2 py-1 rounded hover:bg-blue-100"
                                     >
-                                        <Plus size={20} />
+                                        Adicionar
                                     </button>
                                 </li>
                                 )
