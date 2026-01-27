@@ -867,6 +867,9 @@ export default function Schedule({
 
             const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear, observation, undefined, allowDuplicate)
             if (res.success) {
+                if ((res as any).warning) {
+                    alert((res as any).warning)
+                }
                 clearCache()
                 await fetchData(true)
             } else {
@@ -877,9 +880,9 @@ export default function Schedule({
                 }
             }
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error(error)
-        alert('Erro ao processar')
+        alert('Erro ao processar: ' + (error.message || 'Erro desconhecido'))
     } finally {
         setLoading(false)
     }
@@ -1333,7 +1336,7 @@ export default function Schedule({
     const sortedProfessionals = professionals.map((p, i) => ({
         nurse: p,
         index: i,
-        firstDay: getFirstShiftDay(p.id),
+        firstDay: getFirstShiftDay(p.unique_key || p.id),
         isTecnico: (p.role || '').toUpperCase() === 'TECNICO',
         listOrder: nurseOrderMap.get(p.unique_key || '')
     }))
@@ -1537,7 +1540,9 @@ export default function Schedule({
                 const absence = absencesLookup[`${nurse.id}_${dateStr}`]
 
                 // Find shift
-                const shift = shiftsLookup.lookup[`${nurse.unique_key}_${dateStr}`] || shiftsLookup.lookup[`${nurse.id}_${dateStr}`]
+                // Use STRICT lookup by unique_key only. 
+                      // Fallback to nurse.id causes shifts from other rosters (same nurse) to leak into this one.
+                      const shift = shiftsLookup.lookup[`${nurse.unique_key}_${dateStr}`]
 
                 let cellClass = "border border-black px-0 py-0 h-5 w-6 text-center text-[10px] leading-none relative text-black font-bold"
                 let content = null

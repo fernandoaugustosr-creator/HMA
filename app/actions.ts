@@ -2399,7 +2399,9 @@ export async function assignNurseToRoster(
   }
 
   const supabase = createClient()
+  let warningMsg: string | undefined = undefined;
   
+  try {
   for (const m of monthsToUpdate) {
     // Check if exists first to decide whether to clear shifts
     let query = supabase
@@ -2413,6 +2415,26 @@ export async function assignNurseToRoster(
     else query = query.is('unit_id', null)
 
     const { data: existing } = await query.maybeSingle()
+
+    // Check for CONFLICT in OTHER units (Warning generation)
+    if (!existing) {
+        let conflictQuery = supabase
+            .from('monthly_rosters')
+            .select('units(title)')
+            .eq('nurse_id', nurseId)
+            .eq('month', m)
+            .eq('year', year)
+        
+        if (unitId) conflictQuery = conflictQuery.neq('unit_id', unitId)
+        else conflictQuery = conflictQuery.not('unit_id', 'is', null)
+
+        const { data: conflict, error: conflictError } = await conflictQuery.maybeSingle()
+        
+        if (!conflictError && conflict) {
+             const conflictUnitName = (conflict as any).units?.title || 'Outro Setor'
+             warningMsg = `Atenção: Este profissional já possui vínculo no setor "${conflictUnitName}".`
+        }
+    }
 
     if (!existing && !allowDuplicate) {
         // Clear shifts for this month if adding new (and not forcing duplicate)
@@ -2479,7 +2501,11 @@ export async function assignNurseToRoster(
   }
 
   revalidatePath('/')
-  return { success: true }
+  return { success: true, warning: warningMsg }
+  } catch (err: any) {
+      console.error('Unhandled error in assignNurseToRoster:', err)
+      return { success: false, message: `Erro ao processar: ${err.message || 'Erro desconhecido'}` }
+  }
 }
 
 export async function removeNurseFromRoster(nurseId: string, month: number, year: number) {
