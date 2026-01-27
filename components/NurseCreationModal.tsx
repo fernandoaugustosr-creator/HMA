@@ -39,35 +39,59 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
 
     const vinculos = formData.getAll('vinculo').filter(Boolean) as string[]
 
-    let result
+    // Helper to prepare formData for a specific bond
+    const getFormDataForBond = (bond: string) => {
+        const fd = new FormData()
+        formData.forEach((value, key) => {
+            if (key === 'vinculo') return
+            fd.append(key, value)
+        })
+        fd.append('vinculo', bond)
+        return fd
+    }
+
+    let result = { success: true, message: '' }
+
     if (nurseToEdit) {
-        if (vinculos.length > 0) {
-            formData.set('vinculo', vinculos[0])
+        if (vinculos.length === 0) {
+             // If no bond selected, just update with original formData (which might have empty vinculo)
+             result = await updateNurse(nurseToEdit.id, null, formData)
+        } else {
+             // 1. Update the main record with the first bond
+             const firstBond = vinculos[0]
+             const firstFd = getFormDataForBond(firstBond)
+             result = await updateNurse(nurseToEdit.id, null, firstFd)
+
+             // 2. Create new records for additional bonds
+             if (result.success && vinculos.length > 1) {
+                 for (let i = 1; i < vinculos.length; i++) {
+                     const extraBond = vinculos[i]
+                     const extraFd = getFormDataForBond(extraBond)
+                     // Try to create additional records. Ignore "Already exists" errors.
+                     const res = await createNurse(null, extraFd)
+                     if (!res.success && !res.message?.includes('Já existe')) {
+                         result = res
+                     }
+                 }
+             }
         }
-        result = await updateNurse(nurseToEdit.id, null, formData)
     } else {
-        if (vinculos.length <= 1) {
-            if (vinculos.length === 1) {
-                formData.set('vinculo', vinculos[0])
-            }
+        if (vinculos.length === 0) {
             result = await createNurse(null, formData)
         } else {
             for (let i = 0; i < vinculos.length; i++) {
-                const v = vinculos[i]
-                const fd = new FormData()
-
-                formData.forEach((value, key) => {
-                    if (key === 'vinculo') return
-                    if (key === 'cpf' && i > 0) return
-                    fd.append(key, value)
-                })
-
-                fd.set('vinculo', v)
-
+                const bond = vinculos[i]
+                const fd = getFormDataForBond(bond)
                 const res = await createNurse(null, fd)
-                result = res
+                
+                // If it fails with something other than "already exists", we consider it a failure
                 if (!res.success) {
-                    break
+                     if (!res.message?.includes('Já existe')) {
+                         result = res
+                         break
+                     }
+                } else {
+                    result = res
                 }
             }
         }
@@ -125,7 +149,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                       type="checkbox"
                       name="vinculo"
                       value="CONCURSO"
-                      defaultChecked={nurseToEdit?.vinculo === 'CONCURSO'}
+                      defaultChecked={nurseToEdit?.vinculo?.includes('CONCURSO')}
                       className="h-4 w-4"
                     />
                     <span>CONCURSO</span>
@@ -135,7 +159,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                       type="checkbox"
                       name="vinculo"
                       value="ESCALA DUPLA"
-                      defaultChecked={nurseToEdit?.vinculo === 'ESCALA DUPLA' || (nurseToEdit?.observation || '').includes('1ED')}
+                      defaultChecked={nurseToEdit?.vinculo?.includes('ESCALA DUPLA') || (nurseToEdit?.observation || '').includes('1ED')}
                       className="h-4 w-4"
                     />
                     <span>ESCALA DUPLA</span>
@@ -145,7 +169,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                       type="checkbox"
                       name="vinculo"
                       value="SELETIVO"
-                      defaultChecked={nurseToEdit?.vinculo === 'SELETIVO'}
+                      defaultChecked={nurseToEdit?.vinculo?.includes('SELETIVO')}
                       className="h-4 w-4"
                     />
                     <span>SELETIVO</span>
@@ -155,7 +179,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                       type="checkbox"
                       name="vinculo"
                       value="COOPERATIVA"
-                      defaultChecked={nurseToEdit?.vinculo === 'COOPERATIVA'}
+                      defaultChecked={nurseToEdit?.vinculo?.includes('COOPERATIVA')}
                       className="h-4 w-4"
                     />
                     <span>COOPERATIVA</span>

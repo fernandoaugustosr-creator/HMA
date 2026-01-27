@@ -1456,7 +1456,7 @@ export default function Schedule({
                         const vinculo = (n.vinculo || '').toUpperCase().trim()
                         let suffix = ''
                         if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
-                        if (rosterEntries.some(r => r.observation?.includes('1ED'))) suffix += ' (1ED)'
+                        // if (rosterEntries.some(r => r.observation?.includes('1ED'))) suffix += ' (1ED)'
                         if (rosterEntries.some(r => r.observation?.includes('AB')) || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
 
                         let label = `${n.name}${suffix}`

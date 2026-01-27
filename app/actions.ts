@@ -358,9 +358,9 @@ export async function createNurse(prevState: any, formData: FormData) {
   if (isLocalMode()) {
     const db = readDb()
     
-    // Check duplicate CPF
-    if (db.nurses.some(n => n.cpf === finalCpf)) {
-      return { success: false, message: 'CPF já cadastrado' }
+    // Check duplicate CPF + Vinculo
+    if (db.nurses.some(n => n.cpf === finalCpf && n.vinculo === vinculo)) {
+      return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
     }
 
     let finalSectionId = sectionId
@@ -434,7 +434,13 @@ export async function createNurse(prevState: any, formData: FormData) {
 
   if (error) {
     console.error('Error creating nurse:', error)
-    if (error.code === '23505') return { success: false, message: 'CPF já cadastrado' }
+    if (error.code === '23505') {
+        // Detect specific constraint violation
+        if (error.message?.includes('nurses_cpf_key')) {
+             return { success: false, message: 'Erro: O banco de dados bloqueou o CPF duplicado. Por favor, execute o script V13 no Supabase.' }
+        }
+        return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
+    }
     return { success: false, message: 'Erro ao cadastrar servidor: ' + error.message }
   }
 
@@ -3249,9 +3255,12 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     const nurse = db.nurses.find(n => n.id === id)
     if (!nurse) return { success: false, message: 'Servidor não encontrado (Local)' }
 
-    // Check duplicate CPF only if changed
-    if (cpf && cpf !== nurse.cpf && db.nurses.some(n => n.cpf === cpf)) {
-        return { success: false, message: 'CPF já cadastrado' }
+    // Check duplicate CPF + Vinculo
+    const targetCpf = cpf || nurse.cpf
+    const targetVinculo = vinculo || nurse.vinculo
+    
+    if (db.nurses.some(n => n.id !== id && n.cpf === targetCpf && n.vinculo === targetVinculo)) {
+        return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
     }
 
     nurse.name = name
@@ -3296,7 +3305,10 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
 
   const { error } = await supabase.from('nurses').update(updateData).eq('id', id)
 
-  if (error) return { success: false, message: 'Erro ao atualizar: ' + error.message }
+  if (error) {
+    if (error.code === '23505') return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
+    return { success: false, message: 'Erro ao atualizar: ' + error.message }
+  }
   
   revalidatePath('/')
   revalidatePath('/servidores')
