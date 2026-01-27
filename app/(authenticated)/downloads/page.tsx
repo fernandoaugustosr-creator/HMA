@@ -247,12 +247,17 @@ export default function DownloadsPage() {
             size: landscape;
             margin: 0;
           }
+          body {
+            overflow: hidden; /* Prevent scrollbars or extra pages */
+          }
           .print-schedule-root {
             width: 100%;
             background-color: #ffffff !important;
             display: flex;
             justify-content: center;
             align-items: flex-start;
+            transform: scale(0.92); /* Scale down to ensure fit */
+            transform-origin: top center;
           }
         }
       `}</style>

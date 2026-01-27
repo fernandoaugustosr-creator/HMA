@@ -1064,6 +1064,86 @@ export async function createGeneralRequest(prevState: any, formData: FormData) {
 export async function login(prevState: any, formData: FormData) {
   const rawCpf = formData.get('cpf') as string
   const password = formData.get('password') as string
+  const selectedProfileId = formData.get('selectedProfileId') as string
+
+  // Handling profile selection from multi-profile step
+  if (selectedProfileId) {
+      const selectionCookie = cookies().get('login_selection_options')
+      if (!selectionCookie) {
+          return { message: 'Sessão de seleção expirada. Tente novamente.' }
+      }
+      
+      let options: any[] = []
+      try {
+          options = JSON.parse(selectionCookie.value)
+      } catch (e) {
+          return { message: 'Erro ao processar seleção.' }
+      }
+
+      const selected = options.find((o: any) => o.id === selectedProfileId)
+      if (!selected) {
+          return { message: 'Perfil inválido.' }
+      }
+
+      // We need to fetch the full nurse object again to be sure (and get section_title)
+      // We can reuse the logic below by mocking a single result finding
+      // But simpler to just re-fetch by ID.
+      
+      let nurse = null
+      let sectionTitle = ''
+
+      if (isLocalMode()) {
+          const db = readDb()
+          nurse = db.nurses.find(n => n.id === selectedProfileId)
+          if (nurse && nurse.section_id) {
+             sectionTitle = db.schedule_sections.find(s => s.id === nurse.section_id)?.title || ''
+          }
+      } else {
+          const supabase = createClient()
+          const { data } = await supabase.from('nurses').select('*').eq('id', selectedProfileId).single()
+          nurse = data
+          if (nurse && nurse.section_id) {
+              const { data: section } = await supabase.from('schedule_sections').select('title').eq('id', nurse.section_id).single()
+              if (section) sectionTitle = section.title
+          }
+      }
+
+      if (!nurse) return { message: 'Erro ao recuperar perfil selecionado.' }
+
+      // Clear selection cookie
+      cookies().delete('login_selection_options')
+
+      // Proceed to set session cookie
+      const mustChangePassword = nurse.password === '123456'
+      
+      // Auto-promote to COORDENACAO_GERAL if specific CPF (legacy check)
+      const cleanCpfForRole = (nurse.cpf || '').replace(/\D/g, '')
+      if (cleanCpfForRole === '02170025367' && nurse.role !== 'COORDENACAO_GERAL' && !isLocalMode()) {
+        const supabase = createClient()
+        await supabase.from('nurses').update({ role: 'COORDENACAO_GERAL' }).eq('id', nurse.id)
+        nurse.role = 'COORDENACAO_GERAL'
+      }
+
+      cookies().set('session_user', JSON.stringify({ 
+        name: nurse.name, 
+        id: nurse.id, 
+        cpf: nurse.cpf,
+        role: nurse.role,
+        section_id: nurse.section_id,
+        section_title: sectionTitle,
+        mustChangePassword
+      }), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 7,
+        path: '/',
+      })
+
+      if (mustChangePassword) {
+        redirect('/alterar-senha')
+      }
+      redirect('/')
+  }
 
   if (!rawCpf || !password) {
     return { message: 'CPF e Senha são obrigatórios' }
@@ -1073,16 +1153,45 @@ export async function login(prevState: any, formData: FormData) {
 
   if (isLocalMode()) {
     const db = readDb()
-    const nurse = db.nurses.find(n => n.cpf.replace(/\D/g, '') === cleanCpf)
+    // Find ALL nurses with this CPF
+    const nurses = db.nurses.filter(n => n.cpf.replace(/\D/g, '') === cleanCpf)
 
-    if (!nurse) {
+    if (nurses.length === 0) {
       return { message: 'CPF não encontrado (Local)' }
     }
 
-    if (nurse.password !== password) {
+    // Filter by password
+    const validNurses = nurses.filter(n => n.password === password)
+
+    if (validNurses.length === 0) {
       return { message: 'Senha incorreta (Local)' }
     }
 
+    if (validNurses.length > 1) {
+        // Multiple profiles found
+        const options = validNurses.map(n => ({
+            id: n.id,
+            name: n.name,
+            role: n.role,
+            vinculo: n.vinculo,
+            unit_id: n.unit_id
+        }))
+        
+        cookies().set('login_selection_options', JSON.stringify(options), {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 60 * 5, // 5 minutes
+            path: '/',
+        })
+        
+        return { 
+            success: false, 
+            step: 'select_profile',
+            profiles: options
+        }
+    }
+
+    const nurse = validNurses[0]
     const mustChangePassword = password === '123456'
 
     let sectionTitle = ''
@@ -1113,54 +1222,65 @@ export async function login(prevState: any, formData: FormData) {
 
   const supabase = createClient()
   
-  let nurse = null
+  // Strategy: Fetch from all 3 potential CPF formats and merge
+  const queries = [
+      supabase.from('nurses').select('*').eq('cpf', rawCpf),
+      supabase.from('nurses').select('*').eq('cpf', cleanCpf)
+  ]
+
+  if (cleanCpf.length === 11) {
+      const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+      queries.push(supabase.from('nurses').select('*').eq('cpf', formattedCpf))
+  }
+
+  const results = await Promise.all(queries)
   
-  // Tenta buscar exato primeiro
-  const { data: nursesRaw } = await supabase
-    .from('nurses')
-    .select('*')
-    .eq('cpf', rawCpf)
-    
-  if (nursesRaw && nursesRaw.length > 0) {
-      nurse = nursesRaw[0]
-  }
-
-  if (!nurse) {
-      // Tenta buscar pelo limpo
-      const { data: nursesClean } = await supabase
-        .from('nurses')
-        .select('*')
-        .eq('cpf', cleanCpf)
-      
-      if (nursesClean && nursesClean.length > 0) {
-          nurse = nursesClean[0]
+  // Merge and Deduplicate by ID
+  const allNurses = results.reduce((acc, res) => {
+      if (res.data) {
+          return [...acc, ...res.data]
       }
-  }
+      return acc
+  }, [] as any[])
 
-  if (!nurse) {
-      // Tenta buscar pelo formatado (XXX.XXX.XXX-XX)
-      // Garante que tem 11 dígitos para formatar corretamente
-      if (cleanCpf.length === 11) {
-          const formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
-          const { data: nursesFormatted } = await supabase
-            .from('nurses')
-            .select('*')
-            .eq('cpf', formattedCpf)
-          
-          if (nursesFormatted && nursesFormatted.length > 0) {
-              nurse = nursesFormatted[0]
-          }
-      }
-  }
+  const uniqueNurses = Array.from(new Map(allNurses.map(item => [item.id, item])).values())
 
-  if (!nurse) {
+  if (uniqueNurses.length === 0) {
     return { message: 'CPF não encontrado' }
   }
 
-  if (nurse.password !== password) {
+  // Filter by password
+  const validNurses = uniqueNurses.filter(n => n.password === password)
+
+  if (validNurses.length === 0) {
     return { message: 'Senha incorreta' }
   }
 
+  if (validNurses.length > 1) {
+      // Multiple profiles found
+      const options = validNurses.map(n => ({
+          id: n.id,
+          name: n.name,
+          role: n.role,
+          vinculo: n.vinculo,
+          unit_id: n.unit_id
+      }))
+      
+      cookies().set('login_selection_options', JSON.stringify(options), {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: 60 * 5, // 5 minutes
+          path: '/',
+      })
+      
+      return { 
+          success: false, 
+          step: 'select_profile',
+          profiles: options
+      }
+  }
+
+  const nurse = validNurses[0]
   const mustChangePassword = password === '123456'
 
   let sectionTitle = ''

@@ -146,6 +146,7 @@ html, body {
   }
 
   .print-schedule-root {
-    page-break-after: always;
+    page-break-after: auto;
+    page-break-inside: avoid;
   }
 }
