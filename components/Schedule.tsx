@@ -43,6 +43,7 @@ interface Shift {
   roster_id?: string
   shift_date: string
   shift_type: 'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn'
+  created_at?: string
 }
 
 interface TimeOff {
@@ -1180,16 +1181,32 @@ export default function Schedule({
                       // Logic: Assign legacy shifts to the FIRST roster entry found for this nurse IN THIS UNIT.
                       const rosterEntries = rosterMap[s.nurse_id]
                       if (rosterEntries && rosterEntries.length > 0) {
+                          // Find "True Home" (Oldest roster entry for this nurse in this month globally)
+                          // Legacy shifts should only attach to the oldest roster entry to prevent leakage to new units
+                          const sortedAll = [...rosterEntries].sort((a, b) => {
+                              const tA = new Date(a.created_at || 0).getTime()
+                              const tB = new Date(b.created_at || 0).getTime()
+                              if (tA !== tB) return tA - tB
+                              return (a.id || '').localeCompare(b.id || '')
+                          })
+                          const trueHomeId = sortedAll[0].id
+
                           // Filter entries to match current unit
                           const unitEntries = rosterEntries.filter(r => currentUnitRosterIds.has(r.id))
                           
                           if (unitEntries.length > 0) {
                               const sortedEntries = [...unitEntries].sort((a, b) => {
-                                  const tA = new Date(a.created_at).getTime()
-                                  const tB = new Date(b.created_at).getTime()
+                                  const tA = new Date(a.created_at || 0).getTime()
+                                  const tB = new Date(b.created_at || 0).getTime()
                                   return tA - tB
                               })
-                              rosterKey = sortedEntries[0].id
+                              
+                              // Strict Isolation: Only bind legacy shift if this unit holds the "True Home" roster entry
+                              if (sortedEntries[0].id === trueHomeId) {
+                                  rosterKey = sortedEntries[0].id
+                              } else {
+                                  return // Skip legacy shift for this secondary unit
+                              }
                           } else {
                               // Nurse has roster entries but NONE in this unit.
                               // Skip this shift for this view.
@@ -1438,7 +1455,7 @@ export default function Schedule({
                     <select 
                       value={nurse.id} 
                       onChange={(e) => handleReassign(nurse.unique_key || '', e.target.value)}
-                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold cursor-pointer outline-none uppercase no-print ${
+                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold cursor-pointer outline-none uppercase no-print appearance-none ${
                         (nurse.vinculo && nurse.vinculo.toUpperCase().includes('SELETIVO')) ? 'text-green-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
@@ -1509,7 +1526,7 @@ export default function Schedule({
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
-                         {obs.includes('1ED') && !isSeletivo && <span className="ml-1">(1ED)</span>}
+                         {/* {obs.includes('1ED') && !isSeletivo && <span className="ml-1">(1ED)</span>} */}
                         {(obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) && <span className="ml-1">(AB)</span>}
                         {displayObs ? displayObs : ''}
                      </span>

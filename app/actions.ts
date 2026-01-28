@@ -1904,7 +1904,7 @@ export async function getMonthlyScheduleData(month: number, year: number) {
         supabase.from('units').select('*'),
         supabase.from('nurses').select('*').order('name'),
         supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year),
-        supabase.from('shifts').select('id, nurse_id, date, type, roster_id').gte('date', startDate).lte('date', endDate),
+        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate),
         supabase.from('time_off_requests').select('id, nurse_id, start_date, end_date, type, status, unit_id').in('status', ['approved', 'pending']).or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
         supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
         supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate)
