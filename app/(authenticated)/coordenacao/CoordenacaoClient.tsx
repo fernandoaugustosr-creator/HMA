@@ -48,6 +48,7 @@ export default function CoordenacaoClient({
   userRole,
   absenceSettings,
 }: CoordenacaoClientProps) {
+  const todayDate = new Date().toISOString().split('T')[0]
   const activeTab = initialTab
   const isManager = isAdmin || userRole === 'COORDENADOR'
   const canEditAbsence = absenceSettings 
