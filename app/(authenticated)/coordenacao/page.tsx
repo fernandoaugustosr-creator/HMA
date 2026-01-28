@@ -1,4 +1,4 @@
-import { getNurses, getNursesBySection, checkUser, getCoordinationRequests, getSameDaySwapEnabled, getAbsenceSettings } from '@/app/actions'
+import { getNurses, getNursesBySection, checkUser, getCoordinationRequests, getSameDaySwapEnabled, getAbsenceSettings, getLoginLogs } from '@/app/actions'
 import CoordenacaoClient from './CoordenacaoClient'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +23,7 @@ export default async function CoordenacaoPage({ searchParams }: { searchParams?:
   }
 
   const { absences, paymentRequests, generalRequests } = await getCoordinationRequests()
-
+  
   const initialTabParam = searchParams?.tab
   const initialTab = initialTabParam === 'pagamento' || initialTabParam === 'outros' ? initialTabParam : 'falta'
 

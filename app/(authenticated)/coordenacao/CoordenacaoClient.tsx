@@ -33,6 +33,7 @@ type CoordenacaoClientProps = {
     view_roles: string[]
     edit_roles: string[]
   }
+  loginLogs?: any[]
 }
 
 export default function CoordenacaoClient({
@@ -527,6 +528,7 @@ export default function CoordenacaoClient({
           )}
         </div>
       )}
+
     </div>
   )
 }

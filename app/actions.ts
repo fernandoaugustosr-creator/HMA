@@ -226,6 +226,66 @@ export async function checkUser() {
   return JSON.parse(session.value)
 }
 
+export async function checkGeneralAdmin() {
+  const session = cookies().get('session_user')
+  if (!session) throw new Error('Unauthorized')
+  const user = JSON.parse(session.value)
+  const isDirector = user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+  if (!isDirector) throw new Error('Forbidden: General admin access required')
+  return user
+}
+
+export async function logLogin(userId: string, userName: string, userRole: string) {
+  if (isLocalMode()) {
+    const db = readDb()
+    db.login_logs = db.login_logs || []
+    db.login_logs.push({
+      id: randomUUID(),
+      user_id: userId,
+      user_name: userName,
+      user_role: userRole,
+      login_at: new Date().toISOString()
+    })
+    writeDb(db)
+    return { success: true }
+  }
+  const supabase = createClient()
+  const { error } = await supabase.from('login_logs').insert({
+    user_id: userId,
+    user_name: userName,
+    user_role: userRole
+  })
+  if (error) return { success: false, message: error.message }
+  return { success: true }
+}
+
+export async function getLoginLogs() {
+  try {
+    await checkGeneralAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+  if (isLocalMode()) {
+    const db = readDb()
+    return { success: true, logs: (db.login_logs || []).sort((a: any, b: any) => (new Date(b.login_at).getTime()) - (new Date(a.login_at).getTime())) }
+  }
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('login_logs')
+    .select('id, user_id, user_name, user_role, login_at')
+    .order('login_at', { ascending: false })
+    .limit(200)
+  if (error) return { success: false, message: 'Erro ao buscar logs: ' + error.message }
+  return { success: true, logs: data || [] }
+}
+
+export async function logCurrentSessionLogin() {
+  const session = cookies().get('session_user')
+  if (!session) return { success: false, message: 'Sessão inválida' }
+  const user = JSON.parse(session.value)
+  return await logLogin(user.id, user.name, user.role)
+}
+
 export async function getSameDaySwapEnabled(): Promise<boolean> {
   if (isLocalMode()) {
     const db = readDb()
@@ -1138,6 +1198,7 @@ export async function login(prevState: any, formData: FormData) {
         maxAge: 60 * 60 * 24 * 7,
         path: '/',
       })
+      await logLogin(nurse.id, nurse.name, nurse.role)
 
       if (mustChangePassword) {
         redirect('/alterar-senha')
@@ -1213,6 +1274,7 @@ export async function login(prevState: any, formData: FormData) {
       maxAge: 60 * 60 * 24 * 7,
       path: '/',
     })
+    await logLogin(nurse.id, nurse.name, nurse.role)
 
     if (mustChangePassword) {
       redirect('/alterar-senha')
@@ -1309,6 +1371,7 @@ export async function login(prevState: any, formData: FormData) {
     maxAge: 60 * 60 * 24 * 7,
     path: '/',
   })
+  await logLogin(nurse.id, nurse.name, nurse.role)
 
   if (mustChangePassword) {
     redirect('/alterar-senha')
