@@ -1744,7 +1744,7 @@ export async function getDailyShifts(date: string) {
     { data: timeOffRows }
   ] = await Promise.all([
     supabase.from('monthly_rosters')
-      .select('nurse_id, section_id, unit_id, month, year')
+      .select('id, nurse_id, section_id, unit_id, month, year')
       .eq('month', monthNum)
       .eq('year', yearNum)
       .in('nurse_id', nurseIds),
@@ -1762,9 +1762,13 @@ export async function getDailyShifts(date: string) {
       .gte('end_date', date)
   ])
 
-  const rosterByNurse: Record<string, { section_id: string | null, unit_id: string | null }> = {}
+  const rosterById: Record<string, { section_id: string | null, unit_id: string | null, nurse_id: string | null }> = {}
+  const rosterByNurse: Record<string, { section_id: string | null, unit_id: string | null, id?: string | null }> = {}
   ;(rosterRows || []).forEach((r: any) => {
-    rosterByNurse[r.nurse_id] = { section_id: r.section_id || null, unit_id: r.unit_id || null }
+    rosterById[r.id] = { section_id: r.section_id || null, unit_id: r.unit_id || null, nurse_id: r.nurse_id || null }
+    if (r.nurse_id && !rosterByNurse[r.nurse_id]) {
+      rosterByNurse[r.nurse_id] = { section_id: r.section_id || null, unit_id: r.unit_id || null, id: r.id || null }
+    }
   })
 
   const nursesById: Record<string, { name: string, role: string, unit_id?: string, section_id?: string }> = {}
@@ -1789,9 +1793,9 @@ export async function getDailyShifts(date: string) {
     const swapWithName = swapsByKey[swapKey] || null
 
     const nurseInfo = nursesById[s.nurse_id] || { name: 'Desconhecido', role: 'Desconhecido', unit_id: null, section_id: null }
-    const roster = rosterByNurse[s.nurse_id]
-    const sectionTitle = roster?.section_id ? sectionsById[roster.section_id] || null : null
-    const unitTitle = roster?.unit_id ? unitsById[roster.unit_id] || null : null
+    const rosterForShift = s.roster_id ? rosterById[s.roster_id] : rosterByNurse[s.nurse_id]
+    const sectionTitle = rosterForShift?.section_id ? sectionsById[rosterForShift.section_id] || null : null
+    const unitTitle = rosterForShift?.unit_id ? unitsById[rosterForShift.unit_id] || null : null
     const sectionFallback = nurseInfo.section_id ? sectionsById[nurseInfo.section_id] || null : null
     const unitFallback = nurseInfo.unit_id ? unitsById[nurseInfo.unit_id] || null : null
 
@@ -1803,7 +1807,7 @@ export async function getDailyShifts(date: string) {
       nurse_role: nurseInfo.role,
       unit_name: unitTitle ?? unitFallback,
       section_name: sectionTitle ?? sectionFallback,
-      is_in_roster: !!roster,
+      is_in_roster: !!rosterForShift,
       swap_with_name: swapWithName
     }
   })
