@@ -3476,20 +3476,52 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
         return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
     }
 
+    // Logic to correct section_id based on role if needed
+    let finalSectionId = sectionId
+    
+    if (role === 'COORDENADOR' || role === 'ENFERMEIRO') {
+        const enfermeirosSection = db.schedule_sections.find(s => s.title === 'ENFERMEIROS')
+        const tecnicosSection = db.schedule_sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')
+        
+        if (enfermeirosSection) {
+             if (!finalSectionId || (tecnicosSection && finalSectionId === tecnicosSection.id)) {
+                 finalSectionId = enfermeirosSection.id
+             }
+        }
+    } else if (role === 'TECNICO') {
+        const enfermeirosSection = db.schedule_sections.find(s => s.title === 'ENFERMEIROS')
+        const tecnicosSection = db.schedule_sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')
+        
+        if (tecnicosSection) {
+             if (!finalSectionId || (enfermeirosSection && finalSectionId === enfermeirosSection.id)) {
+                 finalSectionId = tecnicosSection.id
+             }
+        }
+    }
+
     nurse.name = name
     if (cpf) nurse.cpf = cpf
     nurse.coren = coren
     nurse.vinculo = vinculo
     nurse.role = role
     
-    // Only update location if provided (optional)
-    if (sectionId) nurse.section_id = sectionId
+    // Only update location if provided (optional) or corrected
+    if (finalSectionId) nurse.section_id = finalSectionId
     if (unitId) nurse.unit_id = unitId
 
     if (useDefaultPassword) {
       nurse.password = '123456'
     } else if (password) {
       nurse.password = password
+    }
+
+    // Update Roster Entries if section changed
+    if (finalSectionId) {
+        if (db.monthly_rosters) {
+            db.monthly_rosters.forEach(r => {
+                if (r.nurse_id === id) r.section_id = finalSectionId
+            })
+        }
     }
 
     writeDb(db)
@@ -3500,6 +3532,32 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
 
   const supabase = createClient()
   
+  let finalSectionId = sectionId
+
+  // Fetch sections to validate/correct
+  const { data: sections } = await supabase.from('schedule_sections').select('id, title')
+  
+  if (sections) {
+    const enfermeirosId = sections.find(s => s.title === 'ENFERMEIROS')?.id
+    const tecnicosId = sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')?.id
+    
+    if (role === 'COORDENADOR' || role === 'ENFERMEIRO') {
+        if (enfermeirosId) {
+             // If no section provided OR if it matches TECNICOS, force ENFERMEIROS
+             if (!finalSectionId || finalSectionId === tecnicosId) {
+                 finalSectionId = enfermeirosId
+             }
+        }
+    } else if (role === 'TECNICO') {
+        if (tecnicosId) {
+             // If no section provided OR if it matches ENFERMEIROS, force TECNICOS
+             if (!finalSectionId || finalSectionId === enfermeirosId) {
+                 finalSectionId = tecnicosId
+             }
+        }
+    }
+  }
+  
   const updateData: any = {
       name,
       coren,
@@ -3507,7 +3565,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
       role
   }
   if (cpf) updateData.cpf = cpf
-  if (sectionId) updateData.section_id = sectionId
+  if (finalSectionId) updateData.section_id = finalSectionId
   if (unitId) updateData.unit_id = unitId
 
   if (useDefaultPassword) {
@@ -3521,6 +3579,11 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   if (error) {
     if (error.code === '23505') return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
     return { success: false, message: 'Erro ao atualizar: ' + error.message }
+  }
+  
+  // Update Roster Entries if section changed
+  if (finalSectionId) {
+      await supabase.from('monthly_rosters').update({ section_id: finalSectionId }).eq('nurse_id', id)
   }
   
   revalidatePath('/')
@@ -3901,7 +3964,7 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
                          date: s.date,
                          type: 'FOLGA_VAZIA' // Explicit empty mask
                      }))
-                     await supabase.from('shifts').upsert(maskInserts, { onConflict: 'roster_id, shift_date' })
+                     await supabase.from('shifts').upsert(maskInserts, { onConflict: 'roster_id, date' })
                 }
 
                 // For dates WITHOUT Legacy shift: Delete the specific shift (Standard cleanup)
