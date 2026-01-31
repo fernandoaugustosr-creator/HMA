@@ -52,6 +52,7 @@ interface TimeOff {
   start_date: string
   end_date: string
   type: string
+  unit_id?: string
 }
 
 interface Absence {
@@ -214,8 +215,30 @@ export default function Schedule({
     onLoaded?: () => void
 }) {
   const [currentDate] = useState(new Date())
-  const [selectedMonth, setSelectedMonth] = useState(initialMonth !== undefined ? initialMonth : currentDate.getMonth())
-  const [selectedYear, setSelectedYear] = useState(initialYear !== undefined ? initialYear : currentDate.getFullYear())
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    if (initialMonth !== undefined) return initialMonth
+    const now = new Date()
+    const m = now.getMonth()
+    const y = now.getFullYear()
+    const daysInMonth = new Date(y, m + 1, 0).getDate()
+    // If within 10 days of end of month, show next month
+    if (daysInMonth - now.getDate() <= 10) {
+        return m === 11 ? 0 : m + 1
+    }
+    return m
+  })
+  const [selectedYear, setSelectedYear] = useState(() => {
+    if (initialYear !== undefined) return initialYear
+    const now = new Date()
+    const m = now.getMonth()
+    const y = now.getFullYear()
+    const daysInMonth = new Date(y, m + 1, 0).getDate()
+    // If within 10 days of end of month, show next month
+    if (daysInMonth - now.getDate() <= 10) {
+        return m === 11 ? y + 1 : y
+    }
+    return y
+  })
   const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], absences: [], sections: [], units: [] })
   const [loading, setLoading] = useState(true)
   const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
@@ -1317,7 +1340,7 @@ export default function Schedule({
         })
       }
       return lookup
-  }, [data.timeOffs, selectedMonth, selectedYear])
+  }, [data.timeOffs, selectedMonth, selectedYear, selectedUnitId])
 
   const absencesLookup = React.useMemo(() => {
       const lookup: Record<string, Absence> = {}

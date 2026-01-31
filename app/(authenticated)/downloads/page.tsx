@@ -26,22 +26,44 @@ export default function DownloadsPage() {
 
         if (data.length > 0) {
             const now = new Date()
-            const currentYear = now.getFullYear()
-            const currentMonth = now.getMonth() + 1
+            let targetYear = now.getFullYear()
+            let targetMonth = now.getMonth() + 1
+            const daysInMonth = new Date(targetYear, targetMonth, 0).getDate()
 
-            const hasCurrentMonth = data.some(
-                r => r.year === currentYear && r.month === currentMonth
+            // If within 10 days of end of month, prefer the next month
+            if (daysInMonth - now.getDate() <= 10) {
+                targetMonth += 1
+                if (targetMonth > 12) {
+                    targetMonth = 1
+                    targetYear += 1
+                }
+            }
+
+            const hasTargetMonth = data.some(
+                r => r.year === targetYear && r.month === targetMonth
             )
 
-            if (hasCurrentMonth) {
-                setSelectedMonthYear(`${currentYear}-${currentMonth}`)
+            if (hasTargetMonth) {
+                setSelectedMonthYear(`${targetYear}-${targetMonth}`)
             } else {
-                const sorted = [...data].sort((a, b) => {
-                    if (a.year !== b.year) return b.year - a.year
-                    return b.month - a.month
-                })
-                const mostRecent = sorted[0]
-                setSelectedMonthYear(`${mostRecent.year}-${mostRecent.month}`)
+                // Fallback to current month if target wasn't found (or if target was current month anyway)
+                const currentYear = now.getFullYear()
+                const currentMonth = now.getMonth() + 1
+                
+                const hasCurrentMonth = data.some(
+                    r => r.year === currentYear && r.month === currentMonth
+                )
+
+                if (hasCurrentMonth) {
+                    setSelectedMonthYear(`${currentYear}-${currentMonth}`)
+                } else {
+                    const sorted = [...data].sort((a, b) => {
+                        if (a.year !== b.year) return b.year - a.year
+                        return b.month - a.month
+                    })
+                    const mostRecent = sorted[0]
+                    setSelectedMonthYear(`${mostRecent.year}-${mostRecent.month}`)
+                }
             }
         }
       } catch (e) {

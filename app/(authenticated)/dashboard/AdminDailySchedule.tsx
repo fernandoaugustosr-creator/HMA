@@ -106,13 +106,15 @@ export default function AdminDailySchedule() {
                         </button>
                         <button 
                             onClick={() => setFilterMode('night')}
-                            className={`px-3 py-1.5 text-xs md:text-sm font-medium rounded-md transition-all ${filterMode === 'night' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            disabled={true}
+                            className={`px-3 py-1.5 text-xs md:text-sm font-medium rounded-md transition-all opacity-50 cursor-not-allowed ${filterMode === 'night' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}
                         >
                             Noite
                         </button>
                         <button 
                             onClick={() => setFilterMode('all')}
-                            className={`px-3 py-1.5 text-xs md:text-sm font-medium rounded-md transition-all ${filterMode === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            disabled={true}
+                            className={`px-3 py-1.5 text-xs md:text-sm font-medium rounded-md transition-all opacity-50 cursor-not-allowed ${filterMode === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}
                         >
                             Todos
                         </button>

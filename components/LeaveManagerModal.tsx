@@ -54,10 +54,16 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
         if (!l.start_date || !l.end_date) return false
         if (l.end_date < monthStart) return false
         if (l.start_date > monthEnd) return false
+        
+        // Unit Isolation: If unitId is provided, hide leaves from other units
+        if (unitId) {
+             if (l.unit_id && l.unit_id !== unitId) return false
+        }
+
         return true
       })
       .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
-  }, [existingLeaves, type, selectedMonth, selectedYear])
+  }, [existingLeaves, type, selectedMonth, selectedYear, unitId])
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
