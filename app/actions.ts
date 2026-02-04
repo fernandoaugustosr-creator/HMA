@@ -372,6 +372,7 @@ export async function getNurses() {
   const { data } = await supabase
     .from('nurses')
     .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
+    .range(0, 9999)
     .order('name')
   return data || []
 }
@@ -387,6 +388,7 @@ export async function getNursesBySection(sectionId: string) {
     .from('nurses')
     .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
     .eq('section_id', sectionId)
+    .range(0, 9999)
     .order('name')
   return data || []
 }
@@ -1881,7 +1883,7 @@ export async function getDailyShifts(date: string) {
   }
 }
 
-export async function getMonthlyScheduleData(month: number, year: number) {
+export async function getMonthlyScheduleData(month: number, year: number, unitId?: string) {
   try {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDay = new Date(year, month, 0).getDate()
@@ -1925,9 +1927,10 @@ export async function getMonthlyScheduleData(month: number, year: number) {
       }
 
       // Re-read roster after potential migration
-      const finalRoster = db.monthly_rosters.filter(r => r.month === month && r.year === year)
+      const finalRoster = db.monthly_rosters.filter(r => r.month === month && r.year === year && (!unitId || r.unit_id === unitId))
       
       // Filter shifts
+      // Optimization: if unitId is present, we could filter shifts by nurse/roster, but for local mode it's fast enough.
       const shifts = db.shifts.filter(s => s.shift_date >= startDate && s.shift_date <= endDate)
       
       // Filter timeOffs
@@ -1956,6 +1959,98 @@ export async function getMonthlyScheduleData(month: number, year: number) {
 
     const supabase = createClient()
     
+    // OPTIMIZED FETCHING STRATEGY
+    if (unitId) {
+        // 1. Fetch Roster for Unit to identify relevant nurses
+        const { data: unitRoster, error: rosterError } = await supabase
+            .from('monthly_rosters')
+            .select('*')
+            .eq('month', month)
+            .eq('year', year)
+            .eq('unit_id', unitId)
+        
+        if (rosterError && rosterError.code !== 'PGRST116') console.error('Error fetching unit roster:', rosterError)
+        
+        const roster = unitRoster || []
+        // Extract Nurse IDs involved in this unit's roster
+        const unitNurseIds = Array.from(new Set(roster.map(r => r.nurse_id)))
+        
+        // 2. Parallel fetch of other data
+        // Note: We still fetch ALL nurses to support the "Add Nurse" dropdown, 
+        // but we optimize shifts, timeOffs, and absences to only relevant nurses.
+        const queries: any[] = [
+            supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
+            supabase.from('units').select('*'),
+            supabase.from('nurses').select('*').range(0, 19999).order('name'),
+            supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
+        ]
+
+        // Only fetch shifts/absences if we have nurses
+        let shiftsPromise, timeOffsPromise, absencesPromise
+
+        if (unitNurseIds.length > 0) {
+            // Chunking to avoid URL length limits if many nurses
+            // Supabase/PostgREST can handle reasonable amounts, but let's be safe if > 100
+            // For simplicity, if < 200 nurses, single query. If > 200, we might fallback to full fetch or batch.
+            // Assuming unit has < 200 nurses usually.
+            
+            shiftsPromise = supabase.from('shifts')
+                .select('id, nurse_id, date, type, roster_id, created_at')
+                .gte('date', startDate)
+                .lte('date', endDate)
+                .in('nurse_id', unitNurseIds) // Fetch shifts for these nurses (including legacy)
+
+            timeOffsPromise = supabase.from('time_off_requests')
+                .select('id, nurse_id, start_date, end_date, type, status, unit_id')
+                .in('status', ['approved', 'pending'])
+                .or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`)
+                .in('nurse_id', unitNurseIds)
+
+            absencesPromise = supabase.from('absences')
+                .select('*')
+                .gte('date', startDate)
+                .lte('date', endDate)
+                .in('nurse_id', unitNurseIds)
+        } else {
+            shiftsPromise = Promise.resolve({ data: [] })
+            timeOffsPromise = Promise.resolve({ data: [] })
+            absencesPromise = Promise.resolve({ data: [] })
+        }
+        
+        const [
+            { data: sections },
+            { data: units },
+            { data: nurses },
+            { data: releases },
+            { data: rawShifts },
+            { data: timeOffsData },
+            { data: absencesData }
+        ] = await Promise.all([
+            ...queries,
+            shiftsPromise,
+            timeOffsPromise,
+            absencesPromise
+        ])
+
+        const shifts = rawShifts?.map((s: any) => ({
+            ...s,
+            shift_date: s.date,
+            shift_type: s.type
+        })) || []
+
+        return {
+            nurses: nurses || [],
+            roster: roster,
+            shifts: shifts,
+            timeOffs: timeOffsData || [],
+            absences: absencesData || [],
+            sections: sections || [],
+            units: units || [],
+            releases: releases || []
+        }
+    }
+
+    // GLOBAL FETCH (Fallback or explicit global view)
     // Parallel fetching for performance optimization
     const [
         { data: sections, error: sectionsError },
@@ -1969,12 +2064,12 @@ export async function getMonthlyScheduleData(month: number, year: number) {
     ] = await Promise.all([
         supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
-        supabase.from('nurses').select('*').order('name'),
-        supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year),
-        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate),
+        supabase.from('nurses').select('*').range(0, 19999).order('name'),
+        supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year).range(0, 19999),
+        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 49999),
         supabase.from('time_off_requests').select('id, nurse_id, start_date, end_date, type, status, unit_id').in('status', ['approved', 'pending']).or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
         supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
-        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate)
+        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate).range(0, 9999)
     ])
 
     if (sectionsError) console.error('Error fetching sections:', sectionsError)
@@ -3066,7 +3161,7 @@ export async function updateRosterOrder(rosterId: string, listOrder: number | nu
   }
 }
 
-export async function resetSectionOrder(sectionId: string, unitId: string | null, month: number, year: number, startRosterId?: string, orderedRosterIds?: string[]) {
+export async function resetSectionOrder(sectionId: string, unitId: string | null, month: number, year: number, startRosterId?: string, orderedRosterIds?: string[], startNumber: number = 1) {
   try {
     await checkAdmin()
 
@@ -3076,15 +3171,27 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
         .filter(r => r.section_id === sectionId && r.month === month && r.year === year && (unitId === 'ALL' ? true : (unitId ? r.unit_id === unitId : !r.unit_id)))
       
       if (orderedRosterIds && orderedRosterIds.length > 0) {
-        // Sort candidates based on the provided order
-        candidates.sort((a, b) => {
-            const indexA = orderedRosterIds.indexOf(a.id)
-            const indexB = orderedRosterIds.indexOf(b.id)
-            if (indexA === -1 && indexB === -1) return 0
-            if (indexA === -1) return 1
-            if (indexB === -1) return -1
-            return indexA - indexB
+        // Explicitly construct sorted list based on orderedRosterIds
+        const candidateMap = new Map(candidates.map(d => [d.id, d]))
+        const newSorted = []
+
+        // 1. Add items present in orderedRosterIds
+        for (const id of orderedRosterIds) {
+          if (candidateMap.has(id)) {
+            newSorted.push(candidateMap.get(id)!)
+            candidateMap.delete(id)
+          }
+        }
+
+        // 2. Append any remaining items
+        const remaining = Array.from(candidateMap.values())
+        remaining.sort((a, b) => {
+            const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+            const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+            return aTime - bTime
         })
+
+        candidates = [...newSorted, ...remaining]
       } else {
         candidates.sort((a, b) => {
           const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
@@ -3104,23 +3211,41 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
         }
       }
 
-      // Calculate base for numbering - GROUP BASED (Modulo 10000)
-      // We want to restart numbering at 1 (visually) but keep sort order higher than previous items
-      
-      let prevOrder = 0
-      if (startIndex > 0) {
-        prevOrder = candidates[startIndex - 1].list_order || 0
-      }
+      // Track currentMax to ensure strictly increasing sequence
+      let currentMax = 0
+      let resetBase = 0
 
-      // Calculate new base: next multiple of 10000 > prevOrder
-      // e.g. if prev is 5, base = 10000. Next items: 10001, 10002... (Displayed as 1, 2...)
-      // e.g. if prev is 10005, base = 20000. Next items: 20001, 20002...
-      const newBase = (Math.floor(prevOrder / 10000) + 1) * 10000
+      for (let i = 0; i < candidates.length; i++) {
+          const r = candidates[i]
+          let newOrder = 0
 
-      // Update from startIndex onwards
-      // This rewrites the sequence for all subsequent items to be a single continuous chronological group
-      for (let i = startIndex; i < candidates.length; i++) {
-          candidates[i].list_order = newBase + (i - startIndex + 1)
+          if (i < startIndex) {
+             // For items before the reset point
+             if (r.list_order != null) {
+                 if (r.list_order <= currentMax) {
+                     newOrder = currentMax + 1
+                 } else {
+                     newOrder = r.list_order
+                 }
+             } else {
+                 const targetDisplay = i + 1
+                 const group = Math.floor(currentMax / 10000)
+                 let candidate = group * 10000 + targetDisplay
+                 while (candidate <= currentMax) candidate += 10000
+                 newOrder = candidate
+             }
+          } else if (i === startIndex) {
+             // The Reset Point: Start a new group
+             const nextGroupBase = (Math.floor(currentMax / 10000) + 1) * 10000
+             newOrder = nextGroupBase + startNumber
+             resetBase = nextGroupBase
+          } else {
+             // i > startIndex: Strictly sequential from resetBase
+             newOrder = resetBase + startNumber + (i - startIndex)
+          }
+
+          r.list_order = newOrder
+          currentMax = newOrder
       }
 
       writeDb(db)
@@ -3148,22 +3273,49 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
     const { data, error } = await query
     if (error) throw error
 
-    let sorted = data || []
+    let sorted: any[] = []
     
-    // Always sort by created_at -> name -> id to match frontend "Chronological" order
-    // We ignore orderedRosterIds because it might be scrambled or incomplete, causing the "Mess"
-    sorted.sort((a: any, b: any) => {
-        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
-        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
-        if (aTime !== bTime) return aTime - bTime
-        
-        const nameA = a.nurse?.name || ''
-        const nameB = b.nurse?.name || ''
-        const nameCompare = nameA.localeCompare(nameB)
-        if (nameCompare !== 0) return nameCompare
-        
-        return (a.id || '').localeCompare(b.id || '')
-    })
+    if (orderedRosterIds && orderedRosterIds.length > 0) {
+      // Explicitly construct sorted list based on orderedRosterIds
+      const candidateMap = new Map(data?.map(d => [d.id, d]))
+      
+      // 1. Add items present in orderedRosterIds
+      for (const id of orderedRosterIds) {
+        if (candidateMap.has(id)) {
+          sorted.push(candidateMap.get(id))
+          candidateMap.delete(id)
+        }
+      }
+      
+      // 2. Append any remaining items (not in orderedRosterIds)
+      // These will be sorted by created_at/name/id as fallback
+      const remaining = Array.from(candidateMap.values())
+      remaining.sort((a: any, b: any) => {
+          const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+          const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+          if (aTime !== bTime) return aTime - bTime
+          return (a.id || '').localeCompare(b.id || '')
+      })
+      
+      sorted = [...sorted, ...remaining]
+      
+      console.log('Explicitly Sorted Candidates:', sorted.map((s: any) => `${s.nurse?.name} (${s.list_order})`).join(', '))
+    } else {
+      // Fallback: Always sort by created_at -> name -> id to match frontend "Chronological" order
+      sorted = data || []
+      sorted.sort((a: any, b: any) => {
+          const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+          const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+          if (aTime !== bTime) return aTime - bTime
+          
+          const nameA = a.nurse?.name || ''
+          const nameB = b.nurse?.name || ''
+          const nameCompare = nameA.localeCompare(nameB)
+          if (nameCompare !== 0) return nameCompare
+          
+          return (a.id || '').localeCompare(b.id || '')
+      })
+    }
 
     let startIndex = 0
     if (startRosterId) {
@@ -3176,34 +3328,65 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
       }
     }
 
-    // Determine the starting base for numbering
-    // We use "Groups" of 10000 to allow restarting numbering without affecting previous rows
-    // e.g. Group 0: 1-9999. Group 1: 10001-19999 (Displays as 1-9999)
-    let prevOrder = 0
-    if (startIndex > 0) {
-        prevOrder = sorted[startIndex - 1].list_order || 0
-    }
-    
-    // Calculate new base: next multiple of 10000 > prevOrder
-    const newBase = (Math.floor(prevOrder / 10000) + 1) * 10000
-
-    // Only update from startIndex onwards
+    // Track currentMax to ensure strictly increasing sequence
+    let currentMax = 0
+    let resetBase = 0
     const updates = []
-    for (let i = startIndex; i < sorted.length; i++) {
+
+    for (let i = 0; i < sorted.length; i++) {
         const r = sorted[i]
-        updates.push({
-            id: r.id,
-            nurse_id: r.nurse_id,
-            section_id: r.section_id,
-            unit_id: r.unit_id ?? null,
-            month: r.month,
-            year: r.year,
-            observation: r.observation ?? null,
-            sector: r.sector ?? null,
-            created_at: r.created_at,
-            // Use new base + relative index (1, 2, 3...)
-            list_order: newBase + (i - startIndex + 1)
-        })
+        let newOrder = 0
+
+        if (i < startIndex) {
+            // For items before the reset point
+            if (r.list_order != null) {
+                // Keep existing order if possible, but ensure strictly increasing if needed
+                if (r.list_order <= currentMax) {
+                    newOrder = currentMax + 1
+                } else {
+                    newOrder = r.list_order
+                }
+            } else {
+                // If null, materialize it to preserve visual order (index + 1)
+                // We try to find a value that displays as (i+1) but is > currentMax
+                // Display = val % 10000. Target = i + 1.
+                const targetDisplay = i + 1
+                const group = Math.floor(currentMax / 10000)
+                let candidate = group * 10000 + targetDisplay
+                
+                // Ensure candidate > currentMax
+                while (candidate <= currentMax) {
+                    candidate += 10000
+                }
+                newOrder = candidate
+            }
+        } else if (i === startIndex) {
+            // The Reset Point: Start a new group
+            const nextGroupBase = (Math.floor(currentMax / 10000) + 1) * 10000
+            newOrder = nextGroupBase + startNumber
+            resetBase = nextGroupBase
+        } else {
+            // i > startIndex: Strictly sequential from resetBase
+            newOrder = resetBase + startNumber + (i - startIndex)
+        }
+
+        // Update if changed or if it was null
+        if (r.list_order !== newOrder) {
+            updates.push({
+                id: r.id,
+                nurse_id: r.nurse_id,
+                section_id: r.section_id,
+                unit_id: r.unit_id ?? null,
+                month: r.month,
+                year: r.year,
+                observation: r.observation ?? null,
+                sector: r.sector ?? null,
+                created_at: r.created_at,
+                list_order: newOrder
+            })
+        }
+        
+        currentMax = newOrder
     }
 
     if (updates.length > 0) {
@@ -3224,6 +3407,46 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
         ? `Erro ao reiniciar numeração: ${errorMessage}` 
         : 'Erro ao reiniciar numeração' 
     }
+  }
+}
+
+export async function updateRosterListOrders(updates: { id: string, list_order: number }[]) {
+  try {
+    await checkAdmin()
+    
+    if (isLocalMode()) {
+      const db = readDb()
+      let changed = false
+      updates.forEach(u => {
+        const roster = db.monthly_rosters.find(r => r.id === u.id)
+        if (roster) {
+          roster.list_order = u.list_order
+          changed = true
+        }
+      })
+      if (changed) {
+        writeDb(db)
+        revalidatePath('/')
+      }
+      return { success: true }
+    }
+    
+    const supabase = createClient()
+    
+    for (const u of updates) {
+      const { error } = await supabase
+        .from('monthly_rosters')
+        .update({ list_order: u.list_order })
+        .eq('id', u.id)
+        
+      if (error) throw error
+    }
+    
+    revalidatePath('/')
+    return { success: true }
+  } catch (e: any) {
+    console.error('Error updating roster orders:', e)
+    return { success: false, message: e.message || 'Erro ao atualizar ordem' }
   }
 }
 

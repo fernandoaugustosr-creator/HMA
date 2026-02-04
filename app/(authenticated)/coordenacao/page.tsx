@@ -17,7 +17,9 @@ export default async function CoordenacaoPage({ searchParams }: { searchParams?:
 
   if (user.role === 'COORDENADOR' && user.section_id) {
       sectionTitle = user.section_title || ''
-      nurses = await getNursesBySection(user.section_id)
+      // FIX: Coordinators need to see ALL nurses to manage the roster effectively, 
+      // not just those already in their section.
+      nurses = await getNurses() 
   } else {
       nurses = await getNurses()
   }

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters, updateRosterListOrders } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser } from 'lucide-react'
 import NurseCreationModal from './NurseCreationModal'
@@ -373,7 +373,7 @@ export default function Schedule({
 
   const fetchData = React.useCallback(async (forceRefresh = false) => {
     setLoading(true)
-    const cacheKey = `${selectedMonth}-${selectedYear}`
+    const cacheKey = `${selectedMonth}-${selectedYear}-${selectedUnitId}`
 
     if (!forceRefresh && scheduleCache.current[cacheKey]) {
         const cachedData = scheduleCache.current[cacheKey]
@@ -384,7 +384,7 @@ export default function Schedule({
     }
 
     try {
-      const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear)
+      const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear, selectedUnitId)
       const newData = result as ScheduleData
       scheduleCache.current[cacheKey] = newData
       setData(newData)
@@ -394,11 +394,18 @@ export default function Schedule({
       setLoading(false)
       onLoaded?.()
     }
-  }, [selectedMonth, selectedYear, onLoaded])
+  }, [selectedMonth, selectedYear, selectedUnitId, onLoaded])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Auto-select first unit if none selected and units are available
+  useEffect(() => {
+    if (!selectedUnitId && data.units.length > 0) {
+      setSelectedUnitId(data.units[0].id)
+    }
+  }, [data.units, selectedUnitId])
 
  
   // We need a separate state for "Manually Added" to survive re-renders until saved
@@ -951,6 +958,7 @@ export default function Schedule({
     
     try {
         const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
+        let stopReason = '' // Track why generation stopped
         
         if (shiftType === 'delete' && deleteWholeMonth) {
             // Delete whole month logic
@@ -964,17 +972,41 @@ export default function Schedule({
                     type: 'DELETE'
                 })
             }
+            stopReason = 'delete_whole_month'
         } else {
             // Standard logic
             const startDate = new Date(shiftModalData.date + 'T12:00:00') // Avoid timezone issues
-            const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+            const startMonth = startDate.getMonth()
             
             // Calculate dates based on recurrence
             let currentDateIter = new Date(startDate)
             let count = 0
-            const limit = limitShifts ? parseInt(limitShifts) : Infinity
+            
+            // Robust limit handling
+            let limit = 1000 // Default to high number (effectively infinity for a month)
+            const limitStr = String(limitShifts || '').trim()
+            if (limitStr !== '') {
+                const parsed = parseInt(limitStr)
+                if (!isNaN(parsed) && parsed > 0) {
+                    limit = parsed
+                }
+            }
 
-            while (currentDateIter.getMonth() === selectedMonth && currentDateIter.getFullYear() === selectedYear) {
+            // Safety break to prevent infinite loops
+            let safetyCounter = 0
+            const MAX_ITERATIONS = 500
+            stopReason = 'month_change' // Default assumption if loop finishes normally
+            
+            // Loop while in the same month as start date
+            console.log('Starting shift generation loop', { startDate, startMonth, recurrence, limit })
+            while (currentDateIter.getMonth() === startMonth && currentDateIter.getFullYear() === startDate.getFullYear()) {
+                if (safetyCounter >= MAX_ITERATIONS) {
+                    console.log('Safety limit reached')
+                    stopReason = 'safety_limit'
+                    break
+                }
+                safetyCounter++
+                
                 // Special handling for Mon-Fri recurrence
                 if (recurrence === 'mon_fri') {
                     const dayOfWeek = currentDateIter.getDay()
@@ -985,7 +1017,11 @@ export default function Schedule({
                     }
                 }
 
-                if (count >= limit) break
+                if (limitShifts && count >= limit) {
+                     console.log('User limit reached', { count, limit })
+                     stopReason = 'user_limit'
+                     break
+                }
 
                 const dateString = `${currentDateIter.getFullYear()}-${String(currentDateIter.getMonth() + 1).padStart(2, '0')}-${String(currentDateIter.getDate()).padStart(2, '0')}`
                 
@@ -998,37 +1034,74 @@ export default function Schedule({
 
                 count++
 
-                if (recurrence === 'none') break
+                if (recurrence === 'none') {
+                    stopReason = 'single_shift'
+                    break
+                }
                 
-                // Increment based on recurrence
+                // Increment based on recurrence - Safe mutation
+                const nextDate = new Date(currentDateIter)
                 if (recurrence === 'daily' || recurrence === 'mon_fri') {
-                    currentDateIter.setDate(currentDateIter.getDate() + 1)
+                    nextDate.setDate(nextDate.getDate() + 1)
                 } else if (recurrence === '12x36') {
-                    currentDateIter.setDate(currentDateIter.getDate() + 2)
+                    nextDate.setDate(nextDate.getDate() + 2)
                 } else if (recurrence === 'every3') {
-                    currentDateIter.setDate(currentDateIter.getDate() + 3)
+                    nextDate.setDate(nextDate.getDate() + 3)
                 } else if (recurrence === '24x72') {
-                    currentDateIter.setDate(currentDateIter.getDate() + 4)
+                    nextDate.setDate(nextDate.getDate() + 4)
                 } else if (recurrence === 'off4') {
-                    currentDateIter.setDate(currentDateIter.getDate() + 5)
+                    nextDate.setDate(nextDate.getDate() + 5)
                 } else if (recurrence === 'off5') {
-                    currentDateIter.setDate(currentDateIter.getDate() + 6)
+                    nextDate.setDate(nextDate.getDate() + 6)
                 } else if (recurrence === 'off6') {
-                    currentDateIter.setDate(currentDateIter.getDate() + 7)
+                    nextDate.setDate(nextDate.getDate() + 7)
                 } else if (recurrence === 'custom') {
                     const days = parseInt(customRecurrenceDays)
                     if (!isNaN(days) && days > 0) {
-                        currentDateIter.setDate(currentDateIter.getDate() + days)
+                        nextDate.setDate(nextDate.getDate() + days)
                     } else {
+                        stopReason = 'invalid_custom'
                         break // Invalid custom days
                     }
+                } else {
+                    // Unknown recurrence or explicit 'none' handled above
+                    stopReason = 'unknown_recurrence'
+                    break
                 }
+                currentDateIter = nextDate
             }
+            console.log('Loop finished', { count, stopReason, lastDate: currentDateIter })
         }
 
-        // CONFLICT DETECTION
+        // CONFLICT DETECTION & CONFIRMATION
         // Only if adding/updating (not deleting)
         if (shiftType !== 'delete') {
+            // Bulk Confirmation with Details
+            if (shiftsToSave.length > 1) {
+                 const lastShift = shiftsToSave[shiftsToSave.length - 1]
+                 const lastDate = lastShift.date.split('-').reverse().join('/')
+                 
+                 let reasonText = ''
+                 switch (stopReason) {
+                     case 'month_change': reasonText = 'Fim do mês alcançado'; break;
+                     case 'user_limit': reasonText = `Limite de ${limitShifts} plantões definido pelo usuário`; break;
+                     case 'safety_limit': reasonText = 'Limite de segurança do sistema atingido (500 iterações)'; break;
+                     case 'single_shift': reasonText = 'Plantão único'; break;
+                     default: reasonText = stopReason;
+                 }
+
+                 const confirmMsg = `Serão gerados ${shiftsToSave.length} plantões.\n` + 
+                                    `Início: ${shiftsToSave[0].date.split('-').reverse().join('/')}\n` + 
+                                    `Fim: ${lastDate}\n` +
+                                    `Motivo da parada: ${reasonText}\n` +
+                                    `\nDeseja confirmar a inclusão?`
+                 
+                 if (!confirm(confirmMsg)) {
+                     setLoading(false)
+                     return
+                 }
+            }
+            
             const conflictingDates: string[] = []
             
             shiftsToSave.forEach(newShift => {
@@ -1425,6 +1498,76 @@ export default function Schedule({
       setReplicationModalOpen(true)
     }
 
+    const handleMoveRow = async (index: number, direction: 'up' | 'down') => {
+      if (!isAdmin) return
+      if (direction === 'up' && index === 0) return
+      if (direction === 'down' && index === orderedProfessionals.length - 1) return
+
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      const current = orderedProfessionals[index]
+      const target = orderedProfessionals[targetIndex]
+
+      // Use unique_key as ID (which is roster ID usually)
+      const currentId = current.nurse.unique_key
+      const targetId = target.nurse.unique_key
+      
+      if (!currentId || !targetId) {
+          alert('Erro: ID do profissional inválido para ordenação.')
+          return
+      }
+      
+      setLoading(true)
+
+      // Check if we can do a simple swap (both have valid listOrder)
+      const currentOrder = current.nurse.listOrder
+      const targetOrder = target.nurse.listOrder
+      
+      const isValid = (o: number | undefined | null) => o !== undefined && o !== null
+
+      if (isValid(currentOrder) && isValid(targetOrder)) {
+          // Swap values
+          const updates = [
+              { id: currentId, list_order: targetOrder! },
+              { id: targetId, list_order: currentOrder! }
+          ]
+          
+          const res = await updateRosterListOrders(updates)
+          if (!res.success) {
+              alert(res.message)
+          } else {
+              clearCache()
+              await fetchData(true)
+          }
+      } else {
+          // Fallback: Materialize everything using resetSectionOrder
+          const newOrder = [...orderedProfessionals]
+          newOrder[index] = target
+          newOrder[targetIndex] = current
+          
+          const orderedIds = newOrder.map(p => p.nurse.unique_key || '')
+          
+          // Use resetSectionOrder to apply this order
+          const res = await resetSectionOrder(
+              section.id, 
+              selectedUnitId || 'ALL', 
+              selectedMonth + 1, 
+              selectedYear, 
+              undefined, 
+              orderedIds,
+              1 
+          )
+          
+          if (!res.success) {
+              alert(res.message)
+          } else {
+              clearCache()
+              await fetchData(true)
+          }
+      }
+      
+      setLoading(false)
+    }
+
     return (
       <>
         {orderedProfessionals.map(({ nurse, firstDay, isTecnico, rowNumber }, index) => {
@@ -1440,31 +1583,71 @@ export default function Schedule({
           return (
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="hover:bg-gray-50">
               <td
-                className={`border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8 ${isAdmin ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-                onClick={async () => {
-                  if (!isAdmin) return
-                  const ok = confirm('Reiniciar numeração a partir deste item (mantendo os anteriores)?')
-                  if (!ok) return
-                  setLoading(true)
-                  const orderedRosterIds = orderedProfessionals.map(p => p.unique_key || '')
-                  // Pass unique_key as startRosterId to reset only from this item onwards
-                  // The backend will use orderedRosterIds to determine the subset sequence
-                  // If selectedUnitId is empty, pass 'ALL' to update all nurses in the section regardless of unit
-                  const res = await resetSectionOrder(section.id, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, nurse.unique_key, orderedRosterIds)
-                  if (!res.success) {
-                    alert(res.message || 'Erro ao reiniciar numeração')
-                  } else {
-                    clearCache()
-                    await fetchData(true)
-                  }
-                  setLoading(false)
-                }}
-                title={isAdmin ? 'Clique para reiniciar numeração a partir daqui' : undefined}
+                className={`border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8 ${isAdmin ? '' : ''}`}
+                title={isAdmin ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
-                {rowNumber}
+                {isAdmin ? (
+                  <input
+                    type="number"
+                    defaultValue={rowNumber}
+                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 appearance-none m-0 p-0"
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const input = e.target as HTMLInputElement
+                        input.blur()
+                      }
+                    }}
+                    onBlur={async (e) => {
+                      const newValue = parseInt(e.target.value, 10)
+                      if (isNaN(newValue) || newValue < 1) {
+                         e.target.value = String(rowNumber)
+                         return
+                      }
+                      
+                      if (newValue === rowNumber) return
+
+                      const ok = confirm(`Deseja reiniciar a numeração a partir deste item começando em ${newValue}?`)
+                      if (!ok) {
+                        e.target.value = String(rowNumber)
+                        return
+                      }
+
+                      setLoading(true)
+                      const orderedRosterIds = orderedProfessionals.map(p => p.unique_key || '')
+                      const res = await resetSectionOrder(section.id, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, nurse.unique_key, orderedRosterIds, newValue)
+                      if (!res.success) {
+                        alert(res.message || 'Erro ao reiniciar numeração')
+                        e.target.value = String(rowNumber)
+                      } else {
+                        clearCache()
+                        await fetchData(true)
+                      }
+                      setLoading(false)
+                    }}
+                  />
+                ) : (
+                  rowNumber
+                )}
               </td>
               <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 w-[300px] print:w-[130px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
+                  {isAdmin && (
+                    <div className="flex flex-col mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button 
+                           onClick={() => handleMoveRow(index, 'up')}
+                           className="text-[10px] leading-3 hover:text-blue-600 hover:font-bold focus:outline-none"
+                           title="Mover para cima"
+                           disabled={index === 0}
+                       >▲</button>
+                       <button 
+                           onClick={() => handleMoveRow(index, 'down')}
+                           className="text-[10px] leading-3 hover:text-blue-600 hover:font-bold focus:outline-none"
+                           title="Mover para baixo"
+                           disabled={index === orderedProfessionals.length - 1}
+                       >▼</button>
+                    </div>
+                  )}
                   {isAdmin && (
                   <button 
                     onClick={() => handleRemoveFromRoster(nurse.unique_key || '')} 
@@ -2612,6 +2795,7 @@ export default function Schedule({
                             onChange={(e) => {
                                 const val = e.target.value as any
                                 setRecurrence(val)
+                                setLimitShifts('') // Reset limit when changing recurrence to prevent confusion
                                 if (typeof window !== 'undefined') localStorage.setItem('enf_hma_last_recurrence', val)
                             }}
                             className="w-full border p-2 rounded text-black bg-white"
@@ -2655,8 +2839,9 @@ export default function Schedule({
                                 type="number"
                                 value={limitShifts}
                                 onChange={e => setLimitShifts(e.target.value)}
-                                placeholder="Ex: 10 primeiros plantões"
+                                placeholder="Deixe vazio para preencher até o fim do mês"
                                 className="w-full border p-2 rounded text-black bg-white text-sm"
+                                autoComplete="off"
                              />
                              <p className="text-xs text-gray-500 mt-1">
                                 Se preenchido, aplicará apenas para a quantidade de plantões informada. Caso contrário, preencherá até o final do mês.
