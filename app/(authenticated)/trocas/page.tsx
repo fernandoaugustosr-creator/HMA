@@ -16,7 +16,7 @@ export default async function TrocasPage() {
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   return (
-    <div className="container mx-auto p-4 h-[calc(100vh-theme(spacing.20))]">
+    <div className="w-full p-4 h-[calc(100vh-theme(spacing.20))]">
       <div className="h-full">
         <SwapSection 
           swaps={swaps} 

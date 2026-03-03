@@ -14,7 +14,7 @@ export default async function GestaoPage() {
   const [sections, nurses] = await Promise.all([getSections(), getNurses()])
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="w-full p-4">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800">Gestão de Coordenações</h1>
         <p className="text-gray-600">Crie locais e atribua coordenadores.</p>

@@ -16,7 +16,7 @@ export default async function LogsPage() {
   const loginLogs = res.success && Array.isArray(res.logs) ? res.logs : []
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="w-full p-4 py-8">
       <LogsClient loginLogs={loginLogs} isDirector={isDirector} />
     </div>
   )

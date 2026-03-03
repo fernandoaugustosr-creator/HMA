@@ -18,6 +18,13 @@ const initialState = {
   success: false
 }
 
+const formatDateBR = (dateString: string | null | undefined) => {
+  if (!dateString) return '—'
+  const [year, month, day] = String(dateString).split('-')
+  if (!year || !month || !day) return String(dateString)
+  return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`
+}
+
 type CoordenacaoClientProps = {
   nurses: any[]
   sectionTitle?: string
@@ -74,20 +81,23 @@ export default function CoordenacaoClient({
   useEffect(() => {
     if (absenceState.success && absenceFormRef.current) {
       absenceFormRef.current.reset()
+      // Optional: focus back on the first field for faster entry
+      const firstInput = absenceFormRef.current.querySelector('select, input') as HTMLElement
+      if (firstInput) firstInput.focus()
     }
-  }, [absenceState.success])
+  }, [absenceState])
 
   useEffect(() => {
     if (paymentState.success && paymentFormRef.current) {
       paymentFormRef.current.reset()
     }
-  }, [paymentState.success])
+  }, [paymentState])
 
   useEffect(() => {
     if (generalState.success && generalFormRef.current) {
       generalFormRef.current.reset()
     }
-  }, [generalState.success])
+  }, [generalState])
 
   useEffect(() => {
     if (sectionTitle) {
@@ -388,7 +398,7 @@ export default function CoordenacaoClient({
                         {item.nurse_name || findNurseName(item.nurse_id)}
                       </td>
                       <td className="px-2 py-1 text-gray-700">
-                        {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '—'}
+                        {formatDateBR(item.date)}
                       </td>
                       <td className="px-2 py-1 text-gray-500 truncate max-w-xs" title={item.reason || ''}>
                         {item.reason || '—'}

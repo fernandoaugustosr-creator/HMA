@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters, updateRosterListOrders } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser } from 'lucide-react'
+import { formatRole } from '@/lib/utils'
 import NurseCreationModal from './NurseCreationModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
 
@@ -260,6 +261,7 @@ export default function Schedule({
   // Unit Management State
   const [isAddingUnit, setIsAddingUnit] = useState(false)
   const [newUnitTitle, setNewUnitTitle] = useState('')
+  const [newUnitNumber, setNewUnitNumber] = useState('')
   const [isEditingUnit, setIsEditingUnit] = useState(false)
   const [editingUnitTitle, setEditingUnitTitle] = useState('')
 
@@ -294,17 +296,24 @@ export default function Schedule({
   const [replicationModalOpen, setReplicationModalOpen] = useState(false)
   const [replicationData, setReplicationData] = useState<{
       value: string,
-      targets: { id: string, group: number }[]
+      targets: { id: string, group: number, index: number }[],
+      startIndex: number
   } | null>(null)
 
   // SQL Instruction Modal
   const [showSqlModal, setShowSqlModal] = useState(false)
+  const [headerLine1, setHeaderLine1] = useState('Prefeitura Municipal de Açailândia')
+  const [headerLine2, setHeaderLine2] = useState('Secretaria Municipal de Saúde / SEMUS')
+  const [headerLine3, setHeaderLine3] = useState('Hospital Municipal de Açailândia - HMA')
+  const [headerPage, setHeaderPage] = useState('1')
+  const [isEditingHeader, setIsEditingHeader] = useState(false)
+  const [unitNumber, setUnitNumber] = useState<string>('')
+  const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO'>('ALL')
 
-  const handleExecuteReplication = async (targetGroup: number) => {
+  const applyReplicationToTargets = async (targetsToUpdate: { id: string }[]) => {
       if (!replicationData) return
 
-      const targetsToUpdate = replicationData.targets.filter(t => t.group === targetGroup)
-      
       if (targetsToUpdate.length === 0) {
           alert('Nenhum profissional encontrado para este critério.')
           return
@@ -336,6 +345,19 @@ export default function Schedule({
       } finally {
           setLoading(false)
       }
+  }
+
+  const handleExecuteReplication = async (targetGroup: number) => {
+      if (!replicationData) return
+      const targetsToUpdate = replicationData.targets.filter(t => t.group === targetGroup)
+      await applyReplicationToTargets(targetsToUpdate)
+  }
+
+  const handleExecuteReplicationAllBelow = async () => {
+      if (!replicationData) return
+      const start = replicationData.startIndex ?? 0
+      const targetsToUpdate = replicationData.targets.filter(t => t.index >= start)
+      await applyReplicationToTargets(targetsToUpdate)
   }
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -406,6 +428,59 @@ export default function Schedule({
       setSelectedUnitId(data.units[0].id)
     }
   }, [data.units, selectedUnitId])
+  
+  useEffect(() => {
+    const l1 = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_line_1') : null
+    const l2 = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_line_2') : null
+    const l3 = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_line_3') : null
+    const pg = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_page') : null
+    if (l1) setHeaderLine1(l1)
+    if (l2) setHeaderLine2(l2)
+    if (l3) setHeaderLine3(l3)
+    if (pg) setHeaderPage(pg)
+  }, [])
+  
+  useEffect(() => {
+    async function refreshUnitNumber() {
+      if (!selectedUnitId) {
+        setUnitNumber('')
+        return
+      }
+      const n = await getUnitNumber(selectedUnitId)
+      setUnitNumber(n || '')
+    }
+    refreshUnitNumber()
+  }, [selectedUnitId])
+  
+  useEffect(() => {
+    async function loadAllNumbers() {
+      const map = await getAllUnitNumbers()
+      setUnitNumbersMap(map || {})
+    }
+    loadAllNumbers()
+  }, [data.units])
+  
+  const handleSaveHeader = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('enf_hma_header_line_1', headerLine1)
+      localStorage.setItem('enf_hma_header_line_2', headerLine2)
+      localStorage.setItem('enf_hma_header_line_3', headerLine3)
+      localStorage.setItem('enf_hma_header_page', headerPage)
+    }
+    setIsEditingHeader(false)
+  }
+  
+  const handleSaveUnitNumber = async () => {
+    if (!selectedUnitId) return
+    const res = await saveUnitNumber(selectedUnitId, unitNumber || '')
+    if (!res.success) {
+      alert(res.message || 'Erro ao salvar número do setor')
+      return
+    }
+    const map = await getAllUnitNumbers()
+    setUnitNumbersMap(map || {})
+    alert('Número do setor salvo')
+  }
 
  
   // We need a separate state for "Manually Added" to survive re-renders until saved
@@ -472,9 +547,10 @@ export default function Schedule({
     if (!newUnitTitle.trim()) return
     setLoading(true)
     try {
-        const res = await addUnit(newUnitTitle)
+        const res = await addUnit(newUnitTitle, newUnitNumber || undefined)
         if (res.success) {
             setNewUnitTitle('')
+            setNewUnitNumber('')
             setIsAddingUnit(false)
             clearCache()
             await fetchData(true)
@@ -1482,18 +1558,20 @@ export default function Schedule({
     })
 
     const orderedProfessionals = professionalsWithRowNumber
-
-    const handleCopySectorDown = async (_startIndex: number, value: string) => {
-      const targets = orderedProfessionals.map(x => ({
+    
+    const handleCopySectorDown = async (startIndex: number, value: string) => {
+      const targets = orderedProfessionals.map((x, idx) => ({
           id: x.nurse.id,
-          group: x.group
+          group: x.group,
+          index: idx
       }))
       
       if (targets.length === 0) return
 
       setReplicationData({
           value,
-          targets
+          targets,
+          startIndex
       })
       setReplicationModalOpen(true)
     }
@@ -1581,16 +1659,16 @@ export default function Schedule({
           const displayTotal = isDiarista ? '' : totalShifts
 
           return (
-            <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="hover:bg-gray-50">
+            <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
-                className={`border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-white z-10 w-8 ${isAdmin ? '' : ''}`}
+                className={`border border-black px-1 py-1 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 ${isAdmin ? '' : ''}`}
                 title={isAdmin ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
                 {isAdmin ? (
                   <input
                     type="number"
                     defaultValue={rowNumber}
-                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 appearance-none m-0 p-0"
+                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 appearance-none m-0 p-0 text-black font-bold"
                     onKeyDown={async (e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
@@ -1627,13 +1705,13 @@ export default function Schedule({
                     }}
                   />
                 ) : (
-                  rowNumber
+                  <span className="text-black font-bold">{rowNumber}</span>
                 )}
               </td>
-              <td className="border border-black px-2 py-1 text-xs whitespace-nowrap font-medium text-black sticky left-8 bg-white z-10 w-[300px] print:w-[130px] border-r-2 border-r-black">
+              <td className="border border-black px-2 py-1 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[220px] print:w-[130px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
                   {isAdmin && (
-                    <div className="flex flex-col mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex flex-col mr-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
                        <button 
                            onClick={() => handleMoveRow(index, 'up')}
                            className="text-[10px] leading-3 hover:text-blue-600 hover:font-bold focus:outline-none"
@@ -1740,7 +1818,7 @@ export default function Schedule({
                    </div>
                 </div>
               </td>
-              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{nurse.coren || '-'}</td>
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{formatRole(nurse.role) || '-'}</td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
                 {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
@@ -1819,7 +1897,7 @@ export default function Schedule({
                    const hasSpecialColor = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].includes(timeOff.type)
                    
                    if (!hasSpecialColor) {
-                       cellClass += " bg-gray-400"
+                       cellClass += " bg-[#3b5998] text-white"
                    }
                 }
 
@@ -1828,6 +1906,42 @@ export default function Schedule({
                     key={day} 
                     className={`${cellClass} ${isAdmin ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`}
                     onClick={isAdmin ? () => handleCellClick(nurse, dateStr, nurse.unique_key) : undefined}
+                    id={`cell-${nurse.unique_key}-${dateStr}`}
+                    tabIndex={isAdmin ? 0 : -1}
+                    onKeyDown={isAdmin ? async (e) => {
+                      const k = e.key.toLowerCase()
+                      if (isSpecialLeave) return
+                      if (['d','n','m','t','delete','backspace','arrowright','arrowleft'].includes(k)) {
+                        e.preventDefault()
+                      }
+                      if (k === 'arrowright' || k === 'arrowleft') {
+                        const delta = k === 'arrowright' ? 1 : -1
+                        const targetDay = day + delta
+                        if (targetDay >= 1) {
+                          const targetDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`
+                          const el = document.getElementById(`cell-${nurse.unique_key}-${targetDate}`)
+                          el?.focus()
+                        }
+                        return
+                      }
+                      let type: 'day' | 'night' | 'morning' | 'afternoon' | 'DELETE' | null = null
+                      if (k === 'd') type = 'day'
+                      else if (k === 'n') type = 'night'
+                      else if (k === 'm') type = 'morning'
+                      else if (k === 't') type = 'afternoon'
+                      else if (k === 'delete' || k === 'backspace') type = 'DELETE'
+                      if (!type) return
+                      setLoading(true)
+                      await saveShifts([{
+                        nurseId: nurse.id,
+                        rosterId: nurse.unique_key,
+                        date: dateStr,
+                        type
+                      } as any])
+                      clearCache()
+                      await fetchData(true)
+                      setLoading(false)
+                    } : undefined}
                     title={isAdmin ? "Clique para gerenciar plantão" : undefined}
                   >
                     {content}
@@ -1840,9 +1954,9 @@ export default function Schedule({
         })}
         {/* Add Professional Row Placeholder */}
         {isAdmin && (
-        <tr className="no-print">
-          <td className="border border-black px-1 py-1 sticky left-0 bg-white z-10"></td>
-          <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black">
+        <tr className="no-print bg-white">
+          <td className="border border-black px-1 py-1 sticky left-0 bg-yellow-400 z-10"></td>
+          <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black w-[220px]">
              <select 
                 onChange={(e) => handleAssignNurse(e.target.value, section.id)}
                 className="flex items-center gap-1 text-xs text-blue-600 italic w-full bg-transparent border-none outline-none cursor-pointer hover:text-blue-800"
@@ -1894,7 +2008,7 @@ export default function Schedule({
           {daysArray.map(({ day, isWeekend }) => (
             <td 
               key={`placeholder-${day}`} 
-              className={`border border-black px-0 py-0 ${isWeekend ? 'bg-gray-400' : ''}`}
+              className={`border border-black px-0 py-0 ${isWeekend ? 'bg-[#3b5998]' : ''}`}
             ></td>
           ))}
           <td className="border border-black px-1 py-1"></td>
@@ -1946,28 +2060,69 @@ export default function Schedule({
     <div 
       className={`w-full bg-white ${printOnly ? 'p-0' : 'p-1'} schedule-root`}
     >
-      {/* Header logos removed as per request */}
-      {!printOnly && (
-        <div className="hidden print:hidden w-full items-center justify-between mb-1">
-            <Image 
-              src={`/logo-hma.png?t=${logoTimestamp}`} 
-              alt="Logo HMA" 
-              width={200} 
-              height={64} 
-              className="h-16 object-contain" 
-              unoptimized
-            />
-            <div className="flex-1"></div>
-            <Image 
-              src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
-              alt="Logo Prefeitura" 
-              width={200} 
-              height={64} 
-              className="h-16 object-contain"
-              unoptimized
-            />
+      <div className="w-full flex items-center justify-between mb-2 px-2 print:mb-4 print:px-0">
+        <div className="flex items-center gap-4">
+          <Image 
+            src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
+            alt="Prefeitura" 
+            width={140} 
+            height={48} 
+            className="h-12 w-auto object-contain print:h-10"
+            priority
+            unoptimized
+          />
+          <Image 
+            src={`/logo-hma.png?t=${logoTimestamp}`} 
+            alt="HMA" 
+            width={140} 
+            height={48} 
+            className="h-12 w-auto object-contain print:h-10" 
+            priority
+            unoptimized
+          />
+          <div className="flex flex-col leading-tight text-[11px] uppercase text-gray-800 print:text-[9px] print:ml-4">
+            {!isEditingHeader ? (
+              <>
+                <span>{headerLine1}</span>
+                <span>{headerLine2}</span>
+                <span>{headerLine3}</span>
+              </>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <input value={headerLine1} onChange={e => setHeaderLine1(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white text-black" />
+                <input value={headerLine2} onChange={e => setHeaderLine2(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white text-black" />
+                <input value={headerLine3} onChange={e => setHeaderLine3(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white text-black" />
+              </div>
+            )}
+          </div>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded print:w-8 print:h-8 print:text-[11px] print:rounded-md print:bg-[#1f2933] print:text-white print:border-0">
+            {(unitNumber || headerPage) || '1'}
+          </div>
+          {isAdmin && !printOnly && (
+            !isEditingHeader ? (
+              <button onClick={() => setIsEditingHeader(true)} className="px-3 py-2 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
+                Editar cabeçalho
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input value={headerPage} onChange={e => setHeaderPage(e.target.value)} className="w-12 border border-gray-300 rounded px-2 py-1 text-xs bg-white text-black" />
+                <input value={unitNumber} onChange={e => setUnitNumber(e.target.value)} placeholder="Número do setor" className="w-24 border border-gray-300 rounded px-2 py-1 text-xs bg-white text-black" />
+                <button onClick={handleSaveHeader} className="px-3 py-2 text-xs rounded bg-green-600 text-white hover:bg-green-700">
+                  Salvar
+                </button>
+                <button onClick={handleSaveUnitNumber} className="px-3 py-2 text-xs rounded bg-blue-600 text-white hover:bg-blue-700" title="Salvar número do setor">
+                  Salvar nº setor
+                </button>
+                <button onClick={() => setIsEditingHeader(false)} className="px-3 py-2 text-xs rounded bg-red-50 text-red-600 border border-red-200 hover:bg-red-100">
+                  Cancelar
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      </div>
 
       {/* Header Filters */}
       <div className="flex flex-col items-center gap-4 mb-6 no-print">
@@ -1997,11 +2152,17 @@ export default function Schedule({
                         className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
                     >
                         <option value="">Selecione um setor...</option>
-                        {data.units.map(unit => {
+                        {[...data.units].sort((a, b) => {
+                          const na = parseInt(unitNumbersMap[a.id] || '9999', 10)
+                          const nb = parseInt(unitNumbersMap[b.id] || '9999', 10)
+                          if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb
+                          return a.title.localeCompare(b.title)
+                        }).map(unit => {
                           const isReleased = data.releases?.some(r => r.unit_id === unit.id && r.month === selectedMonth + 1 && r.year === selectedYear && r.is_released)
+                          const num = unitNumbersMap[unit.id]
                           return (
                             <option key={unit.id} value={unit.id}>
-                                {unit.title} {isReleased ? '(Laçada)' : ''}
+                                {num ? `${num} - ${unit.title}` : unit.title} {isReleased ? '(Laçada)' : ''}
                             </option>
                           )
                         })}
@@ -2021,6 +2182,19 @@ export default function Schedule({
                             >
                                 <Pencil size={16} />
                             </button>
+                            <input 
+                              value={unitNumber} 
+                              onChange={e => setUnitNumber(e.target.value)} 
+                              placeholder="Nº" 
+                              className="ml-2 w-16 border border-gray-300 rounded px-2 py-1 text-xs bg-white text-black"
+                            />
+                            <button 
+                              onClick={handleSaveUnitNumber}
+                              className="text-green-600 p-2 hover:bg-gray-100 rounded"
+                              title="Salvar número do setor"
+                            >
+                              <Save size={16} />
+                            </button>
                             <button 
                                 onClick={handleClearAllUnitRosters}
                                 className="text-orange-600 p-2 hover:bg-gray-100 rounded"
@@ -2039,6 +2213,19 @@ export default function Schedule({
                     )}
                 </div>
             )}
+            </div>
+            <div className="w-full md:w-auto">
+            <label className="block text-sm font-medium text-black mb-1">Profissão</label>
+            <select
+                value={selectedRoleFilter}
+                onChange={(e) => setSelectedRoleFilter(e.target.value as any)}
+                className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
+            >
+                <option value="ALL">Todas</option>
+                <option value="ENFERMEIRO">Enfermeiro(a)</option>
+                <option value="TECNICO">Técnico de Enfermagem</option>
+                <option value="MEDICO">Médico(a)</option>
+            </select>
             </div>
             <div className="w-full md:w-auto">
             <label className="block text-sm font-medium text-black mb-1">Mês</label>
@@ -2169,7 +2356,7 @@ export default function Schedule({
       <div className="print:bg-white bg-white">
         <div className="mb-1"></div>
 
-      <div className={`overflow-x-auto border-none shadow-none max-w-full relative ${printOnly ? 'print:overflow-visible' : ''}`}>
+      <div className={`overflow-x-visible w-full border-none shadow-none relative ${printOnly ? 'print:overflow-visible' : ''}`}>
         {loading ? (
              <div className="text-center py-4">Carregando...</div>
         ) : (
@@ -2182,56 +2369,39 @@ export default function Schedule({
                }
                return (
                  <>
-                 {/* Print Header Logos - Only once at top */}
-                <div className="hidden print:flex items-center justify-between mb-2 px-2 break-inside-avoid" style={{ width: '100%' }}>
-                     <div className="relative h-12 w-[150px]">
-                         <img 
-                            src={`/logo-hma.png?t=${logoTimestamp}`} 
-                            alt="HMA Logo" 
-                            className="h-full w-full object-contain"
-                         />
-                     </div>
-
-                     <div className="relative h-12 w-[150px]">
-                         <img 
-                            src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
-                            alt="City Logo" 
-                            className="h-full w-full object-contain"
-                         />
-                     </div>
-                </div>
+                
 
                  {visibleSections.map((section, index) => (
                     <div key={section.id}>
-                       <table className="min-w-max w-full border-collapse border border-black text-black text-[9px] print:text-[8px]">
+                       <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[8px]">
                              <colgroup>
                                 <col className="w-8" />
-                                <col className="w-[150px]" />
-                                <col className="w-14" />
-                                <col className="w-14" />
-                                <col className="w-14" />
+                                <col className="w-[220px]" />
+                                <col className="w-24" />
+                                <col className="w-24" />
+                                <col className="w-24" />
                                 {daysArray.map(d => <col key={d.day} className="w-4" />)}
                                 <col className="w-12" />
                              </colgroup>
                              <thead>
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
-                                <tr className="bg-blue-100 text-black">
+                                <tr className="bg-[#1e3a5f] text-white">
                                     <th colSpan={5 + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
                                         {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
                                     </th>
                                 </tr>
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
-                                <tr className="bg-blue-100 text-black">
+                                <tr className="bg-[#1e3a5f] text-white">
                                     <th colSpan={5 + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
                                         ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
                                     </th>
                                 </tr>
                                 {/* Main Headers Row 3 (Columns) */}
-                                <tr className="bg-blue-100 text-black">
+                                <tr className="bg-[#1e3a5f] text-white">
                                     <th 
-                                      className="border border-black px-1 py-1 text-center sticky left-0 bg-blue-100 z-20 font-bold cursor-pointer select-none text-xs"
+                                      className="border border-black px-1 py-1 text-center sticky left-0 bg-[#1e3a5f] z-20 font-bold cursor-pointer select-none text-xs"
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
@@ -2253,9 +2423,9 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-[150px] sticky left-8 bg-blue-100 z-20 border-r-2 border-r-black font-bold uppercase text-xs group" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-[220px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-xs group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
-                                        <div className="flex items-center gap-1 w-full justify-center">
+                                        <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
                                                 value={editingSectionTitle}
                                                 onChange={e => setEditingSectionTitle(e.target.value)}
@@ -2267,15 +2437,15 @@ export default function Schedule({
                                         </div>
                                     ) : (
                                         <div className="flex justify-between items-center w-full">
-                                            <span className="flex-1 text-center">{section.title}</span>
+                                            <span className="flex-1 text-center">NOME COMPLETO</span>
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-14 font-bold text-xs bg-blue-100" rowSpan={2}>COREN</th>
-                                <th className="border border-black px-1 py-1 text-center w-14 font-bold text-xs bg-blue-100" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-1 py-1 text-center w-14 font-bold text-xs bg-blue-100 group relative" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-xs bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-xs bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-xs bg-[#1e3a5f] group relative" rowSpan={2}>
                                     {editingSectorTitleId === section.id ? (
-                                        <div className="flex items-center gap-1 w-full h-full">
+                                        <div className="flex items-center gap-1 w-full h-full text-black">
                                             <input 
                                                 value={tempSectorTitle}
                                                 onChange={(e) => setTempSectorTitle(e.target.value)}
@@ -2292,33 +2462,35 @@ export default function Schedule({
                                                 e.stopPropagation();
                                                 startEditingSectorTitle(section);
                                             }}
-                                            className={`w-full h-full flex items-center justify-center min-h-[20px] break-words leading-tight ${isAdmin ? "cursor-pointer hover:text-blue-600" : ""}`}
+                                            className={`w-full h-full flex items-center justify-center min-h-[20px] break-words leading-tight ${isAdmin ? "cursor-pointer hover:text-blue-200" : ""}`}
                                             title={isAdmin ? "Clique para editar" : ""}
                                         >
-                                            {section.sector_title || 'ENFERMARIAS/LEITOS'}
+                                            SETOR LABORAL
                                         </div>
                                     )}
                                 </th>
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 text-xs ${isWeekend ? 'bg-gray-400' : ''}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 text-[10px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
                                     {weekday}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center w-12 font-bold text-xs bg-blue-100">TOTAL</th>
+                                <th className="border border-black px-1 py-1 text-center w-12 font-bold text-xs bg-[#1e3a5f]">TOTAL</th>
                             </tr>
                             {/* Main Headers Row 2 */}
-                            <tr className="bg-blue-100 text-black">
+                            <tr className="bg-[#1e3a5f] text-white">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 text-xs ${isWeekend ? 'bg-gray-400' : ''}`}>
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 text-[10px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
                                       {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-1 py-1 text-center w-12 font-bold text-xs bg-blue-100">PLANTÃO</th>
+                                <th className="border border-black px-1 py-1 text-center w-12 font-bold text-xs bg-[#1e3a5f]">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
                             {renderGrid(
-                                (nursesBySection[section.id] || []).filter(n => !selectedUnitId || n.unit_id === selectedUnitId),
+                                (nursesBySection[section.id] || [])
+                                  .filter(n => !selectedUnitId || n.unit_id === selectedUnitId)
+                                  .filter(n => selectedRoleFilter === 'ALL' ? true : (n.role || '').toUpperCase() === selectedRoleFilter),
                                 section
                             )}
                         </tbody>
@@ -2565,26 +2737,7 @@ export default function Schedule({
 
       </div>
 
-      {/* Signatures Footer */}
-      <div className="mt-16 mb-0 grid grid-cols-4 gap-1 text-center break-inside-avoid print:mt-16 bg-white print:bg-white">
-        <div className="flex flex-col items-center">
-            <div className="w-[80%] border-t border-black mb-1"></div>
-            <p className="font-bold text-[9px] text-black uppercase">Coordenação de Setor</p>
-        </div>
-        <div className="flex flex-col items-center">
-            <div className="w-[80%] border-t border-black mb-1"></div>
-            <p className="font-bold text-[9px] text-black uppercase">Coordenação Geral de Enfermagem</p>
-        </div>
-        <div className="flex flex-col items-center">
-            <div className="w-[80%] border-t border-black mb-1"></div>
-            <p className="font-bold text-[9px] text-black uppercase">Coordenação do RH/HMA</p>
-        </div>
-        <div className="flex flex-col items-center">
-            <div className="w-[80%] border-t border-black mb-1"></div>
-            <p className="font-bold text-[9px] text-black uppercase">Direção Geral do HMA</p>
-        </div>
-      </div>
-      
+     
       <div className="hidden print:block h-0 w-full mb-0 pb-0"></div>
       
       {/* Unit Creation Modal */}
@@ -2598,6 +2751,12 @@ export default function Schedule({
                     className="w-full border p-2 mb-4 rounded text-black"
                     placeholder="Nome do setor (ex: POSTO 3)"
                     autoFocus
+                />
+                <input 
+                    value={newUnitNumber}
+                    onChange={e => setNewUnitNumber(e.target.value)}
+                    className="w-full border p-2 mb-4 rounded text-black"
+                    placeholder="Número do setor (ex: 12)"
                 />
                 <div className="flex justify-end gap-2">
                     <button 
@@ -2942,6 +3101,15 @@ export default function Schedule({
                 </p>
 
                 <div className="flex flex-col gap-2">
+                    <button 
+                        onClick={handleExecuteReplicationAllBelow}
+                        className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-black w-full text-left flex justify-between"
+                    >
+                        <span>Repetir em todos os campos abaixo</span>
+                        <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">
+                            {replicationData.targets.filter(t => t.index >= replicationData.startIndex).length} prof.
+                        </span>
+                    </button>
                     {[1, 2, 3, 4, 5].map(num => (
                         <button 
                             key={num}

@@ -3,9 +3,22 @@ import Schedule from '@/components/Schedule'
 
 export const dynamic = 'force-dynamic'
 
-export default function SchedulePage() {
+export default function SchedulePage({ searchParams }: { searchParams?: { tab?: string } }) {
   const session = cookies().get('session_user')
   const user = session ? JSON.parse(session.value) : null
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
-  return <Schedule isAdmin={isAdmin} />
+  const isCadastro = searchParams?.tab === 'cadastro'
+  return (
+    <div className="p-4 md:p-6">
+      {isCadastro && (
+        <div className="mb-4">
+          <h1 className="text-xl md:text-2xl font-bold text-indigo-700">Cadastro de escalas</h1>
+          <p className="text-sm text-gray-600">
+            Use a grade abaixo no modelo tipo Excel para cadastrar a escala mensal.
+          </p>
+        </div>
+      )}
+      <Schedule isAdmin={isAdmin} />
+    </div>
+  )
 }

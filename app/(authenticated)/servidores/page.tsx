@@ -17,7 +17,7 @@ export default async function ServidoresPage() {
   const [nurses, sections] = await Promise.all([getNurses(), getSections()])
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="w-full">
       <div className="mb-8 flex justify-between items-center">
         <div>
            <h1 className="text-2xl font-bold text-gray-800">Servidores</h1>

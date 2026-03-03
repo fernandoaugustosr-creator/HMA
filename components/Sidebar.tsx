@@ -94,7 +94,6 @@ export default function Sidebar({ user }: { user: any }) {
         <div className="flex items-center gap-2">
           <Image src="/logo-hma.png" alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
           <Image src="/logo-prefeitura.png" alt="Prefeitura Logo" width={32} height={32} className="h-8 w-auto object-contain" />
-          <h2 className="text-xl font-bold text-indigo-600">ENF-HMA</h2>
         </div>
         <button 
           onClick={() => setIsMobileMenuOpen(true)}
@@ -121,7 +120,6 @@ export default function Sidebar({ user }: { user: any }) {
               <div className="flex items-center gap-2">
                 <Image src="/logo-hma.png" alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
                 <Image src="/logo-prefeitura.png" alt="Prefeitura Logo" width={32} height={32} className="h-8 w-auto object-contain" />
-                <h2 className="text-xl font-bold text-indigo-600">ENF-HMA</h2>
               </div>
               <button 
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -197,6 +195,7 @@ export default function Sidebar({ user }: { user: any }) {
                         <span className="truncate">Gestão de Coordenações</span>
                       </Link>
                     )}
+                    {itemPath === '/escala' && isAdmin && null}
                   </div>
                 )
               })}
@@ -233,7 +232,7 @@ export default function Sidebar({ user }: { user: any }) {
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
             {!isCollapsed && (
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold text-green-600 truncate">ENF-HMA</h2>
+                <Image src="/logo-hma.png" alt="HMA Logo" width={120} height={40} className="h-10 w-auto object-contain" />
               </div>
             )}
             <button 
@@ -301,6 +300,7 @@ export default function Sidebar({ user }: { user: any }) {
                     </Link>
                   </>
                 )}
+                {itemPath === '/escala' && isAdmin && !isCollapsed && null}
               </div>
             )
           })}

@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase'
 import { readDb, writeDb, isLocalMode } from '@/lib/local-db'
 import { randomUUID } from 'crypto'
+import { cache } from 'react'
 
 // Types
 export interface Section {
@@ -211,6 +212,69 @@ export async function saveAbsenceSettings(viewRoles: string[], editRoles: string
   return { success: true }
 }
 
+export async function getUnitNumber(unitId: string) {
+  if (!unitId) return null
+  if (isLocalMode()) {
+    const db = readDb()
+    const map = (db.settings && db.settings.unit_numbers) || {}
+    return map[unitId] || null
+  }
+  const supabase = createClient()
+  const { data } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .eq('key', `unit_number_${unitId}`)
+    .maybeSingle()
+  return data?.value || null
+}
+
+export async function saveUnitNumber(unitId: string, numberText: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+  if (!unitId) return { success: false, message: 'Setor inválido.' }
+  const value = (numberText || '').trim()
+  if (isLocalMode()) {
+    const db = readDb()
+    db.settings = db.settings || {}
+    db.settings.unit_numbers = db.settings.unit_numbers || {}
+    db.settings.unit_numbers[unitId] = value
+    writeDb(db)
+    revalidatePath('/escala')
+    return { success: true }
+  }
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: `unit_number_${unitId}`, value }, { onConflict: 'key' })
+  if (error) return { success: false, message: 'Erro ao salvar número do setor: ' + error.message }
+  revalidatePath('/escala')
+  return { success: true }
+}
+
+export async function getAllUnitNumbers(): Promise<Record<string, string>> {
+  if (isLocalMode()) {
+    const db = readDb()
+    const map = (db.settings && db.settings.unit_numbers) || {}
+    return map
+  }
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .ilike('key', 'unit_number_%')
+  if (error) return {}
+  const result: Record<string, string> = {}
+  const rows = Array.isArray(data) ? data : []
+  rows.forEach((row: any) => {
+    const unitId = String(row.key).replace('unit_number_', '')
+    result[unitId] = row.value || ''
+  })
+  return result
+}
+
 export async function checkAdmin() {
   const session = cookies().get('session_user')
   if (!session) throw new Error('Unauthorized')
@@ -362,7 +426,7 @@ export async function toggleSameDaySwapSetting() {
   }
 }
 
-export async function getNurses() {
+export const getNurses = cache(async () => {
   if (isLocalMode()) {
     const db = readDb()
     return db.nurses.sort((a, b) => a.name.localeCompare(b.name))
@@ -375,7 +439,7 @@ export async function getNurses() {
     .range(0, 9999)
     .order('name')
   return data || []
-}
+})
 
 export async function getNursesBySection(sectionId: string) {
   if (isLocalMode()) {
@@ -408,6 +472,7 @@ export async function createNurse(prevState: any, formData: FormData) {
   const role = formData.get('role') as string || 'ENFERMEIRO'
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
+  const sector = formData.get('sector') as string // Manual sector name if provided
 
   // Validate Name (Essential)
   if (!name) {
@@ -441,6 +506,7 @@ export async function createNurse(prevState: any, formData: FormData) {
       role,
       section_id: finalSectionId,
       unit_id: unitId,
+      sector: sector || '', // Current sector
       created_at: new Date().toISOString()
     }
 
@@ -462,6 +528,7 @@ export async function createNurse(prevState: any, formData: FormData) {
             unit_id: unitId,
             month: currentMonth,
             year: currentYear,
+            sector: sector || '', // History for this month
             created_at: new Date().toISOString()
         })
     }
@@ -491,7 +558,8 @@ export async function createNurse(prevState: any, formData: FormData) {
     vinculo,
     role,
     section_id: finalSectionId || null,
-    unit_id: unitId || null
+    unit_id: unitId || null,
+    sector: sector || '' // Current sector
   }).select().single()
 
   if (error) {
@@ -517,7 +585,8 @@ export async function createNurse(prevState: any, formData: FormData) {
           section_id: finalSectionId,
           unit_id: unitId,
           month: currentMonth,
-          year: currentYear
+          year: currentYear,
+          sector: sector || '' // History for this month
       })
   }
 
@@ -525,7 +594,7 @@ export async function createNurse(prevState: any, formData: FormData) {
   return { success: true, message: 'Servidor cadastrado com sucesso!' }
 }
 
-export async function getSections() {
+export const getSections = cache(async () => {
   if (isLocalMode()) {
     const db = readDb()
     return db.schedule_sections || []
@@ -534,7 +603,7 @@ export async function getSections() {
   const supabase = createClient()
   const { data } = await supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true })
   return data || []
-}
+})
 
 export async function createSection(prevState: any, formData: FormData) {
   try {
@@ -2856,80 +2925,129 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
     return { success: false, message: 'Acesso negado.' }
   }
 
+  const computeInterval = (days: number[]) => {
+    if (!days || days.length < 2) return null
+    const diffs: number[] = []
+    for (let i = 1; i < days.length; i++) {
+      const diff = days[i] - days[i - 1]
+      if (diff <= 0) return null
+      diffs.push(diff)
+    }
+    const base = diffs[0]
+    for (let i = 1; i < diffs.length; i++) {
+      if (diffs[i] !== base) return null
+    }
+    return base
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000
+
   if (isLocalMode()) {
     const db = readDb()
     if (!db.monthly_rosters) db.monthly_rosters = []
 
     const sourceRoster = db.monthly_rosters.filter(r => r.month === sourceMonth && r.year === sourceYear && (!unitId || r.unit_id === unitId))
     
-    let addedCount = 0
-    sourceRoster.forEach(item => {
-        // Check if exists in target (Strict unit match)
-        const exists = db.monthly_rosters.some(r => r.nurse_id === item.nurse_id && r.month === targetMonth && r.year === targetYear && r.unit_id === item.unit_id)
-        if (!exists) {
-            db.monthly_rosters.push({
-                id: randomUUID(),
-                nurse_id: item.nurse_id,
-                section_id: item.section_id,
-                unit_id: item.unit_id,
-                month: targetMonth,
-                year: targetYear,
-                observation: item.observation || '',
-                sector: item.sector || '',
-                list_order: item.list_order ?? null,
-                created_at: item.created_at || new Date().toISOString()
-            })
-            addedCount++
+    // 1. Calculate projected shifts for all professionals first to determine order
+    const projections = sourceRoster.map(sr => {
+        // Project shifts based on 6-day cycle: D -> N -> 4 off
+        const nurseShifts = db.shifts.filter(s => s.nurse_id === sr.nurse_id)
+        let projectedShifts: { date: string, type: string, day: number }[] = []
+        let firstWorkDay = 999
+        let hasNightOnDay1 = false
+
+        if (nurseShifts.length > 0) {
+            const sourceLastDayFull = new Date(Date.UTC(sourceYear, sourceMonth, 0, 23, 59, 59)).getTime()
+            const sorted = nurseShifts
+              .map(s => {
+                const parts = String(s.shift_date).split('-')
+                const y = parseInt(parts[0], 10)
+                const m = parseInt(parts[1], 10)
+                const d = parseInt(parts[2], 10)
+                const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+                return { raw: s, date, time: date.getTime() }
+              })
+              .filter(x => !Number.isNaN(x.time) && x.time <= sourceLastDayFull)
+              .sort((a, b) => b.time - a.time)
+
+            if (sorted.length > 0) {
+                const anchor = sorted[0]
+                const anchorDate = anchor.date
+                const anchorType = anchor.raw.shift_type
+
+                const isNight = (type: string) => type === 'night' || type === 'dn'
+                const anchorPos = isNight(anchorType) ? 1 : 0 // 0=D, 1=N, 2,3,4,5=Off (6-day cycle)
+                const targetLastDay = new Date(targetYear, targetMonth, 0).getDate()
+
+                for (let d = 1; d <= targetLastDay; d++) {
+                  const targetDate = new Date(Date.UTC(targetYear, targetMonth - 1, d, 12, 0, 0))
+                  const diffDays = Math.round((targetDate.getTime() - anchorDate.getTime()) / dayMs)
+                  if (diffDays <= 0) continue
+
+                  const cyclePos = (anchorPos + diffDays) % 6
+                  const finalPos = cyclePos < 0 ? cyclePos + 6 : cyclePos
+
+                  if (finalPos === 0 || finalPos === 1) {
+                    const shiftType = (finalPos === 0) ? 'day' : 'night'
+                    projectedShifts.push({
+                      date: `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+                      type: shiftType,
+                      day: d
+                    })
+                    if (d < firstWorkDay) firstWorkDay = d
+                    if (d === 1 && finalPos === 1) hasNightOnDay1 = true
+                  }
+                }
+            }
+        }
+
+        // Sort Key: Night on Day 1 comes first (Key 0), then by first day of work
+        const sortKey = hasNightOnDay1 ? 0 : firstWorkDay
+
+        return {
+            source: sr,
+            projectedShifts,
+            sortKey
         }
     })
-    
-    const nurseIds = sourceRoster.map(r => r.nurse_id)
-    if (nurseIds.length > 0) {
-        const sourceStartDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-01`
-        const sourceLastDay = new Date(sourceYear, sourceMonth, 0).getDate()
-        const sourceEndDate = `${sourceYear}-${String(sourceMonth).padStart(2, '0')}-${sourceLastDay}`
-        
-        const sourceShifts = db.shifts.filter(s => 
-            nurseIds.includes(s.nurse_id) && 
-            s.shift_date >= sourceStartDate && 
-            s.shift_date <= sourceEndDate
-        )
 
-        if (sourceShifts.length > 0) {
-            const targetLastDay = new Date(targetYear, targetMonth, 0).getDate()
-            const targetStartDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`
-            const targetEndDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetLastDay).padStart(2, '0')}`
+    // 2. Sort by projected pattern (staircase)
+    projections.sort((a, b) => a.sortKey - b.sortKey)
 
-            // Limpar quaisquer plantões existentes desses profissionais no mês de destino
-            // REMOVED FOR SAFE APPEND (Local Mode) - Prevent data loss in other units
-            // db.shifts = db.shifts.filter(s => 
-            //    !(
-            //        nurseIds.includes(s.nurse_id) &&
-            //        s.shift_date >= targetStartDate &&
-            //        s.shift_date <= targetEndDate
-            //    )
-            // )
-
-            sourceShifts.forEach(shift => {
-                const day = parseInt(shift.shift_date.split('-')[2], 10)
-                if (day > targetLastDay) return
-
-                const newDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-
-                db.shifts.push({
-                    id: randomUUID(),
-                    nurse_id: shift.nurse_id,
-                    shift_date: newDate,
-                    shift_type: shift.shift_type,
-                    updated_at: new Date().toISOString()
-                })
-            })
+    // 3. Create target rosters and shifts in new order
+    let addedCount = 0
+    projections.forEach((p, idx) => {
+        const sr = p.source
+        const targetRoster = {
+            id: randomUUID(),
+            nurse_id: sr.nurse_id,
+            section_id: sr.section_id,
+            unit_id: sr.unit_id,
+            month: targetMonth,
+            year: targetYear,
+            observation: sr.observation || '',
+            sector: sr.sector || '',
+            list_order: idx + 1, // New sequential order based on staircase
+            created_at: new Date().toISOString()
         }
-    }
+        db.monthly_rosters.push(targetRoster)
+        addedCount++
 
+        p.projectedShifts.forEach(ps => {
+            db.shifts.push({
+                id: randomUUID(),
+                nurse_id: sr.nurse_id,
+                shift_date: ps.date,
+                shift_type: ps.type,
+                updated_at: new Date().toISOString(),
+                roster_id: targetRoster.id
+            })
+        })
+    })
+    
     writeDb(db)
     revalidatePath('/')
-    return { success: true, message: `${addedCount} servidores copiados (incluindo plantões).` }
+    return { success: true, message: `${addedCount} servidores copiados seguindo o padrão visual.` }
   }
 
   const supabase = createClient()
@@ -2958,7 +3076,6 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
       
   if (shiftsError) return { success: false, message: shiftsError.message }
 
-  // Group shifts by roster_id (preferred) and nurse_id (legacy fallback)
   const shiftsByRosterId: Record<string, any[]> = {}
   const shiftsByNurseIdLegacy: Record<string, any[]> = {}
 
@@ -2974,41 +3091,85 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
       })
   }
 
-  // 1. (REMOVED) Limpar o mês de destino - Agora usamos "Safe Append" (Inserir apenas se não existir)
-  // Isso evita deletar dados de outras unidades ou da mesma unidade se já existir.
-
-  // 2. Ordenar a lista de origem para preservar a ordem visual
-  const sortedSourceRoster = [...sourceRoster].sort((a, b) => {
-      // Prioridade: list_order
-      if (a.list_order !== null && b.list_order !== null) {
-          return a.list_order - b.list_order
-      }
-      if (a.list_order !== null) return -1
-      if (b.list_order !== null) return 1
-      
-      // Fallback: created_at
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  })
-
+  // 2. Pre-calculate projections to determine order (staircase pattern)
   const targetLastDay = new Date(targetYear, targetMonth, 0).getDate()
-  let addedCount = 0
-
-  // 3. Processar sequencialmente para garantir ordem
   const processedLegacyNurses = new Set<string>()
+  const projections = []
 
-  for (const sourceEntry of sortedSourceRoster) {
-      // Check if exists in target (Strict unit match)
-      const { data: existing } = await supabase.from('monthly_rosters')
-          .select('id')
-          .eq('nurse_id', sourceEntry.nurse_id)
-          .eq('month', targetMonth)
-          .eq('year', targetYear)
-          .eq('unit_id', sourceEntry.unit_id)
-          .maybeSingle()
+  for (const sourceEntry of sourceRoster) {
+      let myShifts = shiftsByRosterId[sourceEntry.id] || []
+      if (!processedLegacyNurses.has(sourceEntry.nurse_id) && shiftsByNurseIdLegacy[sourceEntry.nurse_id]) {
+          myShifts = [...myShifts, ...shiftsByNurseIdLegacy[sourceEntry.nurse_id]]
+          processedLegacyNurses.add(sourceEntry.nurse_id)
+      }
 
-      if (existing) continue
+      let firstWorkDay = 999
+      let hasNightOnDay1 = false
+      const shiftsToInsert = []
 
-      // Create target roster entry
+      if (myShifts.length > 0) {
+          const sourceLastDayFull = new Date(Date.UTC(sourceYear, sourceMonth, 0, 23, 59, 59)).getTime()
+          const sorted = myShifts
+            .map(s => {
+              const parts = String(s.date).split('-')
+              const y = parseInt(parts[0], 10)
+              const m = parseInt(parts[1], 10)
+              const d = parseInt(parts[2], 10)
+              const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+              return { raw: s, date, time: date.getTime() }
+            })
+            .filter(x => !Number.isNaN(x.time) && x.time <= sourceLastDayFull)
+            .sort((a, b) => b.time - a.time)
+
+          if (sorted.length > 0) {
+            const anchor = sorted[0]
+            const anchorDate = anchor.date
+            const anchorType = anchor.raw.type
+
+            const isNight = (type: string) => type === 'night' || type === 'dn'
+            const anchorPos = isNight(anchorType) ? 1 : 0 // 6-day cycle: 0=D, 1=N, 2,3,4,5=Off
+
+            for (let d = 1; d <= targetLastDay; d++) {
+              const targetDate = new Date(Date.UTC(targetYear, targetMonth - 1, d, 12, 0, 0))
+              const diffDays = Math.round((targetDate.getTime() - anchorDate.getTime()) / dayMs)
+              if (diffDays <= 0) continue
+
+              const cyclePos = (anchorPos + diffDays) % 6
+              const finalPos = cyclePos < 0 ? cyclePos + 6 : cyclePos
+
+              if (finalPos === 0 || finalPos === 1) {
+                const shiftType = (finalPos === 0) ? 'day' : 'night'
+                const dateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                
+                shiftsToInsert.push({
+                  nurse_id: sourceEntry.nurse_id,
+                  date: dateStr,
+                  type: shiftType
+                })
+                if (d < firstWorkDay) firstWorkDay = d
+                if (d === 1 && finalPos === 1) hasNightOnDay1 = true
+              }
+            }
+          }
+      }
+
+      const sortKey = hasNightOnDay1 ? 0 : firstWorkDay
+      projections.push({
+          source: sourceEntry,
+          shiftsToInsert,
+          sortKey
+      })
+  }
+
+  // 3. Sort projections by staircase pattern
+  projections.sort((a, b) => a.sortKey - b.sortKey)
+
+  // 4. Insert sequentially to preserve order
+  let addedCount = 0
+  for (let i = 0; i < projections.length; i++) {
+      const p = projections[i]
+      const sourceEntry = p.source
+      
       const targetEntry = {
           nurse_id: sourceEntry.nurse_id,
           section_id: sourceEntry.section_id,
@@ -3017,55 +3178,59 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
           year: targetYear,
           observation: sourceEntry.observation || null,
           sector: sourceEntry.sector || null,
-          list_order: sourceEntry.list_order ?? null,
+          list_order: i + 1, // New sequential order
           created_at: new Date().toISOString()
       }
 
-      // Insert and get ID
       const { data: insertedRoster, error: insertError } = await supabase
           .from('monthly_rosters')
           .insert(targetEntry)
           .select()
           .single()
       
-      if (insertError) {
-          console.error('Error inserting roster:', insertError)
-          continue
-      }
-      
+      if (insertError) continue
       addedCount++
 
-      // Find associated shifts
-      let myShifts = shiftsByRosterId[sourceEntry.id] || []
-      
-      // Legacy handling: Attach legacy shifts to the FIRST occurrence of this nurse
-      if (!processedLegacyNurses.has(sourceEntry.nurse_id) && shiftsByNurseIdLegacy[sourceEntry.nurse_id]) {
-          myShifts = [...myShifts, ...shiftsByNurseIdLegacy[sourceEntry.nurse_id]]
-          processedLegacyNurses.add(sourceEntry.nurse_id)
-      }
-
-      if (myShifts.length > 0) {
-          const shiftsToInsert = myShifts.map(s => {
-              const day = parseInt((s.date as string).split('-')[2], 10)
-              if (day > targetLastDay) return null
-
-              const newDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-              return {
-                  nurse_id: s.nurse_id,
-                  date: newDate,
-                  type: s.type,
-                  roster_id: insertedRoster.id
-              }
-          }).filter(Boolean)
-
-          if (shiftsToInsert.length > 0) {
-              await supabase.from('shifts').insert(shiftsToInsert)
-          }
+      if (p.shiftsToInsert.length > 0) {
+          const finalShifts = p.shiftsToInsert.map(s => ({
+              ...s,
+              roster_id: insertedRoster.id
+          }))
+          await supabase.from('shifts').insert(finalShifts)
       }
   }
   
   revalidatePath('/')
   return { success: true, message: `${addedCount} servidores copiados com sucesso.` }
+}
+
+export async function getNurseSectorHistory(nurseId: string) {
+  if (isLocalMode()) {
+    const db = readDb()
+    return db.monthly_rosters
+      .filter(r => r.nurse_id === nurseId && r.sector)
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year
+        return b.month - a.month
+      })
+      .map(r => ({
+        month: r.month,
+        year: r.year,
+        sector: r.sector
+      }))
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('monthly_rosters')
+    .select('month, year, sector')
+    .eq('nurse_id', nurseId)
+    .not('sector', 'is', null)
+    .order('year', { ascending: false })
+    .order('month', { ascending: false })
+
+  if (error) return []
+  return data || []
 }
 
 export async function updateRosterObservation(rosterId: string, observation: string) {
@@ -3108,6 +3273,20 @@ export async function updateRosterSector(rosterId: string, sector: string) {
       const roster = db.monthly_rosters.find(r => r.id === rosterId)
       if (roster) {
         roster.sector = sector
+        
+        // Also update the nurse's current sector if this is the most recent roster
+        const nurse = db.nurses.find(n => n.id === roster.nurse_id)
+        if (nurse) {
+          // Check if this roster is for the current month or future
+          const now = new Date()
+          const currentMonth = now.getMonth() + 1
+          const currentYear = now.getFullYear()
+          
+          if (roster.year > currentYear || (roster.year === currentYear && roster.month >= currentMonth)) {
+            nurse.sector = sector
+          }
+        }
+
         writeDb(db)
         revalidatePath('/')
         return { success: true }
@@ -3116,12 +3295,35 @@ export async function updateRosterSector(rosterId: string, sector: string) {
     }
 
     const supabase = createClient()
+    
+    // 1. Get roster info to know the nurse and date
+    const { data: rosterData } = await supabase
+      .from('monthly_rosters')
+      .select('nurse_id, month, year')
+      .eq('id', rosterId)
+      .single()
+
     const { error } = await supabase
       .from('monthly_rosters')
       .update({ sector })
       .eq('id', rosterId)
 
     if (error) throw error
+
+    // 2. Update nurse's current sector if it's the latest roster
+    if (rosterData) {
+      const now = new Date()
+      const currentMonth = now.getMonth() + 1
+      const currentYear = now.getFullYear()
+
+      if (rosterData.year > currentYear || (rosterData.year === currentYear && rosterData.month >= currentMonth)) {
+        await supabase
+          .from('nurses')
+          .update({ sector })
+          .eq('id', rosterData.nurse_id)
+      }
+    }
+
     revalidatePath('/')
     return { success: true }
   } catch (e) {
@@ -3681,6 +3883,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const role = formData.get('role') as string
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
+  const sector = formData.get('sector') as string
   const password = formData.get('password') as string
   const useDefaultPassword = formData.get('useDefaultPassword') === 'on'
 
@@ -3727,6 +3930,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     nurse.coren = coren
     nurse.vinculo = vinculo
     nurse.role = role
+    nurse.sector = sector || nurse.sector
     
     // Only update location if provided (optional) or corrected
     if (finalSectionId) nurse.section_id = finalSectionId
@@ -3738,11 +3942,22 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
       nurse.password = password
     }
 
-    // Update Roster Entries if section changed
-    if (finalSectionId) {
+    // Update Roster Entries if section changed OR sector changed (current/future only)
+    if (finalSectionId || sector !== undefined) {
         if (db.monthly_rosters) {
+            const now = new Date()
+            const currentMonth = now.getMonth() + 1
+            const currentYear = now.getFullYear()
+
             db.monthly_rosters.forEach(r => {
-                if (r.nurse_id === id) r.section_id = finalSectionId
+                if (r.nurse_id === id) {
+                    if (finalSectionId) r.section_id = finalSectionId
+                    
+                    // Only update sector history for current/future months
+                    if (sector !== undefined && (r.year > currentYear || (r.year === currentYear && r.month >= currentMonth))) {
+                        r.sector = sector
+                    }
+                }
             })
         }
     }
@@ -3790,6 +4005,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   if (cpf) updateData.cpf = cpf
   if (finalSectionId) updateData.section_id = finalSectionId
   if (unitId) updateData.unit_id = unitId
+  if (sector) updateData.sector = sector
 
   if (useDefaultPassword) {
     updateData.password = '123456'
@@ -3804,9 +4020,27 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     return { success: false, message: 'Erro ao atualizar: ' + error.message }
   }
   
-  // Update Roster Entries if section changed
-  if (finalSectionId) {
-      await supabase.from('monthly_rosters').update({ section_id: finalSectionId }).eq('nurse_id', id)
+  // Update Roster Entries if section changed OR sector changed
+  if (finalSectionId || sector) {
+      const rosterUpdates: any = {}
+      if (finalSectionId) rosterUpdates.section_id = finalSectionId
+      
+      if (sector) {
+          // Update sector only for current and future rosters
+          const now = new Date()
+          const currentMonth = now.getMonth() + 1
+          const currentYear = now.getFullYear()
+
+          // Note: This is a bit tricky with Supabase in a single call without complex queries.
+          // We'll update all rosters for this nurse that are >= current date.
+          await supabase
+            .from('monthly_rosters')
+            .update({ sector, ...(finalSectionId ? { section_id: finalSectionId } : {}) })
+            .eq('nurse_id', id)
+            .or(`year.gt.${currentYear},and(year.eq.${currentYear},month.gte.${currentMonth})`)
+      } else if (finalSectionId) {
+          await supabase.from('monthly_rosters').update({ section_id: finalSectionId }).eq('nurse_id', id)
+      }
   }
   
   revalidatePath('/')

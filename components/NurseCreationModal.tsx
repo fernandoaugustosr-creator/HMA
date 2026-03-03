@@ -198,23 +198,35 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                 >
                     <option value="ENFERMEIRO">Enfermeiro(a)</option>
                     <option value="TECNICO">Técnico de Enfermagem</option>
+                    <option value="MEDICO">Médico(a)</option>
                     <option value="COORDENADOR">Coordenador(a)</option>
                 </select>
             </div>
             <div>
-                <label className="block text-sm font-medium text-gray-700">Setor (Opcional)</label>
+                <label className="block text-sm font-medium text-gray-700">Setor Laboral (Histórico)</label>
+                <input 
+                    type="text"
+                    name="sector"
+                    defaultValue={nurseToEdit?.sector || ''}
+                    placeholder="Ex: UTI, PEDIATRIA..."
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                />
+            </div>
+          </div>
+
+          <div>
+                <label className="block text-sm font-medium text-gray-700">Grupo da Escala (Localização)</label>
                 <select 
                     name="sectionId" 
                     defaultValue={nurseToEdit?.section_id || defaultSectionId || ''}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 >
-                    <option value="">Selecione...</option>
+                    <option value="">Selecione o grupo...</option>
                     {sections.map((section) => (
                       <option key={section.id} value={section.id}>{section.title}</option>
                     ))}
                 </select>
             </div>
-          </div>
 
           <div>
              <label className="block text-sm font-medium text-gray-700">CPF</label>

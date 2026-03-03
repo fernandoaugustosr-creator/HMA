@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { getReleasedSchedules } from '@/app/actions'
 import Schedule from '@/components/Schedule'
 import { FileText, ArrowLeft, Download, Calendar, Printer } from 'lucide-react'
+import Image from 'next/image'
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -109,7 +110,7 @@ export default function DownloadsPage() {
         printTimeoutRef.current = null
         // Release lock after print dialog opens (or a bit later)
         setTimeout(() => setIsPrinting(false), 1000)
-    }, 500)
+    }, 1200)
   }, [])
 
   const handlePrint = (release: any) => {
@@ -177,11 +178,20 @@ export default function DownloadsPage() {
             <div className="space-y-8">
                 {/* Display Header for Selected Month */}
                 {selectedMonthYear && (
-                    <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 border-b pb-2">
-                        <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-sm uppercase tracking-wide">
-                            {MONTHS[currentMonth - 1]} {currentYear}
-                        </span>
-                    </h2>
+                  <h2 className="text-xl font-bold text-gray-800 flex items-center gap-3 border-b pb-2">
+                    <Image
+                      src="/logo-hma.png"
+                      alt="HMA"
+                      width={120}
+                      height={40}
+                      className="h-8 w-auto object-contain"
+                      priority
+                      unoptimized
+                    />
+                    <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-sm uppercase tracking-wide">
+                      {MONTHS[currentMonth - 1]} {currentYear}
+                    </span>
+                  </h2>
                 )}
 
                 <div className="space-y-4">
@@ -206,15 +216,36 @@ export default function DownloadsPage() {
                             type="button"
                             onClick={() => handlePrint(release)}
                             disabled={isPrinting}
-                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-white text-xs font-semibold transition-colors ${isPrinting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-                            title="Visualizar impressão desta escala"
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors ${
+                              isPrinting
+                                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                            }`}
+                            title="Visualizar escala (impressão)"
+                          >
+                            {isPrinting && selectedRelease?.id === release.id ? (
+                                <span className="animate-spin h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                            ) : (
+                                <Printer size={14} />
+                            )}
+                            <span>{isPrinting && selectedRelease?.id === release.id ? 'Gerando...' : 'Visualizar'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handlePrint(release)}
+                            disabled={isPrinting}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-white text-xs font-semibold transition-colors ${
+                              isPrinting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                            }`}
+                            title="Baixar escala em PDF (via impressão do navegador)"
                           >
                             {isPrinting && selectedRelease?.id === release.id ? (
                                 <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></span>
                             ) : (
-                                <Printer size={14} />
+                                <Download size={14} />
                             )}
-                            <span>{isPrinting && selectedRelease?.id === release.id ? 'Gerando...' : 'Visualizar impressão'}</span>
+                            <span>{isPrinting && selectedRelease?.id === release.id ? 'Gerando...' : 'Baixar'}</span>
                           </button>
                         </div>
                       </div>
@@ -278,7 +309,7 @@ export default function DownloadsPage() {
             display: flex;
             justify-content: center;
             align-items: flex-start;
-            transform: scale(0.92); /* Scale down to ensure fit */
+            transform: scale(1); /* Use full width for better aproveitamento na impressão */
             transform-origin: top center;
           }
         }

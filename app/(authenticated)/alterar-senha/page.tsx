@@ -14,7 +14,7 @@ export default function AlterarSenhaPage() {
   const [state, formAction] = useFormState(changePassword, initialState)
 
   return (
-    <div className="max-w-md mx-auto mt-10">
+    <div className="w-full max-w-md mx-auto mt-10 p-4">
       <div className="bg-white p-8 rounded-lg shadow-md border border-red-200">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold text-red-600">Alteração de Senha Obrigatória</h2>

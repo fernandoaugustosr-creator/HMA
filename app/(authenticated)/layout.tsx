@@ -18,7 +18,7 @@ export default function AuthenticatedLayout({
   const user = JSON.parse(sessionCookie.value)
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-gray-100">
+    <div className="flex flex-col md:flex-row min-h-screen bg-white">
       <div className="no-print">
         <Sidebar user={user} />
       </div>

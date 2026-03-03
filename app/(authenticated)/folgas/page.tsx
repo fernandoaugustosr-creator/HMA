@@ -16,7 +16,7 @@ export default async function FolgasPage() {
   ])
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="w-full p-4 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-800">Gestão de Folgas</h1>
         <p className="text-gray-600">Solicite e acompanhe suas folgas.</p>

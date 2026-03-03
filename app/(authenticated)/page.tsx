@@ -11,16 +11,18 @@ export default async function DashboardPage({
 }: {
   searchParams?: { month?: string; year?: string }
 }) {
-  const data = await getUserDashboardData()
-  const recentAbsences = await getRecentAbsences()
-  const absenceSettings = await getAbsenceSettings()
+  const [data, recentAbsences, absenceSettings, swaps] = await Promise.all([
+    getUserDashboardData(),
+    getRecentAbsences(),
+    getAbsenceSettings(),
+    getSwapRequests()
+  ])
 
   if (!data) {
     redirect('/login')
   }
 
   const { shifts, timeOffs, user } = data
-  const swaps = await getSwapRequests()
 
   const now = new Date()
   const rawMonth = searchParams?.month ? parseInt(searchParams.month, 10) : NaN
@@ -132,7 +134,7 @@ export default async function DashboardPage({
   const yearOptions = Array.from({ length: 5 }, (_, index) => currentYearValue - 2 + index)
 
   return (
-    <div className="container mx-auto p-4 space-y-6">
+    <div className="w-full p-4 space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
         <h1 className="text-2xl font-bold text-gray-800">Bem-vindo(a), {user.name}</h1>
         <p className="text-gray-600">{user.role}</p>
@@ -245,7 +247,7 @@ export default async function DashboardPage({
                   {filteredCoordinatorSwaps.length}
                 </span>
               </div>
-              <div className="max-h-80 overflow-auto">
+              <div className="overflow-x-auto">
                 {filteredCoordinatorSwaps.length === 0 ? (
                   <p className="text-sm text-gray-500">Nenhuma troca registrada neste período.</p>
                 ) : (
@@ -296,7 +298,7 @@ export default async function DashboardPage({
                   {filteredCoordinatorTimeOffs.length}
                 </span>
               </div>
-              <div className="max-h-80 overflow-auto">
+              <div className="overflow-x-auto">
                 {filteredCoordinatorTimeOffs.length === 0 ? (
                   <p className="text-sm text-gray-500">Nenhuma folga registrada neste período.</p>
                 ) : (
@@ -344,7 +346,7 @@ export default async function DashboardPage({
                   {filteredCoordinatorAbsences.length}
                 </span>
               </div>
-              <div className="max-h-80 overflow-auto">
+              <div className="overflow-x-auto">
                 {filteredCoordinatorAbsences.length === 0 ? (
                   <p className="text-sm text-gray-500">Nenhuma falta registrada neste período.</p>
                 ) : (
@@ -362,11 +364,9 @@ export default async function DashboardPage({
                           <td className="px-2 py-1 text-gray-900">
                             {item.nurse_name || findNurseName(item.nurse_id)}
                           </td>
-                          <td className="px-2 py-1 text-gray-700">
-                            {item.date
-                              ? new Date(item.date).toLocaleDateString('pt-BR')
-                              : '—'}
-                          </td>
+          <td className="px-2 py-1 text-gray-700">
+            {item.date ? formatDate(item.date) : '—'}
+          </td>
                           <td
                             className="px-2 py-1 text-gray-500 truncate max-w-xs"
                             title={item.reason || ''}
@@ -388,7 +388,7 @@ export default async function DashboardPage({
                   {filteredCoordinatorPayments.length}
                 </span>
               </div>
-              <div className="max-h-80 overflow-auto">
+              <div className="overflow-x-auto">
                 {filteredCoordinatorPayments.length === 0 ? (
                   <p className="text-sm text-gray-500">
                     Nenhum pagamento solicitado neste período.
@@ -438,7 +438,7 @@ export default async function DashboardPage({
                   {filteredCoordinatorGeneralRequests.length}
                 </span>
               </div>
-              <div className="max-h-80 overflow-auto">
+              <div className="overflow-x-auto">
                 {filteredCoordinatorGeneralRequests.length === 0 ? (
                   <p className="text-sm text-gray-500">
                     Nenhuma outra solicitação registrada neste período.

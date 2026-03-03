@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { randomUUID } from 'crypto'
 import { checkAdmin } from '@/app/actions'
 
-export async function addUnit(title: string) {
+export async function addUnit(title: string, unitNumber?: string) {
   try {
     await checkAdmin()
   } catch (e) {
@@ -16,20 +16,32 @@ export async function addUnit(title: string) {
   if (isLocalMode()) {
     const db = readDb()
     db.units = db.units || []
+    const newId = randomUUID()
     db.units.push({
-      id: randomUUID(),
+      id: newId,
       title
     })
+    if (unitNumber !== undefined) {
+      db.settings = db.settings || {}
+      db.settings.unit_numbers = db.settings.unit_numbers || {}
+      db.settings.unit_numbers[newId] = (unitNumber || '').trim()
+    }
     writeDb(db)
     revalidatePath('/')
-    return { success: true }
+    return { success: true, id: newId }
   }
 
   const supabase = createClient()
-  const { error } = await supabase.from('units').insert({ title })
+  const { data, error } = await supabase.from('units').insert({ title }).select('id').single()
   if (error) return { success: false, message: error.message }
+  const newId = data?.id
+  if (newId && unitNumber !== undefined) {
+    await supabase
+      .from('app_settings')
+      .upsert({ key: `unit_number_${newId}`, value: (unitNumber || '').trim() }, { onConflict: 'key' })
+  }
   revalidatePath('/')
-  return { success: true }
+  return { success: true, id: newId }
 }
 
 export async function updateUnit(id: string, title: string) {
