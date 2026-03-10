@@ -95,6 +95,10 @@ export async function deleteUnit(id: string) {
              db.monthly_schedule_metadata = db.monthly_schedule_metadata.filter((m: any) => m.unit_id !== id)
         }
 
+        if (db.time_offs) {
+             db.time_offs = db.time_offs.filter((t: any) => t.unit_id !== id)
+        }
+
         db.units = db.units.filter(u => u.id !== id)
         // Reset nurses unit_id?
         db.nurses.forEach(n => {
@@ -116,10 +120,17 @@ export async function deleteUnit(id: string) {
          await supabase.from('monthly_rosters').delete().in('id', rosterIds)
     }
     
+    await supabase.from('time_offs').delete().eq('unit_id', id)
     await supabase.from('monthly_schedule_metadata').delete().eq('unit_id', id)
 
+    // Reset nurses unit_id before deleting the unit to avoid FK constraints
+    await supabase.from('nurses').update({ unit_id: null }).eq('unit_id', id)
+
     const { error } = await supabase.from('units').delete().eq('id', id)
-    if (error) return { success: false, message: error.message }
+    if (error) {
+        console.error('Error deleting unit:', error)
+        return { success: false, message: error.message }
+    }
     revalidatePath('/')
     return { success: true }
 }

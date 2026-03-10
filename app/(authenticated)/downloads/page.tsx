@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { getReleasedSchedules } from '@/app/actions'
 import Schedule from '@/components/Schedule'
-import { FileText, ArrowLeft, Download, Calendar, Printer } from 'lucide-react'
+import { FileText, ArrowLeft, Download, Calendar } from 'lucide-react'
 import Image from 'next/image'
 
 const MONTHS = [
@@ -212,25 +212,6 @@ export default function DownloadsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 relative z-10">
-                          <button
-                            type="button"
-                            onClick={() => handlePrint(release)}
-                            disabled={isPrinting}
-                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors ${
-                              isPrinting
-                                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                                : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
-                            }`}
-                            title="Visualizar escala (impressão)"
-                          >
-                            {isPrinting && selectedRelease?.id === release.id ? (
-                                <span className="animate-spin h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full"></span>
-                            ) : (
-                                <Printer size={14} />
-                            )}
-                            <span>{isPrinting && selectedRelease?.id === release.id ? 'Gerando...' : 'Visualizar'}</span>
-                          </button>
-
                           <button
                             type="button"
                             onClick={() => handlePrint(release)}

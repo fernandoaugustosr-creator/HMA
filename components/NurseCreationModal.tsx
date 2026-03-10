@@ -18,6 +18,25 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [useDefaultPassword, setUseDefaultPassword] = useState(false)
+  const [phone, setPhone] = useState(nurseToEdit?.phone || '')
+  const [showSqlModal, setShowSqlModal] = useState(false)
+
+  useEffect(() => {
+    if (nurseToEdit?.phone) setPhone(nurseToEdit.phone)
+  }, [nurseToEdit])
+
+  const formatPhone = (val: string) => {
+    const digits = val.replace(/\D/g, '')
+    if (digits.length <= 2) return digits ? `(${digits}` : ''
+    if (digits.length <= 6) return `(${digits.slice(0, 2)})${digits.slice(2)}`
+    if (digits.length <= 10) return `(${digits.slice(0, 2)})${digits.slice(2, 6)}-${digits.slice(6)}`
+    return `(${digits.slice(0, 2)})${digits.slice(2, 7)}-${digits.slice(7, 11)}`
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhone(e.target.value)
+    setPhone(formatted)
+  }
 
   if (!isOpen) return null
 
@@ -102,11 +121,55 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
       onClose()
     } else {
       setError(result.message || 'Erro ao salvar servidor')
+      if (result.message?.includes('V15')) {
+          setShowSqlModal(true)
+      }
     }
     setLoading(false)
   }
 
   return (
+    <>
+    {showSqlModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+            <div className="bg-white p-6 rounded shadow-lg w-full max-w-2xl">
+                <h3 className="font-bold text-lg mb-4 text-red-600">Atenção: Atualização de Banco de Dados Necessária</h3>
+                <p className="text-sm text-gray-700 mb-4">
+                    Para permitir o cadastro de CRM e Telefone, é necessário adicionar novas colunas à tabela de profissionais no banco de dados.
+                    Como esta é uma operação de segurança, você precisa rodar manualmente no Supabase.
+                </p>
+                
+                <div className="bg-gray-100 p-4 rounded mb-4 overflow-auto max-h-60">
+                    <pre className="text-xs text-black whitespace-pre-wrap font-mono">
+{`-- Execute este código no SQL Editor do Supabase (V15):
+-- Este script adiciona as colunas crm e phone na tabela nurses.
+
+ALTER TABLE nurses 
+ADD COLUMN IF NOT EXISTS crm TEXT DEFAULT '',
+ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
+`}
+                    </pre>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                    <a 
+                        href="https://supabase.com/dashboard/project/umvjzgurzkldqyxzkkaq/sql/new"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold flex items-center"
+                    >
+                        1. Abrir Supabase SQL
+                    </a>
+                    <button 
+                        onClick={() => setShowSqlModal(false)}
+                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                    >
+                        2. Já executei, fechar
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
         <h2 className="text-xl font-bold mb-4 text-black">
@@ -138,6 +201,31 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
                   type="text" 
                   name="coren" 
                   defaultValue={nurseToEdit?.coren}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-gray-700">CRM</label>
+                <input 
+                  type="text" 
+                  name="crm" 
+                  defaultValue={nurseToEdit?.crm}
+                  placeholder="Apenas para Médicos"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700">Telefone</label>
+                <input 
+                  type="text" 
+                  name="phone" 
+                  value={phone}
+                  onChange={handlePhoneChange}
+                  placeholder="(00)00000-0000"
+                  maxLength={14}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 />
             </div>
@@ -215,20 +303,6 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
           </div>
 
           <div>
-                <label className="block text-sm font-medium text-gray-700">Grupo da Escala (Localização)</label>
-                <select 
-                    name="sectionId" 
-                    defaultValue={nurseToEdit?.section_id || defaultSectionId || ''}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
-                >
-                    <option value="">Selecione o grupo...</option>
-                    {sections.map((section) => (
-                      <option key={section.id} value={section.id}>{section.title}</option>
-                    ))}
-                </select>
-            </div>
-
-          <div>
              <label className="block text-sm font-medium text-gray-700">CPF</label>
              <input 
                type="text" 
@@ -283,5 +357,6 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
         </form>
       </div>
     </div>
+    </>
   )
 }

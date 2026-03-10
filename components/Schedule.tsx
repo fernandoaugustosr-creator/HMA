@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
@@ -13,6 +13,9 @@ interface Nurse {
   id: string
   name: string
   coren: string
+  crm?: string
+  phone?: string
+  cpf?: string
   role: string
   vinculo: string
   section_id?: string
@@ -292,6 +295,10 @@ export default function Schedule({
   const [copyTargetMonth, setCopyTargetMonth] = useState(selectedMonth)
   const [copyTargetYear, setCopyTargetYear] = useState(selectedYear)
 
+  // Dynamic Column Field State
+  const [dynamicField, setDynamicField] = useState<'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('coren')
+  const [isSetorHidden, setIsSetorHidden] = useState(false)
+
   // Replication State
   const [replicationModalOpen, setReplicationModalOpen] = useState(false)
   const [replicationData, setReplicationData] = useState<{
@@ -302,6 +309,7 @@ export default function Schedule({
 
   // SQL Instruction Modal
   const [showSqlModal, setShowSqlModal] = useState(false)
+  const [sqlModalType, setSqlModalType] = useState<'V11' | 'V14' | 'V15' | 'V16'>('V11')
   const [headerLine1, setHeaderLine1] = useState('Prefeitura Municipal de Açailândia')
   const [headerLine2, setHeaderLine2] = useState('Secretaria Municipal de Saúde / SEMUS')
   const [headerLine3, setHeaderLine3] = useState('Hospital Municipal de Açailândia - HMA')
@@ -325,8 +333,8 @@ export default function Schedule({
       setData(prev => ({
           ...prev,
           roster: prev.roster.map(r => {
-              const isTarget = targetsToUpdate.some(t => t.id === r.nurse_id)
-              if (isTarget && r.month === selectedMonth + 1 && r.year === selectedYear) {
+              const isTarget = targetsToUpdate.some(t => t.id === r.id)
+              if (isTarget) {
                   return { ...r, sector: replicationData.value }
               }
               return r
@@ -336,6 +344,8 @@ export default function Schedule({
       // Server Update
       try {
           await Promise.all(targetsToUpdate.map(t => updateRosterSector(t.id, replicationData.value)))
+          clearCache() // Clear cache to ensure fresh data
+          await fetchData(true) // Force refresh
           setReplicationModalOpen(false)
           setReplicationData(null)
       } catch (e) {
@@ -358,6 +368,40 @@ export default function Schedule({
       const start = replicationData.startIndex ?? 0
       const targetsToUpdate = replicationData.targets.filter(t => t.index >= start)
       await applyReplicationToTargets(targetsToUpdate)
+  }
+
+  const handleDynamicFieldChange = async (field: 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+      setDynamicField(field)
+      setLoading(true)
+      const res = await updateScheduleDynamicField(selectedMonth + 1, selectedYear, selectedUnitId, field)
+      if (!res.success) {
+          alert(res.message || 'Erro ao salvar campo dinâmico')
+          if (res.message?.includes('V14')) {
+              setSqlModalType('V14')
+              setShowSqlModal(true)
+          }
+      } else {
+          clearCache()
+          await fetchData(true)
+      }
+      setLoading(false)
+  }
+
+  const handleToggleSetorVisibility = async (isHidden: boolean) => {
+      setIsSetorHidden(isHidden)
+      setLoading(true)
+      const res = await updateScheduleSetorVisibility(selectedMonth + 1, selectedYear, selectedUnitId, isHidden)
+      if (!res.success) {
+          alert(res.message || 'Erro ao salvar visibilidade do setor')
+          if (res.message?.includes('V16')) {
+              setSqlModalType('V16')
+              setShowSqlModal(true)
+          }
+      } else {
+          clearCache()
+          await fetchData(true)
+      }
+      setLoading(false)
   }
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -400,6 +444,19 @@ export default function Schedule({
     if (!forceRefresh && scheduleCache.current[cacheKey]) {
         const cachedData = scheduleCache.current[cacheKey]
         setData(cachedData)
+        
+        // Ensure dynamic field and footer are also set from cache
+        const meta = cachedData.releases && cachedData.releases.length > 0 ? cachedData.releases[0] : null
+        if (meta) {
+            setFooterText(meta.footer_text || '')
+            setDynamicField(meta.dynamic_field || 'coren')
+            setIsSetorHidden(!!meta.is_setor_hidden)
+        } else {
+            setFooterText('')
+            setDynamicField('coren')
+            setIsSetorHidden(false)
+        }
+
         setLoading(false)
         onLoaded?.()
         return
@@ -410,6 +467,18 @@ export default function Schedule({
       const newData = result as ScheduleData
       scheduleCache.current[cacheKey] = newData
       setData(newData)
+
+      // Set metadata fields
+      const meta = newData.releases && newData.releases.length > 0 ? newData.releases[0] : null
+      if (meta) {
+          setFooterText(meta.footer_text || '')
+          setDynamicField(meta.dynamic_field || 'coren')
+          setIsSetorHidden(!!meta.is_setor_hidden)
+      } else {
+          setFooterText('')
+          setDynamicField('coren')
+          setIsSetorHidden(false)
+      }
     } catch (error) {
       console.error('Error fetching schedule:', error)
     } finally {
@@ -770,8 +839,8 @@ export default function Schedule({
         alert('Erro ao salvar setor')
         await fetchData(true)
     } else {
-        // Ensure consistency
-        await fetchData(true)
+        // Ensure consistency by clearing cache, but no need to re-fetch immediately if optimistic update is correct
+        clearCache()
     }
   }
 
@@ -790,8 +859,7 @@ export default function Schedule({
       alert('Erro ao salvar numeração')
       await fetchData(true)
     } else {
-        // Ensure consistency
-        await fetchData(true)
+        clearCache()
     }
   }
 
@@ -847,14 +915,32 @@ export default function Schedule({
 
   const saveSectorTitle = async () => {
     if (!editingSectorTitleId) return
-    setLoading(true)
-    // We only update the sector_title, keeping the existing title
-    const section = data.sections.find(s => s.id === editingSectorTitleId)
-    if (section) {
-        await updateSection(editingSectorTitleId, section.title, tempSectorTitle)
-    }
+    
+    // Optimistic local update for instant UI feedback
+    setData(prev => ({
+        ...prev,
+        sections: prev.sections.map(s => 
+            s.id === editingSectorTitleId ? { ...s, sector_title: tempSectorTitle } : s
+        )
+    }))
+
+    const sectionId = editingSectorTitleId
+    const newTitle = tempSectorTitle
     setEditingSectorTitleId(null)
-    await fetchData()
+
+    // Background server update
+    try {
+        const section = data.sections.find(s => s.id === sectionId)
+        if (section) {
+            await updateSection(sectionId, section.title, newTitle)
+        }
+        // No need to full fetchData() here if successful as state is already updated
+        // Just clear cache for future reloads
+        clearCache()
+    } catch (error) {
+        console.error('Error saving sector title:', error)
+        fetchData(true) // Revert to server state on error
+    }
   }
 
   const handleEditFooter = () => {
@@ -863,17 +949,23 @@ export default function Schedule({
   }
 
   const saveFooterText = async () => {
-      setLoading(true)
-      const res = await updateScheduleFooter(selectedMonth + 1, selectedYear, selectedUnitId, tempFooterText)
-      if (res.success) {
-          setIsEditingFooter(false)
-          setFooterText(tempFooterText)
-          clearCache()
-          await fetchData(true)
-      } else {
-          alert(res.message)
+      // Optimistic Update
+      const newText = tempFooterText
+      setFooterText(newText)
+      setIsEditingFooter(false)
+
+      try {
+          const res = await updateScheduleFooter(selectedMonth + 1, selectedYear, selectedUnitId, newText)
+          if (res.success) {
+              clearCache()
+          } else {
+              alert(res.message)
+              fetchData(true) // Revert on error
+          }
+      } catch (e) {
+          console.error('Error saving footer text:', e)
+          fetchData(true)
       }
-      setLoading(false)
   }
 
   const handleAddHiddenSectionToRoster = () => {
@@ -1561,7 +1653,7 @@ export default function Schedule({
     
     const handleCopySectorDown = async (startIndex: number, value: string) => {
       const targets = orderedProfessionals.map((x, idx) => ({
-          id: x.nurse.id,
+          id: x.nurse.unique_key || x.nurse.id, // Use unique_key (roster ID) if available
           group: x.group,
           index: idx
       }))
@@ -1708,7 +1800,7 @@ export default function Schedule({
                   <span className="text-black font-bold">{rowNumber}</span>
                 )}
               </td>
-              <td className="border border-black px-2 py-1 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[220px] print:w-[130px] border-r-2 border-r-black">
+              <td className="border border-black px-2 py-1 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[130px] border-r-2 border-r-black">
                 <div className="flex items-center gap-1">
                   {isAdmin && (
                     <div className="flex flex-col mr-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
@@ -1823,6 +1915,54 @@ export default function Schedule({
                 {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
+                {isAdmin && dynamicField === 'coren' ? (
+                  <select
+                    value={nurse.coren || ''}
+                    onChange={async (e) => {
+                      const newCoren = e.target.value
+                      setLoading(true)
+                      const res = await updateRosterCoren(nurse.unique_key || nurse.id, newCoren)
+                      if (res.success) {
+                        clearCache()
+                        await fetchData(true)
+                      } else {
+                        alert(res.message || 'Erro ao atualizar COREN')
+                      }
+                      setLoading(false)
+                    }}
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-[10px] cursor-pointer outline-none text-center appearance-none"
+                  >
+                    <option value="">-</option>
+                    {(() => {
+                        // Get all unique CORENs from the nurse database
+                        const allCorens = Array.from(new Set(data.nurses.map(n => n.coren).filter(Boolean))).sort()
+                        return allCorens.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                        ))
+                    })()}
+                  </select>
+                ) : (
+                  (() => {
+                    // Try to find the nurse in the base data.nurses to get the most up-to-date fields
+                    const baseNurse = data.nurses.find(n => n.id === nurse.id)
+                    const source = baseNurse || nurse
+                    const val = source[dynamicField as keyof Nurse] || '-'
+                    
+                    if (dynamicField === 'role') return formatRole(val as string)
+                    if (dynamicField === 'phone' && val !== '-') {
+                        const digits = String(val).replace(/\D/g, '')
+                        if (digits.length === 11) {
+                            return `(${digits.slice(0, 2)})${digits.slice(2, 7)}-${digits.slice(7)}`
+                        } else if (digits.length === 10) {
+                            return `(${digits.slice(0, 2)})${digits.slice(2, 6)}-${digits.slice(6)}`
+                        }
+                    }
+                    return String(val)
+                  })()
+                )}
+              </td>
+              {!isSetorHidden && (
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
                   <SectorCell 
                       initialValue={nurse.sector}
                       onSave={(val) => handleUpdateSector(nurse.unique_key || nurse.id, val)}
@@ -1830,6 +1970,7 @@ export default function Schedule({
                       isAdmin={isAdmin}
                   />
               </td>
+              )}
               
               {daysArray.map(({ day, weekday, isWeekend }) => {
                 const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -1956,7 +2097,7 @@ export default function Schedule({
         {isAdmin && (
         <tr className="no-print bg-white">
           <td className="border border-black px-1 py-1 sticky left-0 bg-yellow-400 z-10"></td>
-          <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black w-[220px]">
+          <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black w-[180px]">
              <select 
                 onChange={(e) => handleAssignNurse(e.target.value, section.id)}
                 className="flex items-center gap-1 text-xs text-blue-600 italic w-full bg-transparent border-none outline-none cursor-pointer hover:text-blue-800"
@@ -2202,13 +2343,6 @@ export default function Schedule({
                             >
                                 <Eraser size={16} />
                             </button>
-                            <button 
-                                onClick={handleDeleteUnit}
-                                className="text-red-600 p-2 hover:bg-gray-100 rounded"
-                                title="Excluir setor"
-                            >
-                                <Trash2 size={16} />
-                            </button>
                         </div>
                     )}
                 </div>
@@ -2241,15 +2375,26 @@ export default function Schedule({
             </div>
             <div className="w-full md:w-auto">
             <label className="block text-sm font-medium text-black mb-1">Ano</label>
-            <select 
-                value={selectedYear} 
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-32 bg-white text-black"
-            >
-                {YEARS.map((y) => (
-                <option key={y} value={y}>{y}</option>
-                ))}
-            </select>
+            <div className="flex gap-1 items-center">
+                <select 
+                    value={selectedYear} 
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-32 bg-white text-black"
+                >
+                    {YEARS.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                    ))}
+                </select>
+                {isAdmin && isSetorHidden && (
+                    <button 
+                        onClick={() => handleToggleSetorVisibility(false)}
+                        className="px-2 py-2 bg-gray-600 text-white rounded text-[10px] hover:bg-gray-700 flex items-center gap-1 no-print h-[38px] whitespace-nowrap"
+                        title="Reexibir coluna SETOR"
+                    >
+                        <Plus size={14} /> EXIBIR SETOR
+                    </button>
+                )}
+            </div>
             </div>
         </div>
         <div className="flex gap-2 w-full md:w-auto justify-center mt-2">
@@ -2376,10 +2521,11 @@ export default function Schedule({
                        <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[8px]">
                              <colgroup>
                                 <col className="w-8" />
-                                <col className="w-[220px]" />
-                                <col className="w-24" />
-                                <col className="w-24" />
-                                <col className="w-24" />
+                                <col className="w-[180px]" />
+                                <col className="w-20" />
+                                <col className="w-20" />
+                                <col className="w-16" />
+                                {!isSetorHidden && <col className="w-20" />}
                                 {daysArray.map(d => <col key={d.day} className="w-4" />)}
                                 <col className="w-12" />
                              </colgroup>
@@ -2387,14 +2533,14 @@ export default function Schedule({
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={5 + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
                                         {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
                                     </th>
                                 </tr>
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={5 + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
                                         ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
                                     </th>
                                 </tr>
@@ -2423,7 +2569,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-[220px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-xs group" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-[180px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-xs group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
@@ -2441,9 +2587,40 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-xs bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-xs bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-1 py-1 text-center w-24 font-bold text-xs bg-[#1e3a5f] group relative" rowSpan={2}>
+                                <th className="border border-black px-1 py-1 text-center w-20 font-bold text-xs bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
+                                <th className="border border-black px-1 py-1 text-center w-20 font-bold text-xs bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-1 py-1 text-center w-16 font-bold text-xs bg-[#1e3a5f]" rowSpan={2}>
+                                    {isAdmin ? (
+                                        <select 
+                                            value={dynamicField}
+                                            onChange={(e) => handleDynamicFieldChange(e.target.value as any)}
+                                            className="bg-[#1e3a5f] text-white border-none outline-none font-bold text-xs uppercase cursor-pointer hover:text-blue-200 text-center w-full appearance-none"
+                                        >
+                                            <option value="coren">COREN</option>
+                                            <option value="crm">CRM</option>
+                                            <option value="phone">TELEFONE</option>
+                                            <option value="cpf">CPF</option>
+                                            <option value="vinculo">VÍNCULO</option>
+                                            <option value="role">CATEGORIA</option>
+                                        </select>
+                                    ) : (
+                                        <span className="uppercase">{dynamicField === 'role' ? 'CATEGORIA' : dynamicField}</span>
+                                    )}
+                                </th>
+                                {!isSetorHidden && (
+                                <th className="border border-black px-1 py-1 text-center w-20 font-bold text-xs bg-[#1e3a5f] group relative" rowSpan={2}>
+                                    {isAdmin && (
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleToggleSetorVisibility(true);
+                                            }}
+                                            className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity z-10 no-print"
+                                            title="Ocultar coluna SETOR nesta escala"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    )}
                                     {editingSectorTitleId === section.id ? (
                                         <div className="flex items-center gap-1 w-full h-full text-black">
                                             <input 
@@ -2452,7 +2629,10 @@ export default function Schedule({
                                                 className="w-full text-[10px] bg-white text-black border border-gray-300 rounded px-1 h-full min-h-[20px]"
                                                 autoFocus
                                                 onBlur={saveSectorTitle}
-                                                onKeyDown={(e) => e.key === 'Enter' && saveSectorTitle()}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') saveSectorTitle();
+                                                    if (e.key === 'Escape') setEditingSectorTitleId(null);
+                                                }}
                                                 onClick={(e) => e.stopPropagation()}
                                             />
                                         </div>
@@ -2463,12 +2643,13 @@ export default function Schedule({
                                                 startEditingSectorTitle(section);
                                             }}
                                             className={`w-full h-full flex items-center justify-center min-h-[20px] break-words leading-tight ${isAdmin ? "cursor-pointer hover:text-blue-200" : ""}`}
-                                            title={isAdmin ? "Clique para editar" : ""}
+                                            title={isAdmin ? "Clique para editar (salva automaticamente ao sair)" : ""}
                                         >
-                                            SETOR LABORAL
+                                            {section.sector_title || 'SETOR LABORAL'}
                                         </div>
                                     )}
                                 </th>
+                                )}
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
                                     <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 text-[10px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
                                     {weekday}
@@ -3144,13 +3325,19 @@ export default function Schedule({
             <div className="bg-white p-6 rounded shadow-lg w-full max-w-2xl">
                 <h3 className="font-bold text-lg mb-4 text-red-600">Atenção: Atualização de Banco de Dados Necessária</h3>
                 <p className="text-sm text-gray-700 mb-4">
-                    Para permitir a duplicidade de servidores (Escala Dupla), é necessário executar um comando no banco de dados.
+                    {sqlModalType === 'V11' 
+                        ? 'Para permitir a duplicidade de servidores (Escala Dupla), é necessário executar um comando no banco de dados.'
+                        : sqlModalType === 'V14' 
+                            ? 'Para permitir a troca de campos dinâmicos no cabeçalho, é necessário adicionar uma nova coluna ao banco de dados.'
+                            : sqlModalType === 'V15'
+                                ? 'Para permitir o cadastro de CRM e Telefone, é necessário adicionar novas colunas à tabela de profissionais.'
+                                : 'Para permitir ocultar a coluna SETOR, é necessário adicionar uma nova coluna à tabela de metadados.'}
                     Como esta é uma operação de segurança, você precisa rodar manualmente no Supabase.
                 </p>
                 
                 <div className="bg-gray-100 p-4 rounded mb-4 overflow-auto max-h-60">
                     <pre className="text-xs text-black whitespace-pre-wrap font-mono">
-{`-- Execute este código FINAL no SQL Editor do Supabase:
+{sqlModalType === 'V11' ? `-- Execute este código FINAL no SQL Editor do Supabase:
 -- Este script remove TODAS as restrições e índices únicos (exceto chave primária).
 
 DO $$ 
@@ -3174,6 +3361,22 @@ BEGIN
     EXECUTE 'DROP INDEX IF EXISTS ' || quote_ident(r.indexname);
   END LOOP;
 END $$;
+` : sqlModalType === 'V14' ? `-- Execute este código no SQL Editor do Supabase (V14):
+-- Este script adiciona a coluna dynamic_field na tabela de metadados.
+
+ALTER TABLE monthly_schedule_metadata 
+ADD COLUMN IF NOT EXISTS dynamic_field TEXT DEFAULT 'coren';
+` : sqlModalType === 'V15' ? `-- Execute este código no SQL Editor do Supabase (V15):
+-- Este script adiciona as colunas crm e phone na tabela nurses.
+
+ALTER TABLE nurses 
+ADD COLUMN IF NOT EXISTS crm TEXT DEFAULT '',
+ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
+` : `-- Execute este código no SQL Editor do Supabase (V16):
+-- Este script adiciona a coluna is_setor_hidden na tabela de metadados.
+
+ALTER TABLE monthly_schedule_metadata 
+ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
 `}
                     </pre>
                 </div>

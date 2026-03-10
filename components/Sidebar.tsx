@@ -12,6 +12,7 @@ export default function Sidebar({ user }: { user: any }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
 
+  // Força a re-renderização para garantir que o botão de logout apareça
   const role = user?.role || ''
   const isAdmin = role === 'ADMIN' || role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
 
@@ -228,7 +229,7 @@ export default function Sidebar({ user }: { user: any }) {
       )}
 
       {/* Desktop Sidebar */}
-      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-screen bg-white border-r border-gray-200 sticky top-0 transition-all duration-300`}>
+      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-full bg-white border-r border-gray-200 sticky top-0 transition-all duration-300`}>
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
             {!isCollapsed && (
               <div className="flex items-center gap-3">

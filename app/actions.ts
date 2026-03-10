@@ -468,6 +468,8 @@ export async function createNurse(prevState: any, formData: FormData) {
   const cpf = formData.get('cpf') as string
   const password = formData.get('password') as string || '123456'
   const coren = formData.get('coren') as string
+  const crm = formData.get('crm') as string
+  const phone = formData.get('phone') as string
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string || 'ENFERMEIRO'
   const sectionId = formData.get('sectionId') as string
@@ -502,6 +504,8 @@ export async function createNurse(prevState: any, formData: FormData) {
       cpf: finalCpf,
       password, // Plain text for local dev
       coren,
+      crm: crm || '',
+      phone: phone || '',
       vinculo,
       role,
       section_id: finalSectionId,
@@ -555,6 +559,8 @@ export async function createNurse(prevState: any, formData: FormData) {
     cpf: finalCpf,
     password,
     coren,
+    crm: crm || '',
+    phone: phone || '',
     vinculo,
     role,
     section_id: finalSectionId || null,
@@ -564,6 +570,9 @@ export async function createNurse(prevState: any, formData: FormData) {
 
   if (error) {
     console.error('Error creating nurse:', error)
+    if (error.message?.includes('crm') || error.message?.includes('phone')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V15). Solicite ao suporte para rodar o script de CRM e Telefone.' }
+    }
     if (error.code === '23505') {
         // Detect specific constraint violation
         if (error.message?.includes('nurses_cpf_key')) {
@@ -2454,6 +2463,155 @@ export async function updateScheduleFooter(month: number, year: number, unitId: 
   }
 }
 
+export async function updateScheduleDynamicField(month: number, year: number, unitId: string | null, field: string) {
+  try {
+      await checkAdmin()
+
+      if (isLocalMode()) {
+        const db = readDb()
+        
+        // Update ALL metadata entries to have the same dynamic_field (Global)
+        db.monthly_schedule_metadata.forEach(m => {
+            m.dynamic_field = field
+            m.updated_at = new Date().toISOString()
+        })
+
+        // Ensure the current one exists too
+        const currentMeta = db.monthly_schedule_metadata.find(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
+        if (!currentMeta) {
+            db.monthly_schedule_metadata.push({
+                id: randomUUID(),
+                month,
+                year,
+                unit_id: unitId || null,
+                dynamic_field: field,
+                is_released: false,
+                released_at: null,
+                updated_at: new Date().toISOString()
+            })
+        }
+        
+        writeDb(db)
+        revalidatePath('/')
+        return { success: true }
+      }
+
+      const supabase = createClient()
+      
+      // Update ALL existing metadata to use the new field (Global)
+      const { error: updateAllError } = await supabase
+        .from('monthly_schedule_metadata')
+        .update({
+            dynamic_field: field,
+            updated_at: new Date().toISOString()
+        })
+        .neq('dynamic_field', field) // only update those that are different
+
+      if (updateAllError) {
+          // If the column doesn't exist, we'll catch it in the catch block
+          if (updateAllError.message?.includes('column "dynamic_field" does not exist')) {
+              throw updateAllError
+          }
+          console.error('Error updating all dynamic fields:', updateAllError)
+      }
+
+      // Ensure the current month/year/unit entry exists
+      let query = supabase.from('monthly_schedule_metadata').select('id').eq('month', month).eq('year', year)
+      if (unitId) query = query.eq('unit_id', unitId)
+      else query = query.is('unit_id', null)
+
+      const { data: existing } = await query.maybeSingle()
+
+      if (!existing) {
+          const payload: any = {
+              month,
+              year,
+              dynamic_field: field,
+              is_released: false
+          }
+          if (unitId) payload.unit_id = unitId
+
+          const { error: insertError } = await supabase.from('monthly_schedule_metadata').insert(payload)
+          if (insertError) throw insertError
+      }
+      
+      revalidatePath('/')
+      return { success: true }
+  } catch(e: any) {
+       console.error('Dynamic Field Error:', e)
+       if (e.message?.includes('column "dynamic_field" does not exist')) {
+           return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V14). Solicite ao suporte para rodar o script de campo dinâmico.' }
+       }
+       return { success: false, message: 'Erro ao salvar campo dinâmico: ' + (e.message || 'Erro desconhecido') }
+   }
+}
+
+export async function updateScheduleSetorVisibility(month: number, year: number, unitId: string | null, isHidden: boolean) {
+  try {
+      await checkAdmin()
+
+      if (isLocalMode()) {
+        const db = readDb()
+        const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
+        
+        if (existingIndex >= 0) {
+            db.monthly_schedule_metadata[existingIndex].is_setor_hidden = isHidden
+            db.monthly_schedule_metadata[existingIndex].updated_at = new Date().toISOString()
+        } else {
+            db.monthly_schedule_metadata.push({
+                id: randomUUID(),
+                month,
+                year,
+                unit_id: unitId || null,
+                is_setor_hidden: isHidden,
+                is_released: false,
+                released_at: null,
+                updated_at: new Date().toISOString()
+            })
+        }
+        writeDb(db)
+        revalidatePath('/')
+        return { success: true }
+      }
+
+      const supabase = createClient()
+      
+      let query = supabase.from('monthly_schedule_metadata').select('id').eq('month', month).eq('year', year)
+      if (unitId) query = query.eq('unit_id', unitId)
+      else query = query.is('unit_id', null)
+
+      const { data: existing } = await query.maybeSingle()
+
+      if (existing) {
+          const { error } = await supabase.from('monthly_schedule_metadata').update({
+              is_setor_hidden: isHidden,
+              updated_at: new Date().toISOString()
+          }).eq('id', existing.id)
+          if (error) throw error
+      } else {
+          const payload: any = {
+              month,
+              year,
+              is_setor_hidden: isHidden,
+              is_released: false
+          }
+          if (unitId) payload.unit_id = unitId
+
+          const { error } = await supabase.from('monthly_schedule_metadata').insert(payload)
+          if (error) throw error
+      }
+      
+      revalidatePath('/')
+      return { success: true }
+  } catch(e: any) {
+       console.error('Setor Visibility Error:', e)
+       if (e.message?.includes('column "is_setor_hidden" does not exist')) {
+           return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V16). Solicite ao suporte para rodar o script de visibilidade do setor.' }
+       }
+       return { success: false, message: 'Erro ao salvar visibilidade do setor: ' + (e.message || 'Erro desconhecido') }
+   }
+}
+
 export async function clearMonthlySchedule(month: number, year: number, unitId: string | null) {
   try {
     await checkAdmin()
@@ -3332,6 +3490,63 @@ export async function updateRosterSector(rosterId: string, sector: string) {
   }
 }
 
+export async function updateRosterCoren(rosterId: string, coren: string) {
+  try {
+    await checkAdmin()
+    
+    if (isLocalMode()) {
+      const db = readDb()
+      const roster = db.monthly_rosters.find(r => r.id === rosterId)
+      if (roster) {
+        roster.coren = coren
+        
+        // Also update the nurse's base profile COREN
+        const nurse = db.nurses.find(n => n.id === roster.nurse_id)
+        if (nurse) {
+          nurse.coren = coren
+        }
+
+        writeDb(db)
+        revalidatePath('/')
+        return { success: true }
+      }
+      return { success: false, message: 'Roster entry not found' }
+    }
+
+    const supabase = createClient()
+    
+    // 1. Get roster info to know the nurse
+    const { data: rosterData } = await supabase
+      .from('monthly_rosters')
+      .select('nurse_id')
+      .eq('id', rosterId)
+      .single()
+
+    // 2. Update roster entry COREN
+    const { error: rosterError } = await supabase
+      .from('monthly_rosters')
+      .update({ coren })
+      .eq('id', rosterId)
+
+    if (rosterError) throw rosterError
+
+    // 3. Update nurse's base profile COREN
+    if (rosterData) {
+      const { error: nurseError } = await supabase
+          .from('nurses')
+          .update({ coren })
+          .eq('id', rosterData.nurse_id)
+      if (nurseError) console.error('Error updating nurse base coren:', nurseError)
+    }
+
+    revalidatePath('/')
+    return { success: true }
+  } catch (e) {
+    console.error('Error updating coren:', e)
+    return { success: false, message: 'Erro ao atualizar COREN' }
+  }
+}
+
 export async function updateRosterOrder(rosterId: string, listOrder: number | null) {
   try {
     await checkAdmin()
@@ -3879,6 +4094,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const name = formData.get('name') as string
   const cpf = formData.get('cpf') as string
   const coren = formData.get('coren') as string
+  const crm = formData.get('crm') as string
+  const phone = formData.get('phone') as string
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string
   const sectionId = formData.get('sectionId') as string
@@ -3928,6 +4145,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     nurse.name = name
     if (cpf) nurse.cpf = cpf
     nurse.coren = coren
+    nurse.crm = crm || nurse.crm || ''
+    nurse.phone = phone || nurse.phone || ''
     nurse.vinculo = vinculo
     nurse.role = role
     nurse.sector = sector || nurse.sector
@@ -3999,6 +4218,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const updateData: any = {
       name,
       coren,
+      crm: crm || '',
+      phone: phone || '',
       vinculo,
       role
   }
@@ -4016,6 +4237,9 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const { error } = await supabase.from('nurses').update(updateData).eq('id', id)
 
   if (error) {
+    if (error.message?.includes('crm') || error.message?.includes('phone')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V15). Solicite ao suporte para rodar o script de CRM e Telefone.' }
+    }
     if (error.code === '23505') return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
     return { success: false, message: 'Erro ao atualizar: ' + error.message }
   }
@@ -4274,8 +4498,15 @@ export async function deleteSection(id: string) {
   }
 
   const supabase = createClient()
+  
+  // Reset nurses section_id before deleting the section to avoid FK constraints
+  await supabase.from('nurses').update({ section_id: null }).eq('section_id', id)
+
   const { error } = await supabase.from('schedule_sections').delete().eq('id', id)
-  if (error) return { success: false, message: error.message }
+  if (error) {
+    console.error('Error deleting section:', error)
+    return { success: false, message: error.message }
+  }
   revalidatePath('/')
   return { success: true }
 }
