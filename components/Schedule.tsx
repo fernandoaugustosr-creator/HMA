@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
+import logoHma from '@/public/logo-hma.png'
+import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser } from 'lucide-react'
@@ -1800,8 +1802,8 @@ export default function Schedule({
                   <span className="text-black font-bold">{rowNumber}</span>
                 )}
               </td>
-              <td className="border border-black px-2 py-1 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[130px] border-r-2 border-r-black">
-                <div className="flex items-center gap-1">
+              <td className="border border-black px-2 py-1 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[130px] border-r-2 border-r-black text-center">
+                <div className="flex items-center justify-center gap-1">
                   {isAdmin && (
                     <div className="flex flex-col mr-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
                        <button 
@@ -1831,7 +1833,7 @@ export default function Schedule({
                     <select 
                       value={nurse.id} 
                       onChange={(e) => handleReassign(nurse.unique_key || '', e.target.value)}
-                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold cursor-pointer outline-none uppercase no-print appearance-none ${
+                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold cursor-pointer outline-none uppercase no-print appearance-none text-center ${
                         (nurse.vinculo && nurse.vinculo.toUpperCase().includes('SELETIVO')) ? 'text-green-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
@@ -1876,7 +1878,7 @@ export default function Schedule({
                       })}
                     </select>
                   ) : null}
-                  <div className={`${isAdmin ? 'hidden print:block' : 'block'}`}>
+                  <div className={`${isAdmin ? 'hidden print:block' : 'block'} text-center w-full`}>
                   {(() => {
                      const obs = (nurse.observation || '').toUpperCase().trim()
                      const vinculo = (nurse.vinculo || '').toUpperCase().trim()
@@ -2204,22 +2206,20 @@ export default function Schedule({
       <div className="w-full flex items-center justify-between mb-2 px-2 print:mb-4 print:px-0">
         <div className="flex items-center gap-4">
           <Image 
-            src={`/logo-prefeitura.png?t=${logoTimestamp}`} 
+            src={logoPrefeitura} 
             alt="Prefeitura de Açailândia" 
             width={140} 
             height={48} 
             className="h-12 w-auto object-contain print:h-10"
             priority
-            unoptimized
           />
           <Image 
-            src={`/logo-hma.png?t=${logoTimestamp}`} 
+            src={logoHma} 
             alt="HMA" 
             width={140} 
             height={48} 
             className="h-12 w-auto object-contain print:h-10" 
             priority
-            unoptimized
           />
           <div className="flex flex-col leading-tight text-[11px] uppercase text-gray-800 print:text-[9px] print:ml-4">
             {!isEditingHeader ? (

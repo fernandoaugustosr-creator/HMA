@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import logoHma from '@/public/logo-hma.png'
 import { usePathname } from 'next/navigation'
 import { logout } from '@/app/actions'
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
@@ -11,7 +12,6 @@ export default function Sidebar({ user }: { user: any }) {
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [logoTimestamp] = useState(Date.now())
 
   // Força a re-renderização para garantir que o botão de logout apareça
   const role = user?.role || ''
@@ -94,8 +94,8 @@ export default function Sidebar({ user }: { user: any }) {
       {/* Mobile Navbar */}
       <div className="flex md:!hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-30 justify-between items-center shadow-sm w-full">
         <div className="flex items-center gap-2">
-          <Image src={`/logo-hma.png?t=${logoTimestamp}`} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" unoptimized />
-          <Image src={`/logo-hma.png?t=${logoTimestamp}`} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" unoptimized />
+          <Image src={logoHma} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
+          <Image src={logoHma} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
         </div>
         <button 
           onClick={() => setIsMobileMenuOpen(true)}
@@ -120,8 +120,8 @@ export default function Sidebar({ user }: { user: any }) {
           <div className="relative flex flex-col w-64 max-w-xs h-full bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center gap-2">
-                <Image src={`/logo-hma.png?t=${logoTimestamp}`} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" unoptimized />
-                <Image src={`/logo-hma.png?t=${logoTimestamp}`} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" unoptimized />
+                <Image src={logoHma} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
+                <Image src={logoHma} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
               </div>
               <button 
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -234,7 +234,7 @@ export default function Sidebar({ user }: { user: any }) {
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
             {!isCollapsed && (
               <div className="flex items-center gap-3">
-                <Image src={`/logo-hma.png?t=${logoTimestamp}`} alt="HMA Logo" width={120} height={40} className="h-10 w-auto object-contain" unoptimized />
+                <Image src={logoHma} alt="HMA Logo" width={120} height={40} className="h-10 w-auto object-contain" />
               </div>
             )}
             <button 
