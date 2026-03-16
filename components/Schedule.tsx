@@ -2208,15 +2208,6 @@ export default function Schedule({
             alt="HMA" 
             width={140} 
             height={48} 
-            className="h-12 w-auto object-contain print:h-10"
-            priority
-            unoptimized
-          />
-          <Image 
-            src={`/logo-hma.png?t=${logoTimestamp}`} 
-            alt="HMA" 
-            width={140} 
-            height={48} 
             className="h-12 w-auto object-contain print:h-10" 
             priority
             unoptimized

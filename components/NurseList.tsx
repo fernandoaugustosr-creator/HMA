@@ -249,33 +249,17 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                     <option value="TECNICO">Técnico</option>
                     <option value="MEDICO">Médico(a)</option>
                     <option value="COORDENADOR">Coordenador(a)</option>
+                    <option value="COORDENACAO_GERAL">Coordenação Geral</option>
                   </select>
                 </div>
               </th>
-              <th className="px-6 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="flex flex-col gap-1">
-                  <span>Vínculo</span>
-                  <select
-                    value={vinculoFilter}
-                    onChange={(e) => setVinculoFilter(e.target.value)}
-                    className="mt-1 block border border-gray-300 rounded-md shadow-sm p-1 text-[11px] bg-white text-gray-700"
-                  >
-                    <option value="ALL">Todos</option>
-                    {uniqueVinculos.map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Ações</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredNurses.map((nurse: any) => (
               <tr key={nurse.id}>
-                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(nurse.id)}
@@ -296,12 +280,11 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                     </button>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                   <SectorHistoryCell nurseId={nurse.id} currentSector={nurse.sector} />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatRole(nurse.role)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{nurse.vinculo || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-2">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{formatRole(nurse.role)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-2 justify-center">
                   <button 
                     onClick={() => handleEdit(nurse)}
                     className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1"
@@ -313,7 +296,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
             ))}
             {filteredNurses.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">Nenhum servidor cadastrado.</td>
+                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">Nenhum servidor cadastrado.</td>
               </tr>
             )}
           </tbody>
