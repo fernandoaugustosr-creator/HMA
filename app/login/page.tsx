@@ -54,12 +54,13 @@ export default function LoginPage() {
         <div>
           <div className="flex justify-center">
             <Image
-              src="/logo-hma.png"
+              src={`/logo-hma.png?t=${Date.now()}`}
               alt="LOGOHMA"
               width={160}
               height={56}
               className="h-14 w-auto object-contain"
               priority
+              unoptimized
             />
           </div>
           <h2 className="mt-4 text-center text-3xl font-extrabold text-gray-900">

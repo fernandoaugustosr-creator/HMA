@@ -2204,8 +2204,8 @@ export default function Schedule({
       <div className="w-full flex items-center justify-between mb-2 px-2 print:mb-4 print:px-0">
         <div className="flex items-center gap-4">
           <Image 
-            src={`/logo-prefeitura.png?t=${cityLogoTimestamp}`} 
-            alt="Prefeitura" 
+            src={`/logo-hma.png?t=${logoTimestamp}`} 
+            alt="HMA" 
             width={140} 
             height={48} 
             className="h-12 w-auto object-contain print:h-10"

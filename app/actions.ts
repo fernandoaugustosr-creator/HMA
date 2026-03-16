@@ -510,7 +510,6 @@ export async function createNurse(prevState: any, formData: FormData) {
       role,
       section_id: finalSectionId,
       unit_id: unitId,
-      sector: sector || '', // Current sector
       created_at: new Date().toISOString()
     }
 
@@ -564,8 +563,7 @@ export async function createNurse(prevState: any, formData: FormData) {
     vinculo,
     role,
     section_id: finalSectionId || null,
-    unit_id: unitId || null,
-    sector: sector || '' // Current sector
+    unit_id: unitId || null
   }).select().single()
 
   if (error) {
@@ -740,7 +738,7 @@ export async function updateSectionForm(prevState: any, formData: FormData) {
   if (error) return { success: false, message: 'Erro ao atualizar setor: ' + error.message }
 
   if (coordinatorId) {
-    // 1. Unassign old coordinator(s) for this section (optional but good for consistency)
+    // 1. Unassign old coordinator(s) for this section
     await supabase.from('nurses').update({ role: 'ENFERMEIRO' }).eq('section_id', id).eq('role', 'COORDENADOR')
 
     // 2. Assign new
@@ -794,7 +792,10 @@ export async function deleteSectionForm(prevState: any, formData: FormData) {
 
     const supabase = createClient()
 
-    // Primeiro remove escalas mensais que referenciam este setor (evita erro de FK)
+    // 1. Desvincular servidores do setor (evita erro de FK em nurses.section_id)
+    await supabase.from('nurses').update({ section_id: null }).eq('section_id', id)
+
+    // 2. Remover escalas mensais ligadas ao setor (evita erro de FK em monthly_rosters.section_id)
     const { error: rosterError } = await supabase
       .from('monthly_rosters')
       .delete()

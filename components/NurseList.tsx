@@ -70,6 +70,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO' | 'COORDENADOR'>('ALL')
   const [vinculoFilter, setVinculoFilter] = useState<string>('ALL')
   const [sectionFilter, setSectionFilter] = useState<string>('ALL')
+  const [nameFilter, setNameFilter] = useState<string>('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkDeleting, setBulkDeleting] = useState(false)
 
@@ -116,9 +117,14 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
             ? true
             : nurse.section_id === sectionFilter
 
-        return roleOk && vinculoOk && sectionOk
+        const nameOk = 
+          !nameFilter 
+            ? true 
+            : (nurse.name || '').toLowerCase().includes(nameFilter.toLowerCase())
+
+        return roleOk && vinculoOk && sectionOk && nameOk
       }),
-    [nurses, roleFilter, vinculoFilter, sectionFilter]
+    [nurses, roleFilter, vinculoFilter, sectionFilter, nameFilter]
   )
 
   const allVisibleSelected =
@@ -217,26 +223,19 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                   className="h-4 w-4"
                 />
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor Laboral</th>
-              <th className="px-6 py-1 text-left text-xs font-medium text-blue-600 uppercase tracking-wider font-bold">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex flex-col gap-1">
-                  <span>Grupo Escala</span>
-                  <select
-                    value={sectionFilter}
-                    onChange={(e) => setSectionFilter(e.target.value)}
-                    className="mt-1 block border border-gray-300 rounded-md shadow-sm p-1 text-[11px] bg-white text-gray-700"
-                  >
-                    <option value="ALL">Todos</option>
-                    {sections.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.title}
-                      </option>
-                    ))}
-                  </select>
+                  <span>Nome</span>
+                  <input
+                    type="text"
+                    placeholder="Filtrar por nome..."
+                    value={nameFilter}
+                    onChange={(e) => setNameFilter(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-1 text-[11px] bg-white text-gray-700 font-normal normal-case"
+                  />
                 </div>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPF</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor Laboral</th>
               <th className="px-6 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex flex-col gap-1">
                   <span>Cargo</span>
@@ -300,10 +299,6 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <SectorHistoryCell nurseId={nurse.id} currentSector={nurse.sector} />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {sectionLookup[nurse.section_id] || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{nurse.cpf}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatRole(nurse.role)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{nurse.vinculo || '-'}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-2">
@@ -313,19 +308,12 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                   >
                     <Pencil size={16} /> Editar
                   </button>
-                  <button 
-                    onClick={() => handleDelete(nurse.id)}
-                    disabled={loadingId === nurse.id}
-                    className="text-red-600 hover:text-red-900 flex items-center gap-1 disabled:opacity-50"
-                  >
-                    <Trash2 size={16} /> {loadingId === nurse.id ? '...' : 'Excluir'}
-                  </button>
                 </td>
               </tr>
             ))}
             {filteredNurses.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">Nenhum servidor cadastrado.</td>
+                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">Nenhum servidor cadastrado.</td>
               </tr>
             )}
           </tbody>
