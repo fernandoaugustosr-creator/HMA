@@ -308,8 +308,9 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
              <input 
                type="text" 
                name="cpf" 
-               defaultValue={nurseToEdit?.cpf}
+               defaultValue={nurseToEdit?.cpf || ''}
                placeholder="Apenas números (opcional)"
+               autoComplete="off"
                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
              />
           </div>
@@ -321,6 +322,7 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                name="password" 
                disabled={useDefaultPassword}
                placeholder={useDefaultPassword ? "Usando senha padrão (123456)" : "******"}
+               autoComplete="new-password"
                className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-black ${useDefaultPassword ? 'bg-gray-100' : 'bg-white'}`}
              />
              <div className="mt-2 flex items-center">
