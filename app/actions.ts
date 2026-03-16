@@ -4144,7 +4144,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     }
 
     nurse.name = name
-    if (cpf) nurse.cpf = cpf
+    // Allow clearing CPF (will be replaced by a TEMP value if empty)
+    nurse.cpf = cpf || `TEMP-${Date.now()}`
     nurse.coren = coren
     nurse.crm = crm || nurse.crm || ''
     nurse.phone = phone || nurse.phone || ''
@@ -4222,9 +4223,9 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
       crm: crm || '',
       phone: phone || '',
       vinculo,
-      role
+      role,
+      cpf: cpf || `TEMP-${Date.now()}`
   }
-  if (cpf) updateData.cpf = cpf
   if (finalSectionId) updateData.section_id = finalSectionId
   if (unitId) updateData.unit_id = unitId
   if (sector) updateData.sector = sector

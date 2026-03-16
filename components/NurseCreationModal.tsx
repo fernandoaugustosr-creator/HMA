@@ -19,10 +19,19 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   const [error, setError] = useState<string | null>(null)
   const [useDefaultPassword, setUseDefaultPassword] = useState(false)
   const [phone, setPhone] = useState(nurseToEdit?.phone || '')
+  const [cpf, setCpf] = useState(nurseToEdit?.cpf || '')
   const [showSqlModal, setShowSqlModal] = useState(false)
 
   useEffect(() => {
-    if (nurseToEdit?.phone) setPhone(nurseToEdit.phone)
+    if (nurseToEdit) {
+        setPhone(nurseToEdit.phone || '')
+        // Se o CPF for um valor temporário (gerado automaticamente), exibe como vazio na UI
+        const currentCpf = nurseToEdit.cpf || ''
+        setCpf(currentCpf.startsWith('TEMP-') ? '' : currentCpf)
+    } else {
+        setPhone('')
+        setCpf('')
+    }
   }, [nurseToEdit])
 
   const formatPhone = (val: string) => {
@@ -262,16 +271,6 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                     />
                     <span>SELETIVO</span>
                   </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      name="vinculo"
-                      value="COOPERATIVA"
-                      defaultChecked={nurseToEdit?.vinculo?.includes('COOPERATIVA')}
-                      className="h-4 w-4"
-                    />
-                    <span>COOPERATIVA</span>
-                  </label>
                 </div>
             </div>
           </div>
@@ -308,9 +307,10 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
              <input 
                type="text" 
                name="cpf" 
-               defaultValue={nurseToEdit?.cpf || ''}
+               value={cpf}
+               onChange={(e) => setCpf(e.target.value)}
                placeholder="Apenas números (opcional)"
-               autoComplete="off"
+               autoComplete="none"
                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
              />
           </div>
