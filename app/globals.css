@@ -148,9 +148,9 @@ html, body {
   .print-schedule-root {
     page-break-after: auto;
     page-break-inside: avoid;
-    transform: scale(0.7);
+    transform: scale(0.75);
     transform-origin: top left;
-    width: 142.85%;
+    width: 133.33%;
   }
 }
 

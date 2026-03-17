@@ -6,10 +6,11 @@ import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
-import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, Move } from 'lucide-react'
+import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
 import NurseCreationModal from './NurseCreationModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
+import NurseSelectionModal from './NurseSelectionModal'
 
 interface Nurse {
   id: string
@@ -300,6 +301,10 @@ export default function Schedule({
   // Dynamic Column Field State
   const [dynamicField, setDynamicField] = useState<'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('coren')
   const [isSetorHidden, setIsSetorHidden] = useState(false)
+
+  // Insertion State
+  const [isNurseModalOpen, setIsNurseModalOpen] = useState(false)
+  const [insertionData, setInsertionData] = useState<{ sectionId: string, position: number, rosterId?: string, orderedIds: string[] } | null>(null)
 
   // Replication State
   const [replicationModalOpen, setReplicationModalOpen] = useState(false)
@@ -1009,6 +1014,95 @@ export default function Schedule({
     setDoubleShiftModal({ isOpen: true, nurseId, sectionId })
   }
 
+  const handleInsertProfessional = (sectionId: string, index: number, direction: 'above' | 'below', currentOrderedIds: string[]) => {
+    const position = direction === 'above' ? index : index + 1
+    setInsertionData({ sectionId, position, orderedIds: currentOrderedIds })
+    setIsNurseModalOpen(true)
+  }
+
+  const onNurseSelected = async (nurseId: string) => {
+    if (!insertionData) return
+    setIsNurseModalOpen(false)
+    
+    const { sectionId, position, orderedIds: previousOrderedIds } = insertionData
+    setLoading(true)
+    
+    try {
+        // Step 1: Capture current roster IDs in this section for comparison
+        const oldRosterIds = new Set(data.roster
+          .filter(r => r.section_id === sectionId && r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
+          .map(r => r.id))
+
+        // Step 2: Assign nurse to roster (puts at end)
+        const res = await assignNurseToRoster(
+            nurseId, 
+            sectionId, 
+            selectedUnitId, 
+            selectedMonth + 1, 
+            selectedYear, 
+            '', 
+            undefined, 
+            true // allow duplicate
+        )
+        
+        if (res.success) {
+            // Step 3: Fetch fresh data to get the new roster ID
+            const freshData = await fetchData(true)
+            if (!freshData) {
+                setLoading(false)
+                return
+            }
+            
+            // Step 4: Find the new roster entry ID
+            const currentRosterInThisContext = freshData.roster.filter(r => 
+                r.section_id === sectionId && 
+                r.month === selectedMonth + 1 && 
+                r.year === selectedYear && 
+                (!selectedUnitId || r.unit_id === selectedUnitId)
+            )
+            
+            const newRosterEntry = currentRosterInThisContext.find(r => !oldRosterIds.has(r.id))
+            
+            if (!newRosterEntry) {
+                setLoading(false)
+                return
+            }
+
+            // Step 5: Construct the NEW ordered list of roster IDs
+            const orderedIds = [...previousOrderedIds]
+            
+            // Insert the new ID at the target position
+            orderedIds.splice(position, 0, newRosterEntry.id)
+            
+            // Step 6: Use resetSectionOrder to apply this final order
+            const orderRes = await resetSectionOrder(
+                sectionId, 
+                selectedUnitId || 'ALL', 
+                selectedMonth + 1, 
+                selectedYear, 
+                undefined, 
+                orderedIds,
+                1 
+            )
+            
+            if (orderRes.success) {
+                clearCache()
+                await fetchData(true)
+            } else {
+                alert('Erro ao ordenar: ' + orderRes.message)
+            }
+        } else {
+            alert('Erro ao adicionar: ' + res.message)
+        }
+    } catch (error) {
+        console.error(error)
+        alert('Erro ao processar inserção.')
+    } finally {
+        setLoading(false)
+        setInsertionData(null)
+    }
+  }
+
   const finalizeAssignNurse = async (observation: string) => {
     if (!doubleShiftModal) return
     const { nurseId, sectionId, rosterId } = doubleShiftModal
@@ -1667,17 +1761,22 @@ export default function Schedule({
 
     const professionalsWithRowNumber = sortedProfessionals.map((p, index) => {
       const rawOrder = p.listOrder
-      
-      // Se o listOrder for > 10000, significa que tem um número manual definido pelo usuário.
-      // Caso contrário, o usuário quer que comece "zerado" (0).
-      const rowNumber = (rawOrder && rawOrder >= 10000) 
-         ? (rawOrder % 10000)
-         : 0
+      let displayOrder = rawOrder
+      if (rawOrder && rawOrder > 10000) {
+          displayOrder = rawOrder % 10000
+          if (displayOrder === 0) displayOrder = 10000
+      }
+
+      const rowNumber =
+        displayOrder !== undefined && displayOrder !== null && displayOrder > 0
+          ? displayOrder
+          : index + 1
           
+      const group = rowNumber
       return {
         ...p,
         rowNumber,
-        group: rowNumber
+        group
       }
     })
 
@@ -1715,119 +1814,6 @@ export default function Schedule({
       setReplicationModalOpen(true)
     }
 
-    const handleMoveRow = async (index: number, direction: 'up' | 'down' | 'to', targetPos?: number) => {
-      if (!isAdmin) return
-      
-      if (direction === 'to') {
-          if (targetPos === undefined || targetPos < 1 || targetPos > orderedProfessionals.length) {
-              alert('Posição inválida.')
-              return
-          }
-          
-          const current = orderedProfessionals[index]
-          const currentId = current.nurse.unique_key
-          if (!currentId) return
-          
-          setLoading(true)
-          
-          // Create a new array to represent the desired order
-          const newOrder = [...orderedProfessionals]
-          // Remove the item from its current position
-          const [movedItem] = newOrder.splice(index, 1)
-          // Insert it at the new position (targetPos is 1-based, so subtract 1)
-          newOrder.splice(targetPos - 1, 0, movedItem)
-          
-          const orderedIds = newOrder.map(p => p.nurse.unique_key || '')
-          
-          // Use resetSectionOrder to apply this new order starting from 1
-          const res = await resetSectionOrder(
-              section.id, 
-              selectedUnitId || 'ALL', 
-              selectedMonth + 1, 
-              selectedYear, 
-              undefined, 
-              orderedIds,
-              1 
-          )
-          
-          if (!res.success) {
-              alert(res.message)
-          } else {
-              clearCache()
-              await fetchData(true)
-          }
-          setLoading(false)
-          return
-      }
-
-      if (direction === 'up' && index === 0) return
-      if (direction === 'down' && index === orderedProfessionals.length - 1) return
-
-      const targetIndex = direction === 'up' ? index - 1 : index + 1
-      const current = orderedProfessionals[index]
-      const target = orderedProfessionals[targetIndex]
-
-      // Use unique_key as ID (which is roster ID usually)
-      const currentId = current.nurse.unique_key
-      const targetId = target.nurse.unique_key
-      
-      if (!currentId || !targetId) {
-          alert('Erro: ID do profissional inválido para ordenação.')
-          return
-      }
-      
-      setLoading(true)
-
-      // Check if we can do a simple swap (both have valid listOrder)
-      const currentOrder = current.nurse.listOrder
-      const targetOrder = target.nurse.listOrder
-      
-      const isValid = (o: number | undefined | null) => o !== undefined && o !== null
-
-      if (isValid(currentOrder) && isValid(targetOrder)) {
-          // Swap values
-          const updates = [
-              { id: currentId, list_order: targetOrder! },
-              { id: targetId, list_order: currentOrder! }
-          ]
-          
-          const res = await updateRosterListOrders(updates)
-          if (!res.success) {
-              alert(res.message)
-          } else {
-              clearCache()
-              await fetchData(true)
-          }
-      } else {
-          // Fallback: Materialize everything using resetSectionOrder
-          const newOrder = [...orderedProfessionals]
-          newOrder[index] = target
-          newOrder[targetIndex] = current
-          
-          const orderedIds = newOrder.map(p => p.nurse.unique_key || '')
-          
-          // Use resetSectionOrder to apply this order
-          const res = await resetSectionOrder(
-              section.id, 
-              selectedUnitId || 'ALL', 
-              selectedMonth + 1, 
-              selectedYear, 
-              undefined, 
-              orderedIds,
-              1 
-          )
-          
-          if (!res.success) {
-              alert(res.message)
-          } else {
-              clearCache()
-              await fetchData(true)
-          }
-      }
-      
-      setLoading(false)
-    }
-
     return (
       <>
         {orderedProfessionals.map(({ nurse, firstDay, isTecnico, rowNumber }, index) => {
@@ -1860,24 +1846,29 @@ export default function Schedule({
                     }}
                     onBlur={async (e) => {
                       const newValue = parseInt(e.target.value, 10)
-                      if (isNaN(newValue) || newValue < 0) {
+                      if (isNaN(newValue) || newValue < 1) {
                          e.target.value = String(rowNumber)
                          return
                       }
                       
                       if (newValue === rowNumber) return
 
-                      // Lógica de Numeração Manual:
-                      // Alteramos apenas o número visual (#) sem mudar a posição da linha.
-                      // O listOrder é composto por (posição * 10000) + número visual.
-                      // Para manter a posição, mantemos a parte dos 10000 e trocamos o resto.
-                      
-                      const currentFullOrder = orderedProfessionals[index].listOrder || (index + 1) * 10000
-                      const basePosition = Math.floor(currentFullOrder / 10000) * 10000
-                      const newListOrder = basePosition + (newValue % 10000)
+                      const ok = confirm(`Deseja reiniciar a numeração a partir deste item começando em ${newValue}?`)
+                      if (!ok) {
+                        e.target.value = String(rowNumber)
+                        return
+                      }
 
                       setLoading(true)
-                      await handleUpdateOrder(nurse.unique_key || nurse.id, newListOrder)
+                      const orderedRosterIds = orderedProfessionals.map(p => p.unique_key || '')
+                      const res = await resetSectionOrder(section.id, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, nurse.unique_key, orderedRosterIds, newValue)
+                      if (!res.success) {
+                        alert(res.message || 'Erro ao reiniciar numeração')
+                        e.target.value = String(rowNumber)
+                      } else {
+                        clearCache()
+                        await fetchData(true)
+                      }
                       setLoading(false)
                     }}
                   />
@@ -1890,30 +1881,19 @@ export default function Schedule({
                   {isAdmin && (
                     <div className="flex flex-col mr-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
                        <button 
-                           onClick={() => handleMoveRow(index, 'up')}
-                           className="text-[10px] leading-3 hover:text-blue-600 hover:font-bold focus:outline-none"
-                           title="Mover para cima"
-                           disabled={index === 0}
-                       >▲</button>
+                           onClick={() => handleInsertProfessional(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                           className="text-blue-500 hover:text-blue-700 focus:outline-none"
+                           title="Inserir Profissional Acima"
+                       >
+                           <ArrowUpCircle size={12} />
+                       </button>
                        <button 
-                           onClick={() => {
-                               const pos = prompt(`Mover "${nurse.name}" para qual posição? (1 a ${orderedProfessionals.length})`)
-                               if (pos) {
-                                   const targetPos = parseInt(pos, 10)
-                                   if (!isNaN(targetPos)) {
-                                       handleMoveRow(index, 'to', targetPos)
-                                   }
-                               }
-                           }}
-                           className="text-[10px] leading-3 hover:text-blue-600 hover:font-bold focus:outline-none my-0.5 flex justify-center"
-                           title="Mover para posição específica"
-                       ><Move size={10} /></button>
-                       <button 
-                           onClick={() => handleMoveRow(index, 'down')}
-                           className="text-[10px] leading-3 hover:text-blue-600 hover:font-bold focus:outline-none"
-                           title="Mover para baixo"
-                           disabled={index === orderedProfessionals.length - 1}
-                       >▼</button>
+                           onClick={() => handleInsertProfessional(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                           className="text-blue-500 hover:text-blue-700 focus:outline-none"
+                           title="Inserir Profissional Abaixo"
+                       >
+                           <ArrowDownCircle size={12} />
+                       </button>
                     </div>
                   )}
                   {isAdmin && (
@@ -3161,13 +3141,33 @@ export default function Schedule({
             padding: 0 !important;
             padding-left: 5mm !important; /* Safety margin for paper edges */
             background-color: #ffffff !important;
-            width: 142.85% !important; /* compensate for scale(0.7) */
-            transform: scale(0.7) !important;
+            width: 133.33% !important; /* compensate for scale(0.75) */
+            transform: scale(0.75) !important;
             transform-origin: top left !important;
+            text-rendering: optimizeLegibility !important;
+            -webkit-print-color-adjust: exact !important;
           }
           .schedule-root * {
-            font-size: 7.5px !important;
+            font-size: 8px !important;
+            color: black !important;
+            border-color: black !important;
           }
+          .schedule-root .bg-\[\#1e3a5f\] {
+            background-color: #1e3a5f !important;
+            color: white !important;
+          }
+          .schedule-root .bg-\[\#3b5998\] {
+            background-color: #3b5998 !important;
+            color: white !important;
+          }
+          .schedule-root .bg-\[\#5072a7\] {
+            background-color: #5072a7 !important;
+            color: white !important;
+          }
+          .schedule-root .text-red-600 { color: #dc2626 !important; }
+          .schedule-root .text-green-600 { color: #16a34a !important; }
+          .schedule-root .text-blue-600 { color: #2563eb !important; }
+          .schedule-root .bg-yellow-400 { background-color: #facc15 !important; }
         }
       `}</style>
       {/* Shift Management Modal */}
@@ -3523,6 +3523,18 @@ ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
                 </div>
             </div>
         </div>
+      )}
+
+      {/* Nurse Selection Modal for Insertion */}
+      {isNurseModalOpen && (
+          <NurseSelectionModal 
+              isOpen={isNurseModalOpen}
+              onClose={() => setIsNurseModalOpen(false)}
+              onSelect={onNurseSelected}
+              nurses={data.nurses}
+              sectionTitle={data.sections.find(s => s.id === insertionData?.sectionId)?.title}
+              existingNurseIds={[]} // Allow adding someone already in the list for double scale
+          />
       )}
     </div>
   )
