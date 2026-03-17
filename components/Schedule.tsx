@@ -820,8 +820,8 @@ export default function Schedule({
         alert('Erro ao salvar observação')
         await fetchData(true)
     } else {
-        // Ensure consistency
-        await fetchData(true)
+        // Clear cache but no need for immediate full refresh if UI is correct
+        clearCache()
     }
   }
 
@@ -841,7 +841,7 @@ export default function Schedule({
         alert('Erro ao salvar setor')
         await fetchData(true)
     } else {
-        // Ensure consistency by clearing cache, but no need to re-fetch immediately if optimistic update is correct
+        // Clear cache but no need for immediate full refresh if UI is correct
         clearCache()
     }
   }
@@ -1310,12 +1310,53 @@ export default function Schedule({
 
         if (!res.success) {
             alert('Erro ao salvar: ' + (res.message || 'Erro desconhecido'))
+            await fetchData(true)
             return
         }
 
+        // Optimistic UI Update: update shifts in local state
+        setData(prev => {
+            const currentShifts = prev.shifts || []
+            const newShifts = [...currentShifts]
+            
+            shiftsToSave.forEach(sToSave => {
+                if (sToSave.type === 'DELETE') {
+                    // Remove matching shift
+                    const idx = newShifts.findIndex(ns => 
+                        ns.nurse_id === sToSave.nurseId && 
+                        ns.shift_date === sToSave.date && 
+                        ns.roster_id === sToSave.rosterId
+                    )
+                    if (idx !== -1) newShifts.splice(idx, 1)
+                } else {
+                    // Add or Update
+                    const existingIdx = newShifts.findIndex(ns => 
+                        ns.nurse_id === sToSave.nurseId && 
+                        ns.shift_date === sToSave.date && 
+                        ns.roster_id === sToSave.rosterId
+                    )
+                    const newShiftObj = {
+                        id: `temp-${Date.now()}-${Math.random()}`,
+                        nurse_id: sToSave.nurseId,
+                        roster_id: sToSave.rosterId,
+                        shift_date: sToSave.date,
+                        shift_type: sToSave.type as any
+                    }
+                    if (existingIdx !== -1) {
+                        newShifts[existingIdx] = newShiftObj
+                    } else {
+                        newShifts.push(newShiftObj)
+                    }
+                }
+            })
+            
+            return { ...prev, shifts: newShifts }
+        })
+
         setIsShiftModalOpen(false)
         clearCache()
-        await fetchData(true)
+        // No need for immediate fetchData(true) as we updated state optimistically
+        // await fetchData(true) 
 
     } catch (error) {
         console.error("Error saving shifts:", error)
