@@ -1895,7 +1895,7 @@ export default function Schedule({
           return (
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
-                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-10 ${isAdmin ? '' : ''}`}
+                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-12 ${isAdmin ? '' : ''}`}
                 title={isAdmin ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
                 {isAdmin ? (
@@ -2678,8 +2678,8 @@ export default function Schedule({
                     <div key={section.id}>
                        <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[7px]">
                              <colgroup>
-                                <col className="w-8 print:w-10" />
-                                <col className="w-[180px] print:w-[120px]" />
+                                <col className="w-8 print:w-12" />
+                                <col className="w-[180px] print:w-[130px]" />
                                 <col className="w-20 print:w-16" />
                                 <col className="w-20 print:w-16" />
                                 <col className="w-16 print:w-14" />
@@ -3228,7 +3228,7 @@ export default function Schedule({
             -webkit-print-color-adjust: exact !important;
           }
           .schedule-root * {
-            font-size: 8px !important;
+            font-size: 10px !important;
             color: inherit;
             border-color: black !important;
           }
@@ -3242,7 +3242,7 @@ export default function Schedule({
             font-size: 16px !important;
           }
           .schedule-root th {
-            font-size: 10px !important;
+            font-size: 12px !important;
           }
           .schedule-root td, .schedule-root th {
             color: black;
