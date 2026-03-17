@@ -1962,7 +1962,7 @@ export default function Schedule({
                    </div>
                 </div>
               </td>
-              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{formatRole(nurse.role) || '-'}</td>
+              <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">{formatRole(nurse.role)}</td>
               <td className="border border-black px-1 py-1 text-center text-[10px] uppercase">
                 {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
@@ -1998,11 +1998,13 @@ export default function Schedule({
                     // Try to find the nurse in the base data.nurses to get the most up-to-date fields
                     const baseNurse = data.nurses.find(n => n.id === nurse.id)
                     const source = baseNurse || nurse
-                    const val = source[dynamicField as keyof Nurse] || '-'
+                    const val = source[dynamicField as keyof Nurse]
                     
                     if (dynamicField === 'role') return formatRole(val as string)
-                    if (dynamicField === 'phone' && val !== '-') {
-                        const digits = String(val).replace(/\D/g, '')
+                    
+                    const displayVal = val || '-'
+                    if (dynamicField === 'phone' && displayVal !== '-') {
+                        const digits = String(displayVal).replace(/\D/g, '')
                         if (digits.length === 11) {
                             return `(${digits.slice(0, 2)})${digits.slice(2, 7)}-${digits.slice(7)}`
                         } else if (digits.length === 10) {
