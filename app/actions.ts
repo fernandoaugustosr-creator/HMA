@@ -2939,28 +2939,30 @@ export async function assignNurseToRoster(
             (unitId ? r.unit_id === unitId : !r.unit_id)
         )
         
+        let finalOrder = listOrder
+        if (finalOrder === undefined || finalOrder === null) {
+            // Find max list_order in this section/month/unit to put at the end
+            const currentRoster = db.monthly_rosters.filter((r: any) => 
+                r.section_id === sectionId && 
+                r.month === m && 
+                r.year === year &&
+                (unitId ? r.unit_id === unitId : !r.unit_id)
+            )
+            if (currentRoster.length > 0) {
+                const maxOrder = Math.max(...currentRoster.map((r: any) => r.list_order || 0))
+                finalOrder = maxOrder + 1
+            } else {
+                finalOrder = 1
+            }
+        }
+
         if (existingIndex !== -1 && !allowDuplicate) {
           db.monthly_rosters[existingIndex].section_id = sectionId
           db.monthly_rosters[existingIndex].unit_id = unitId
           if (observation !== undefined) db.monthly_rosters[existingIndex].observation = observation
           if (createdAt) db.monthly_rosters[existingIndex].created_at = createdAt
-          if (listOrder !== undefined) db.monthly_rosters[existingIndex].list_order = listOrder
+          if (finalOrder !== undefined) db.monthly_rosters[existingIndex].list_order = finalOrder
         } else {
-          // If adding new to roster, clear any existing shifts for this month (clean slate) ONLY if not duplicate mode
-          // This prevents "ghost" shifts from appearing if the nurse had shifts in this month previously
-          // But if we are adding a duplicate (ED), we should NOT clear shifts as they might belong to the other bond (shared shifts limitation)
-          // if (!allowDuplicate) {
-          //     const startDate = `${year}-${String(m).padStart(2, '0')}-01`
-          //     const lastDay = new Date(year, m, 0).getDate()
-          //     const endDate = `${year}-${String(m).padStart(2, '0')}-${lastDay}`
-              
-          //     if (db.shifts) {
-          //         db.shifts = db.shifts.filter((s: any) => 
-          //           !(s.nurse_id === nurseId && s.shift_date >= startDate && s.shift_date <= endDate)
-          //         )
-          //     }
-          // }
-
           db.monthly_rosters.push({
             id: randomUUID(),
             nurse_id: nurseId,
@@ -2970,7 +2972,7 @@ export async function assignNurseToRoster(
             year,
             observation: observation || '',
             created_at: createdAt || new Date().toISOString(),
-            list_order: listOrder
+            list_order: finalOrder
           })
         }
     })
@@ -3040,9 +3042,31 @@ export async function assignNurseToRoster(
         month: m, 
         year 
     }
+    
+    let finalOrder = listOrder
+    if (finalOrder === undefined || finalOrder === null) {
+        // Find max list_order in this section/month/unit to put at the end
+        let maxQuery = supabase
+            .from('monthly_rosters')
+            .select('list_order')
+            .eq('section_id', sectionId)
+            .eq('month', m)
+            .eq('year', year)
+        
+        if (unitId) maxQuery = maxQuery.eq('unit_id', unitId)
+        else maxQuery = maxQuery.is('unit_id', null)
+        
+        const { data: maxData } = await maxQuery.order('list_order', { ascending: false }).limit(1)
+        if (maxData && maxData.length > 0) {
+            finalOrder = (maxData[0].list_order || 0) + 1
+        } else {
+            finalOrder = 1
+        }
+    }
+
     if (observation !== undefined) payload.observation = observation
     if (createdAt) payload.created_at = createdAt
-    if (listOrder !== undefined) payload.list_order = listOrder
+    if (finalOrder !== undefined) payload.list_order = finalOrder
 
     let error;
     if (allowDuplicate) {
