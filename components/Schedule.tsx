@@ -3114,6 +3114,9 @@ export default function Schedule({
             margin: 0 auto !important;
             padding: 0 !important;
             background-color: #ffffff !important;
+            width: 133.33% !important; /* compensate for scale(0.75) */
+            transform: scale(0.75) !important;
+            transform-origin: top left !important;
           }
           .schedule-root * {
             font-size: 8px !important;
