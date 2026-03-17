@@ -2579,7 +2579,7 @@ export default function Schedule({
       <div className="print:bg-white bg-white">
         <div className="mb-1"></div>
 
-      <div className={`overflow-x-visible w-full border-none shadow-none relative ${printOnly ? 'print:overflow-visible' : ''}`}>
+      <div className={`overflow-x-visible w-full border-none shadow-none relative schedule-root ${printOnly ? 'print:overflow-visible' : ''}`}>
         {loading ? (
              <div className="text-center py-4">Carregando...</div>
         ) : (
@@ -3149,25 +3149,48 @@ export default function Schedule({
           }
           .schedule-root * {
             font-size: 8px !important;
-            color: black !important;
+            color: inherit;
             border-color: black !important;
           }
-          .schedule-root .bg-\[\#1e3a5f\] {
+          .schedule-root td, .schedule-root th {
+            color: black;
+          }
+          .schedule-root thead tr, 
+          .schedule-root thead th,
+          .schedule-root thead td,
+          .schedule-root .bg-\[\#1e3a5f\], 
+          .schedule-root .bg-\[\#1e3a5f\] *,
+          .schedule-root .bg-\[\#3b5998\],
+          .schedule-root .bg-\[\#3b5998\] *,
+          .schedule-root .bg-\[\#5072a7\],
+          .schedule-root .bg-\[\#5072a7\] * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color: white !important;
+          }
+          .schedule-root .bg-\[\#1e3a5f\], 
+          .schedule-root .bg-\[\#1e3a5f\] * {
             background-color: #1e3a5f !important;
-            color: white !important;
           }
-          .schedule-root .bg-\[\#3b5998\] {
+          .schedule-root .bg-\[\#3b5998\], 
+          .schedule-root .bg-\[\#3b5998\] * {
             background-color: #3b5998 !important;
-            color: white !important;
           }
-          .schedule-root .bg-\[\#5072a7\] {
+          .schedule-root .bg-\[\#5072a7\], 
+          .schedule-root .bg-\[\#5072a7\] * {
             background-color: #5072a7 !important;
-            color: white !important;
           }
+          .schedule-root .text-white { color: white !important; }
           .schedule-root .text-red-600 { color: #dc2626 !important; }
           .schedule-root .text-green-600 { color: #16a34a !important; }
           .schedule-root .text-blue-600 { color: #2563eb !important; }
-          .schedule-root .bg-yellow-400 { background-color: #facc15 !important; }
+          .schedule-root .bg-yellow-400 { 
+            background-color: #facc15 !important; 
+            color: black !important;
+          }
+          .schedule-root .bg-yellow-400 * {
+            color: black !important;
+          }
         }
       `}</style>
       {/* Shift Management Modal */}
