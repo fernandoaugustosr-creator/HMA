@@ -3210,7 +3210,7 @@ export default function Schedule({
             padding: 0 !important;
             padding-left: 5mm !important; /* Safety margin for paper edges */
             background-color: #ffffff !important;
-            width: 100% !important;
+            width: 117.65% !important; /* compensate for 0.85 zoom/scale */
             zoom: 0.85; /* Better for print, doesn't leave gaps */
             text-rendering: optimizeLegibility !important;
             -webkit-print-color-adjust: exact !important;
