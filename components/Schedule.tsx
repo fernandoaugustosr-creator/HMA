@@ -1976,7 +1976,7 @@ export default function Schedule({
                      if (displayObs === '1 ED AB') displayObs = ''
                      if (displayObs === 'AB') displayObs = ''
                      
-                     return <span className={`text-xs font-bold ${nameColorClass} uppercase print:text-[10px]`}>
+                     return <span className={`text-xs font-bold ${nameColorClass} uppercase print:text-[7.5px]`}>
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
@@ -1988,11 +1988,11 @@ export default function Schedule({
                    </div>
                 </div>
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[10px] uppercase">{formatRole(nurse.role)}</td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[10px] uppercase">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">{formatRole(nurse.role)}</td>
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">
                 {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[10px] uppercase">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">
                 {isAdmin && dynamicField === 'coren' ? (
                   <select
                     value={nurse.coren || ''}
@@ -2008,7 +2008,7 @@ export default function Schedule({
                       }
                       setLoading(false)
                     }}
-                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-[10px] print:text-[10px] cursor-pointer outline-none text-center appearance-none"
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-[10px] print:text-[7.5px] cursor-pointer outline-none text-center appearance-none"
                   >
                     <option value="">-</option>
                     {(() => {
@@ -2042,7 +2042,7 @@ export default function Schedule({
                 )}
               </td>
               {!isSetorHidden && (
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[10px] uppercase">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">
                   <SectorCell 
                       initialValue={nurse.sector}
                       onSave={(val) => handleUpdateSector(nurse.unique_key || nurse.id, val)}
@@ -2066,7 +2066,7 @@ export default function Schedule({
                       // Fallback to nurse.id causes shifts from other rosters (same nurse) to leak into this one.
                       const shift = shiftsLookup.lookup[`${nurse.unique_key}_${dateStr}`]
 
-                let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-5 print:w-6 text-center text-[10px] print:text-[9px] leading-none relative text-black font-bold"
+                let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-3.5 print:w-4 text-center text-[10px] print:text-[7px] leading-none relative text-black font-bold"
                 let content = null
 
                 // Priority: Special Leaves > Shift > Absence > Generic Folga (implicit)
@@ -2169,7 +2169,7 @@ export default function Schedule({
                   </td>
                 )
               })}
-              <td className="border border-black px-0.5 py-0.5 text-center w-16 text-xs print:text-[10px] font-bold">{displayTotal}</td>
+              <td className="border border-black px-0.5 py-0.5 text-center w-16 text-xs print:text-[7.5px] font-bold">{displayTotal}</td>
             </tr>
           )
         })}
@@ -2288,7 +2288,7 @@ export default function Schedule({
             alt="Prefeitura de Açailândia" 
             width={140} 
             height={48} 
-            className="h-12 w-auto object-contain print:h-20"
+            className="h-12 w-auto object-contain print:h-16"
             priority
           />
           <Image 
@@ -2296,10 +2296,10 @@ export default function Schedule({
             alt="HMA" 
             width={140} 
             height={48} 
-            className="h-12 w-auto object-contain print:h-20" 
+            className="h-12 w-auto object-contain print:h-16" 
             priority
           />
-          <div className="flex flex-col leading-tight text-[11px] uppercase text-gray-800 print:text-[16px] print:ml-6 print:gap-1">
+          <div className="print-header-text flex flex-col leading-tight text-[13px] uppercase text-gray-800 print:text-[16px] print:ml-4">
             {!isEditingHeader ? (
               <>
                 <span className="font-bold">{headerLine1}</span>
@@ -2308,15 +2308,15 @@ export default function Schedule({
               </>
             ) : (
               <div className="flex flex-col gap-1">
-                <input value={headerLine1} onChange={e => setHeaderLine1(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white text-black" />
-                <input value={headerLine2} onChange={e => setHeaderLine2(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white text-black" />
-                <input value={headerLine3} onChange={e => setHeaderLine3(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white text-black" />
+                <input value={headerLine1} onChange={e => setHeaderLine1(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[13px] bg-white text-black" />
+                <input value={headerLine2} onChange={e => setHeaderLine2(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[13px] bg-white text-black" />
+                <input value={headerLine3} onChange={e => setHeaderLine3(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-[13px] bg-white text-black" />
               </div>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded print:w-32 print:h-32 print:text-[64px] print:rounded-2xl print:bg-[#1f2933] print:text-white print:border-0">
+          <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded print:w-24 print:h-24 print:text-[48px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-0">
             {(unitNumber || headerPage) || '1'}
           </div>
           {isAdmin && !printOnly && (
@@ -2598,27 +2598,27 @@ export default function Schedule({
                     <div key={section.id}>
                        <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[7px]">
                              <colgroup>
-                                <col className="w-8 print:w-12" />
-                                <col className="w-[180px] print:w-[160px]" />
-                                <col className="w-20 print:w-24" />
-                                <col className="w-20 print:w-24" />
-                                <col className="w-16 print:w-20" />
-                                {!isSetorHidden && <col className="w-20 print:w-24" />}
-                                {daysArray.map(d => <col key={d.day} className="w-4 print:w-5" />)}
-                                <col className="w-12 print:w-16" />
+                                <col className="w-8 print:w-10" />
+                                <col className="w-[180px] print:w-[120px]" />
+                                <col className="w-20 print:w-16" />
+                                <col className="w-20 print:w-16" />
+                                <col className="w-16 print:w-14" />
+                                {!isSetorHidden && <col className="w-20 print:w-16" />}
+                                {daysArray.map(d => <col key={d.day} className="w-4 print:w-3.5" />)}
+                                <col className="w-12 print:w-10" />
                              </colgroup>
                              <thead>
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[14px]">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px]">
                                         {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
                                     </th>
                                 </tr>
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[14px] relative group">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px] relative group">
                                         ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
                                         {isAdmin && (
                                             <button 
@@ -2669,7 +2669,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[160px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[11px] group" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[120px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[9px] group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
@@ -2687,14 +2687,14 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[11px] bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[11px] bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-20 font-bold text-sm print:text-[11px] bg-[#1e3a5f]" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-14 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>
                                     {isAdmin ? (
                                         <select 
                                             value={dynamicField}
                                             onChange={(e) => handleDynamicFieldChange(e.target.value as any)}
-                                            className="bg-[#1e3a5f] text-white border-none outline-none font-bold text-sm print:text-[11px] uppercase cursor-pointer hover:text-blue-200 text-center w-full appearance-none"
+                                            className="bg-[#1e3a5f] text-white border-none outline-none font-bold text-sm print:text-[9px] uppercase cursor-pointer hover:text-blue-200 text-center w-full appearance-none"
                                         >
                                             <option value="coren">COREN</option>
                                             <option value="crm">CRM</option>
@@ -2708,7 +2708,7 @@ export default function Schedule({
                                     )}
                                 </th>
                                 {!isSetorHidden && (
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[11px] bg-[#1e3a5f] group relative" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f] group relative" rowSpan={2}>
                                     {isAdmin && (
                                         <button 
                                             onClick={(e) => {
@@ -2751,20 +2751,20 @@ export default function Schedule({
                                 </th>
                                 )}
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[9px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-3.5 text-[10px] print:text-[8px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
                                     {weekday}
                                     </th>
                                 ))}
-                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-16 font-bold text-sm print:text-[11px] bg-[#1e3a5f]">TOTAL</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-10 font-bold text-sm print:text-[9px] bg-[#1e3a5f]">TOTAL</th>
                             </tr>
                             {/* Main Headers Row 2 */}
                             <tr className="bg-[#1e3a5f] text-white">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[9px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-3.5 text-[10px] print:text-[8px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
                                       {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-16 font-bold text-sm print:text-[11px] bg-[#1e3a5f]">PLANTÃO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-10 font-bold text-sm print:text-[9px] bg-[#1e3a5f]">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -3001,7 +3001,7 @@ export default function Schedule({
             if (!activeLeaves) return null
 
             return (
-                <div key={type} className="bg-white text-black border border-black px-1 py-0.5 text-xs print:text-[10px] font-bold uppercase flex items-center">
+                <div key={type} className="bg-white text-black border border-black px-1 py-0.5 text-xs print:text-[8px] font-bold uppercase flex items-center">
                     <span className="mr-2 whitespace-nowrap">{label}:</span>
                     <span className="font-normal truncate">{activeLeaves}</span>
                 </div>
@@ -3010,7 +3010,7 @@ export default function Schedule({
 
         {/* Footer Text Display */}
         {footerText && (
-            <div className="mt-1 text-xs print:text-[10px] text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
+            <div className="mt-1 text-xs print:text-[8px] text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
                 {footerText}
             </div>
         )}
@@ -3148,17 +3148,21 @@ export default function Schedule({
             -webkit-print-color-adjust: exact !important;
           }
           .schedule-root * {
-            font-size: 10px !important;
+            font-size: 8px !important;
             color: inherit;
             border-color: black !important;
           }
           .schedule-root .print-header-number, 
           .schedule-root .print-header-number * {
-            font-size: 64px !important;
+            font-size: 48px !important;
             color: white !important;
           }
+          .schedule-root .print-header-text, 
+          .schedule-root .print-header-text * {
+            font-size: 16px !important;
+          }
           .schedule-root th {
-            font-size: 12px !important;
+            font-size: 10px !important;
           }
           .schedule-root td, .schedule-root th {
             color: black;
