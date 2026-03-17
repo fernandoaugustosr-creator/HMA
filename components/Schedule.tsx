@@ -1686,16 +1686,20 @@ export default function Schedule({
       }
     })
 
-    // FIX: A ordem das linhas deve ser baseada no listOrder real (ordem absoluta no banco),
-    // enquanto o rowNumber é apenas para exibição e renumeração.
+    // FIX: A ordem das linhas deve ser baseada no ID da escala (roster item id) ou na data de criação (created_at)
     // Isso garante que a linha NÃO mude de posição ao alterar apenas o número (#).
+    // A única forma de mudar a ordem é através do handleMoveRow (setas), que altera o listOrder.
     const orderedProfessionals = [...professionalsWithRowNumber].sort((a, b) => {
-        const orderA = a.listOrder || 0
-        const orderB = b.listOrder || 0
+        // Se ambos tiverem listOrder, usa o listOrder (que é alterado pelas setas)
+        if (a.listOrder !== undefined && a.listOrder !== null && b.listOrder !== undefined && b.listOrder !== null) {
+            return a.listOrder - b.listOrder
+        }
         
-        if (orderA !== orderB) return orderA - orderB
-        
-        // Fallback para a ordem original (índice) se o listOrder for igual ou nulo
+        // Se apenas um tiver listOrder, ele vem primeiro
+        if (a.listOrder !== undefined && a.listOrder !== null) return -1
+        if (b.listOrder !== undefined && b.listOrder !== null) return 1
+
+        // Fallback: Ordem cronológica de entrada na escala (usando o index original do fetch)
         return a.index - b.index
     })
     
