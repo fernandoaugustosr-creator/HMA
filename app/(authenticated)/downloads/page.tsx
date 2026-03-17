@@ -285,12 +285,12 @@ export default function DownloadsPage() {
             overflow: hidden; /* Prevent scrollbars or extra pages */
           }
           .print-schedule-root {
-            width: 125%;
+            width: 117.65%;
             background-color: #ffffff !important;
             display: flex;
             justify-content: flex-start;
             align-items: flex-start;
-            transform: scale(0.8); /* Use 80% scale */
+            transform: scale(0.85); /* Use 85% scale */
             transform-origin: top left;
           }
         }

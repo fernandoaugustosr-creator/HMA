@@ -3221,8 +3221,8 @@ export default function Schedule({
             padding: 0 !important;
             padding-left: 5mm !important; /* Safety margin for paper edges */
             background-color: #ffffff !important;
-            width: 125% !important; /* compensate for scale(0.8) */
-            transform: scale(0.8) !important;
+            width: 117.65% !important; /* compensate for scale(0.85) */
+            transform: scale(0.85) !important;
             transform-origin: top left !important;
             text-rendering: optimizeLegibility !important;
             -webkit-print-color-adjust: exact !important;
