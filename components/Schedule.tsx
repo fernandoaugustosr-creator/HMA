@@ -2288,7 +2288,7 @@ export default function Schedule({
             alt="Prefeitura de Açailândia" 
             width={140} 
             height={48} 
-            className="h-12 w-auto object-contain print:h-10"
+            className="h-12 w-auto object-contain print:h-16"
             priority
           />
           <Image 
@@ -2296,10 +2296,10 @@ export default function Schedule({
             alt="HMA" 
             width={140} 
             height={48} 
-            className="h-12 w-auto object-contain print:h-10" 
+            className="h-12 w-auto object-contain print:h-16" 
             priority
           />
-          <div className="flex flex-col leading-tight text-[11px] uppercase text-gray-800 print:text-[8px] print:ml-2">
+          <div className="flex flex-col leading-tight text-[11px] uppercase text-gray-800 print:text-[12px] print:ml-4">
             {!isEditingHeader ? (
               <>
                 <span className="font-bold">{headerLine1}</span>
