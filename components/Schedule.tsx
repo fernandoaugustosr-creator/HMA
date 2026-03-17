@@ -6,7 +6,7 @@ import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
-import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser } from 'lucide-react'
+import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, Move } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
 import NurseCreationModal from './NurseCreationModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
@@ -1720,8 +1720,51 @@ export default function Schedule({
       setReplicationModalOpen(true)
     }
 
-    const handleMoveRow = async (index: number, direction: 'up' | 'down') => {
+    const handleMoveRow = async (index: number, direction: 'up' | 'down' | 'to', targetPos?: number) => {
       if (!isAdmin) return
+      
+      if (direction === 'to') {
+          if (targetPos === undefined || targetPos < 1 || targetPos > orderedProfessionals.length) {
+              alert('Posição inválida.')
+              return
+          }
+          
+          const current = orderedProfessionals[index]
+          const currentId = current.nurse.unique_key
+          if (!currentId) return
+          
+          setLoading(true)
+          
+          // Create a new array to represent the desired order
+          const newOrder = [...orderedProfessionals]
+          // Remove the item from its current position
+          const [movedItem] = newOrder.splice(index, 1)
+          // Insert it at the new position (targetPos is 1-based, so subtract 1)
+          newOrder.splice(targetPos - 1, 0, movedItem)
+          
+          const orderedIds = newOrder.map(p => p.nurse.unique_key || '')
+          
+          // Use resetSectionOrder to apply this new order starting from 1
+          const res = await resetSectionOrder(
+              section.id, 
+              selectedUnitId || 'ALL', 
+              selectedMonth + 1, 
+              selectedYear, 
+              undefined, 
+              orderedIds,
+              1 
+          )
+          
+          if (!res.success) {
+              alert(res.message)
+          } else {
+              clearCache()
+              await fetchData(true)
+          }
+          setLoading(false)
+          return
+      }
+
       if (direction === 'up' && index === 0) return
       if (direction === 'down' && index === orderedProfessionals.length - 1) return
 
@@ -1829,22 +1872,17 @@ export default function Schedule({
                       
                       if (newValue === rowNumber) return
 
-                      const ok = confirm(`Deseja reiniciar a numeração a partir deste item começando em ${newValue}?`)
-                      if (!ok) {
-                        e.target.value = String(rowNumber)
-                        return
-                      }
+                      // Lógica de Numeração Manual:
+                      // Alteramos apenas o número visual (#) sem mudar a posição da linha.
+                      // O listOrder é composto por (posição * 10000) + número visual.
+                      // Para manter a posição, mantemos a parte dos 10000 e trocamos o resto.
+                      
+                      const currentFullOrder = orderedProfessionals[index].listOrder || (index + 1) * 10000
+                      const basePosition = Math.floor(currentFullOrder / 10000) * 10000
+                      const newListOrder = basePosition + (newValue % 10000)
 
                       setLoading(true)
-                      const orderedRosterIds = orderedProfessionals.map(p => p.unique_key || '')
-                      const res = await resetSectionOrder(section.id, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, nurse.unique_key, orderedRosterIds, newValue)
-                      if (!res.success) {
-                        alert(res.message || 'Erro ao reiniciar numeração')
-                        e.target.value = String(rowNumber)
-                      } else {
-                        clearCache()
-                        await fetchData(true)
-                      }
+                      await handleUpdateOrder(nurse.unique_key || nurse.id, newListOrder)
                       setLoading(false)
                     }}
                   />
@@ -1862,6 +1900,19 @@ export default function Schedule({
                            title="Mover para cima"
                            disabled={index === 0}
                        >▲</button>
+                       <button 
+                           onClick={() => {
+                               const pos = prompt(`Mover "${nurse.name}" para qual posição? (1 a ${orderedProfessionals.length})`)
+                               if (pos) {
+                                   const targetPos = parseInt(pos, 10)
+                                   if (!isNaN(targetPos)) {
+                                       handleMoveRow(index, 'to', targetPos)
+                                   }
+                               }
+                           }}
+                           className="text-[10px] leading-3 hover:text-blue-600 hover:font-bold focus:outline-none my-0.5 flex justify-center"
+                           title="Mover para posição específica"
+                       ><Move size={10} /></button>
                        <button 
                            onClick={() => handleMoveRow(index, 'down')}
                            className="text-[10px] leading-3 hover:text-blue-600 hover:font-bold focus:outline-none"
@@ -2099,7 +2150,7 @@ export default function Schedule({
                 return (
                   <td 
                     key={day} 
-                    className={`${cellClass} ${isAdmin ? 'cursor-pointer hover:bg-yellow-100' : ''} transition-colors`}
+                    className={`${cellClass} ${isAdmin ? 'cursor-pointer hover:bg-yellow-100 hover:scale-110 hover:shadow-lg hover:z-50 transition-all duration-200' : ''}`}
                     onClick={isAdmin ? () => handleCellClick(nurse, dateStr, nurse.unique_key) : undefined}
                     id={`cell-${nurse.unique_key}-${dateStr}`}
                     tabIndex={isAdmin ? 0 : -1}
