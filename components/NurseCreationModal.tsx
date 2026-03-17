@@ -55,9 +55,13 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     setError(null)
 
     const formData = new FormData(e.currentTarget)
+    
+    // Se não houver cargo selecionado, usa o padrão. 
+    // IMPORTANTE: Garantir que não force COORDENACAO_GERAL a menos que seja explicitamente selecionado.
     if (!formData.get('role')) {
         formData.set('role', defaultRole)
     }
+    
     if (defaultSectionId && !formData.get('sectionId')) {
         formData.set('sectionId', defaultSectionId)
     }
@@ -82,20 +86,16 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
 
     if (nurseToEdit) {
         if (vinculos.length === 0) {
-             // If no bond selected, just update with original formData (which might have empty vinculo)
              result = await updateNurse(nurseToEdit.id, null, formData)
         } else {
-             // 1. Update the main record with the first bond
              const firstBond = vinculos[0]
              const firstFd = getFormDataForBond(firstBond)
              result = await updateNurse(nurseToEdit.id, null, firstFd)
 
-             // 2. Create new records for additional bonds
              if (result.success && vinculos.length > 1) {
                  for (let i = 1; i < vinculos.length; i++) {
                      const extraBond = vinculos[i]
                      const extraFd = getFormDataForBond(extraBond)
-                     // Try to create additional records. Ignore "Already exists" errors.
                      const res = await createNurse(null, extraFd)
                      if (!res.success && !res.message?.includes('Já existe')) {
                          result = res
@@ -107,19 +107,20 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
         if (vinculos.length === 0) {
             result = await createNurse(null, formData)
         } else {
-            for (let i = 0; i < vinculos.length; i++) {
-                const bond = vinculos[i]
-                const fd = getFormDataForBond(bond)
-                const res = await createNurse(null, fd)
-                
-                // If it fails with something other than "already exists", we consider it a failure
-                if (!res.success) {
-                     if (!res.message?.includes('Já existe')) {
-                         result = res
-                         break
-                     }
-                } else {
-                    result = res
+            // Se houver múltiplos vínculos, o primeiro cria o registro principal.
+            // Os subsequentes apenas criam registros adicionais se não existirem.
+            const firstBond = vinculos[0]
+            const firstFd = getFormDataForBond(firstBond)
+            result = await createNurse(null, firstFd)
+            
+            if (result.success && vinculos.length > 1) {
+                for (let i = 1; i < vinculos.length; i++) {
+                    const bond = vinculos[i]
+                    const fd = getFormDataForBond(bond)
+                    const res = await createNurse(null, fd)
+                    if (!res.success && !res.message?.includes('Já existe')) {
+                        result = res
+                    }
                 }
             }
         }

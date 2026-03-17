@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
@@ -1625,17 +1625,11 @@ export default function Schedule({
     }))
 
     const professionalsWithRowNumber = sortedProfessionals.map((p, index) => {
-      // Handle "Magic Numbering" (groups of 10000)
-      // If listOrder > 10000, it means it's a new numbering group (e.g. 10001 = 1, 20001 = 1)
       const rawOrder = p.listOrder
-      
-      // FIX: If listOrder is undefined (legacy data), treat as 0 or fallback to index+1
-      // If listOrder is 1, 2, 3... (legacy or low group), use it directly.
-      // If listOrder > 10000, use modulo.
       let displayOrder = rawOrder
       if (rawOrder && rawOrder > 10000) {
           displayOrder = rawOrder % 10000
-          if (displayOrder === 0) displayOrder = 10000 // Edge case if base is 10000
+          if (displayOrder === 0) displayOrder = 10000
       }
 
       const rowNumber =
@@ -1651,7 +1645,9 @@ export default function Schedule({
       }
     })
 
-    const orderedProfessionals = professionalsWithRowNumber
+    // FIX: Garantir que a ordem das linhas seja baseada na NUMERAÇÃO (#) definida pelo usuário.
+    // Isso evita que a linha mude de posição visual ao alterar apenas o número.
+    const orderedProfessionals = [...professionalsWithRowNumber].sort((a, b) => a.rowNumber - b.rowNumber)
     
     const handleCopySectorDown = async (startIndex: number, value: string) => {
       const targets = orderedProfessionals.map((x, idx) => ({
@@ -2540,8 +2536,30 @@ export default function Schedule({
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-1 py-1 text-center font-bold uppercase text-sm relative group">
                                         ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
+                                        {isAdmin && (
+                                            <button 
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    const ok = confirm(`AVISO: Isso irá remover TODOS os profissionais e plantões do grupo "${section.title}" desta escala de ${MONTHS[selectedMonth]}/${selectedYear}. Deseja continuar?`);
+                                                    if (!ok) return;
+                                                    setLoading(true);
+                                                    const res = await clearSectionRoster(selectedMonth + 1, selectedYear, selectedUnitId || null, section.id);
+                                                    if (res.success) {
+                                                        clearCache();
+                                                        await fetchData(true);
+                                                    } else {
+                                                        alert(res.message || 'Erro ao remover grupo');
+                                                    }
+                                                    setLoading(false);
+                                                }}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-200 opacity-0 group-hover:opacity-100 transition-opacity no-print"
+                                                title="Remover este grupo inteiro desta escala mensal"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
                                     </th>
                                 </tr>
                                 {/* Main Headers Row 3 (Columns) */}

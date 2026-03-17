@@ -2706,6 +2706,78 @@ export async function clearMonthlySchedule(month: number, year: number, unitId: 
   }
 }
 
+export async function clearSectionRoster(month: number, year: number, unitId: string | null, sectionId: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+
+    const rosterToDelete = db.monthly_rosters.filter((r: any) => 
+        r.month === month && 
+        r.year === year && 
+        (unitId ? r.unit_id === unitId : !r.unit_id) &&
+        r.section_id === sectionId
+    )
+    const rosterIds = rosterToDelete.map((r: any) => r.id)
+
+    if (rosterIds.length === 0) return { success: true }
+
+    db.monthly_rosters = db.monthly_rosters.filter((r: any) => !rosterIds.includes(r.id))
+
+    db.shifts = db.shifts.filter((s: any) => {
+      if (s.roster_id && rosterIds.includes(s.roster_id)) return false
+      return true
+    })
+
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  try {
+    const supabase = createClient()
+
+    let rosterQuery = supabase
+      .from('monthly_rosters')
+      .select('id')
+      .eq('month', month)
+      .eq('year', year)
+      .eq('section_id', sectionId)
+
+    if (unitId) rosterQuery = rosterQuery.eq('unit_id', unitId)
+    else rosterQuery = rosterQuery.is('unit_id', null)
+
+    const { data: rosterItems, error: rosterError } = await rosterQuery
+    if (rosterError) throw rosterError
+
+    const rosterIds = rosterItems?.map(r => r.id) || []
+
+    if (rosterIds.length > 0) {
+        const { error: shiftsError } = await supabase
+            .from('shifts')
+            .delete()
+            .in('roster_id', rosterIds)
+        if (shiftsError) throw shiftsError
+
+        const { error: deleteError } = await supabase
+            .from('monthly_rosters')
+            .delete()
+            .in('id', rosterIds)
+        if (deleteError) throw deleteError
+    }
+
+    revalidatePath('/')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error clearing section roster:', error)
+    return { success: false, message: error.message }
+  }
+}
+
 export async function clearAllUnitRosters(unitId: string) {
   try {
     await checkAdmin()
