@@ -75,7 +75,7 @@ export default function NurseSelectionModal({ isOpen, onClose, onSelect, nurses,
                                             {isSeletivo && <span className="text-xs font-normal text-gray-500 ml-1">(SEL)</span>}
                                         </p>
                                         <p className="text-xs text-gray-500">
-                                            {formatRole(nurse.role)} • COREN: {nurse.coren || '-'}
+                                            {nurse.role ? `${formatRole(nurse.role)} • ` : ''}COREN: {nurse.coren || '-'}
                                             {nurse.vinculo && ` • ${nurse.vinculo}`}
                                         </p>
                                     </div>

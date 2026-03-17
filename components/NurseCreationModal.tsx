@@ -284,7 +284,7 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                     defaultValue={nurseToEdit?.role || ''}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 >
-                    <option value="">Campo Vazio</option>
+                    <option value="">Em Branco</option>
                     <option value="ENFERMEIRO">Enfermeiro(a)</option>
                     <option value="TECNICO">Técnico de Enfermagem</option>
                     <option value="MEDICO">Médico(a)</option>
