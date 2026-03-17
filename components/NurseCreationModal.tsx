@@ -272,6 +272,16 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                     />
                     <span>SELETIVO</span>
                   </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="vinculo"
+                      value="CESSÃO"
+                      defaultChecked={nurseToEdit?.vinculo?.includes('CESSÃO')}
+                      className="h-4 w-4"
+                    />
+                    <span>CESSÃO</span>
+                  </label>
                 </div>
             </div>
           </div>
