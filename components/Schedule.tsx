@@ -1895,7 +1895,7 @@ export default function Schedule({
           return (
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
-                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-16 ${isAdmin ? '' : ''}`}
+                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-6 ${isAdmin ? '' : ''}`}
                 title={isAdmin ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
                 {isAdmin ? (
@@ -2678,8 +2678,8 @@ export default function Schedule({
                     <div key={section.id}>
                        <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[7px]">
                              <colgroup>
-                                <col className="w-8 print:w-16" />
-                                <col className="w-[180px] print:w-[150px]" />
+                                <col className="w-8 print:w-6" />
+                                <col className="w-[180px] print:w-[224px]" />
                                 <col className="w-20 print:w-24" />
                                 <col className="w-20 print:w-24" />
                                 <col className="w-16 print:w-20" />
@@ -2727,7 +2727,7 @@ export default function Schedule({
                                 {/* Main Headers Row 3 (Columns) */}
                                 <tr className="bg-[#1e3a5f] text-white">
                                     <th 
-                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#1e3a5f] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] print:w-16"
+                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#1e3a5f] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] print:w-6"
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
@@ -2749,7 +2749,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[150px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[224px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
