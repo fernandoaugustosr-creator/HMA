@@ -77,17 +77,16 @@ html, body {
 @media print {
   @page {
     size: landscape;
-    margin: 0;
+    margin: 5mm; /* Minimum margin for printers */
   }
 
   html, body {
     background-color: #ffffff !important;
     background-image: none !important;
-    width: 100vw !important;
-    height: 100vh !important;
+    width: 100% !important;
+    height: auto !important;
     margin: 0 !important;
     padding: 0 !important;
-    overflow: hidden !important; /* Force single page if content fits */
   }
 
   /* Force layout backgrounds to white */

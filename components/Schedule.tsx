@@ -1805,7 +1805,7 @@ export default function Schedule({
           return (
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
-                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-6 ${isAdmin ? '' : ''}`}
+                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-10 ${isAdmin ? '' : ''}`}
                 title={isAdmin ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
                 {isAdmin ? (
@@ -2572,7 +2572,7 @@ export default function Schedule({
                     <div key={section.id}>
                        <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[8px]">
                              <colgroup>
-                                <col className="w-8 print:w-6" />
+                                <col className="w-8 print:w-10" />
                                 <col className="w-[180px] print:w-[120px]" />
                                 <col className="w-20 print:w-16" />
                                 <col className="w-20 print:w-16" />
@@ -3111,8 +3111,9 @@ export default function Schedule({
             border-color: #000000 !important;
           }
           .schedule-root {
-            margin: 0 auto !important;
+            margin: 0 !important;
             padding: 0 !important;
+            padding-left: 10mm !important; /* Safety margin for paper edges */
             background-color: #ffffff !important;
             width: 133.33% !important; /* compensate for scale(0.75) */
             transform: scale(0.75) !important;
