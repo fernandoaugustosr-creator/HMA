@@ -1667,22 +1667,17 @@ export default function Schedule({
 
     const professionalsWithRowNumber = sortedProfessionals.map((p, index) => {
       const rawOrder = p.listOrder
-      let displayOrder = rawOrder
-      if (rawOrder && rawOrder > 10000) {
-          displayOrder = rawOrder % 10000
-          if (displayOrder === 0) displayOrder = 10000
-      }
-
-      const rowNumber =
-        displayOrder !== undefined && displayOrder !== null && displayOrder > 0
-          ? displayOrder
-          : index + 1
+      
+      // Se o listOrder for > 10000, significa que tem um número manual definido pelo usuário.
+      // Caso contrário, o usuário quer que comece "zerado" (0).
+      const rowNumber = (rawOrder && rawOrder >= 10000) 
+         ? (rawOrder % 10000)
+         : 0
           
-      const group = rowNumber
       return {
         ...p,
         rowNumber,
-        group
+        group: rowNumber
       }
     })
 
@@ -1865,7 +1860,7 @@ export default function Schedule({
                     }}
                     onBlur={async (e) => {
                       const newValue = parseInt(e.target.value, 10)
-                      if (isNaN(newValue) || newValue < 1) {
+                      if (isNaN(newValue) || newValue < 0) {
                          e.target.value = String(rowNumber)
                          return
                       }
