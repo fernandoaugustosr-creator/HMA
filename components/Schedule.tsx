@@ -1645,9 +1645,18 @@ export default function Schedule({
       }
     })
 
-    // FIX: Garantir que a ordem das linhas seja baseada na NUMERAÇÃO (#) definida pelo usuário.
-    // Isso evita que a linha mude de posição visual ao alterar apenas o número.
-    const orderedProfessionals = [...professionalsWithRowNumber].sort((a, b) => a.rowNumber - b.rowNumber)
+    // FIX: A ordem das linhas deve ser baseada no listOrder real (ordem absoluta no banco),
+    // enquanto o rowNumber é apenas para exibição e renumeração.
+    // Isso garante que a linha NÃO mude de posição ao alterar apenas o número (#).
+    const orderedProfessionals = [...professionalsWithRowNumber].sort((a, b) => {
+        const orderA = a.listOrder || 0
+        const orderB = b.listOrder || 0
+        
+        if (orderA !== orderB) return orderA - orderB
+        
+        // Fallback para a ordem original (índice) se o listOrder for igual ou nulo
+        return a.index - b.index
+    })
     
     const handleCopySectorDown = async (startIndex: number, value: string) => {
       const targets = orderedProfessionals.map((x, idx) => ({
