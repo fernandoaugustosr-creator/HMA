@@ -67,7 +67,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [nurseToEdit, setNurseToEdit] = useState<any | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO' | 'COORDENADOR'>('ALL')
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO' | 'COORDENADOR' | 'BLANK'>('ALL')
   const [vinculoFilter, setVinculoFilter] = useState<string>('ALL')
   const [sectionFilter, setSectionFilter] = useState<string>('ALL')
   const [nameFilter, setNameFilter] = useState<string>('')
@@ -105,7 +105,9 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
         const roleOk =
           roleFilter === 'ALL'
             ? true
-            : (nurse.role || '').toUpperCase() === roleFilter
+            : roleFilter === 'BLANK'
+              ? !nurse.role || nurse.role.trim() === ''
+              : (nurse.role || '').toUpperCase() === roleFilter
 
         const vinculoOk =
           vinculoFilter === 'ALL'
@@ -245,6 +247,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                     className="mt-1 block border border-gray-300 rounded-md shadow-sm p-1 text-[11px] bg-white text-gray-700"
                   >
                     <option value="ALL">Todos</option>
+                    <option value="BLANK">Vazio (Sem Cargo)</option>
                     <option value="ENFERMEIRO">Enfermeiro(a)</option>
                     <option value="TECNICO">Técnico</option>
                     <option value="MEDICO">Médico(a)</option>
