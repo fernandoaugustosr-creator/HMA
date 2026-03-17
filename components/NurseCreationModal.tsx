@@ -10,11 +10,13 @@ interface NurseCreationModalProps {
   defaultRole?: string
   defaultSectionId?: string
   defaultUnitId?: string
+  selectedMonth?: number
+  selectedYear?: number
   nurseToEdit?: any
   sections?: any[]
 }
 
-export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId, defaultUnitId, nurseToEdit, sections = [] }: NurseCreationModalProps) {
+export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId, defaultUnitId, selectedMonth, selectedYear, nurseToEdit, sections = [] }: NurseCreationModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [useDefaultPassword, setUseDefaultPassword] = useState(false)
@@ -61,6 +63,12 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     }
     if (defaultUnitId) {
         formData.set('unitId', defaultUnitId)
+    }
+    if (selectedMonth !== undefined) {
+        formData.set('month', String(selectedMonth + 1))
+    }
+    if (selectedYear !== undefined) {
+        formData.set('year', String(selectedYear))
     }
 
     const vinculos = formData.getAll('vinculo').filter(Boolean) as string[]

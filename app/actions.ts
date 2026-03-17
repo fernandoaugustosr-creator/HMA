@@ -476,6 +476,10 @@ export async function createNurse(prevState: any, formData: FormData) {
   const unitId = formData.get('unitId') as string
   const sector = formData.get('sector') as string // Manual sector name if provided
 
+  // Custom Month/Year for roster insertion
+  const customMonth = formData.get('month') ? parseInt(formData.get('month') as string, 10) : null
+  const customYear = formData.get('year') ? parseInt(formData.get('year') as string, 10) : null
+
   // Validate Name (Essential)
   if (!name) {
     return { success: false, message: 'Nome é obrigatório' }
@@ -515,11 +519,11 @@ export async function createNurse(prevState: any, formData: FormData) {
 
     db.nurses.push(newNurse)
 
-    // Add to current month roster automatically
+    // Add to roster automatically
     if (finalSectionId) {
         const now = new Date()
-        const currentMonth = now.getMonth() + 1
-        const currentYear = now.getFullYear()
+        const rosterMonth = customMonth || (now.getMonth() + 1)
+        const rosterYear = customYear || now.getFullYear()
         
         // Ensure monthly_rosters exists
         if (!db.monthly_rosters) db.monthly_rosters = []
@@ -529,8 +533,8 @@ export async function createNurse(prevState: any, formData: FormData) {
             nurse_id: newNurse.id,
             section_id: finalSectionId,
             unit_id: unitId,
-            month: currentMonth,
-            year: currentYear,
+            month: rosterMonth,
+            year: rosterYear,
             sector: sector || '', // History for this month
             created_at: new Date().toISOString()
         })
@@ -581,18 +585,18 @@ export async function createNurse(prevState: any, formData: FormData) {
     return { success: false, message: 'Erro ao cadastrar servidor: ' + error.message }
   }
 
-  // Add to current month roster automatically
+  // Add to roster automatically
   if (insertedNurse && finalSectionId) {
       const now = new Date()
-      const currentMonth = now.getMonth() + 1
-      const currentYear = now.getFullYear()
+      const rosterMonth = customMonth || (now.getMonth() + 1)
+      const rosterYear = customYear || now.getFullYear()
       
       await supabase.from('monthly_rosters').insert({
           nurse_id: insertedNurse.id,
           section_id: finalSectionId,
           unit_id: unitId,
-          month: currentMonth,
-          year: currentYear,
+          month: rosterMonth,
+          year: rosterYear,
           sector: sector || '' // History for this month
       })
   }

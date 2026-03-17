@@ -304,6 +304,7 @@ export default function Schedule({
 
   // Insertion State
   const [isNurseModalOpen, setIsNurseModalOpen] = useState(false)
+  const [isCreationModalOpen, setIsCreationModalOpen] = useState(false)
   const [insertionData, setInsertionData] = useState<{ sectionId: string, position: number, rosterId?: string, orderedIds: string[] } | null>(null)
 
   // Replication State
@@ -1018,6 +1019,71 @@ export default function Schedule({
     const position = direction === 'above' ? index : index + 1
     setInsertionData({ sectionId, position, orderedIds: currentOrderedIds })
     setIsNurseModalOpen(true)
+  }
+
+  const handleCreateNewAndInsert = (sectionId: string, index: number, direction: 'above' | 'below', currentOrderedIds: string[]) => {
+    const position = direction === 'above' ? index : index + 1
+    setInsertionData({ sectionId, position, orderedIds: currentOrderedIds })
+    setIsCreationModalOpen(true)
+  }
+
+  const onNurseCreated = async () => {
+    if (!insertionData) return
+    setIsCreationModalOpen(false)
+    
+    const { sectionId, position, orderedIds: previousOrderedIds } = insertionData
+    setLoading(true)
+    
+    try {
+        // Find the new roster entry ID
+        const freshData = await fetchData(true)
+        if (!freshData) {
+            setLoading(false)
+            return
+        }
+        
+        const currentRosterInThisContext = freshData.roster.filter(r => 
+            r.section_id === sectionId && 
+            r.month === selectedMonth + 1 && 
+            r.year === selectedYear && 
+            (!selectedUnitId || r.unit_id === selectedUnitId)
+        )
+        
+        // Find the one that is NOT in the previous ordered list
+        const previousIdsSet = new Set(previousOrderedIds)
+        const newRosterEntry = currentRosterInThisContext.find(r => !previousIdsSet.has(r.id))
+        
+        if (!newRosterEntry) {
+            setLoading(false)
+            return
+        }
+
+        const orderedIds = [...previousOrderedIds]
+        orderedIds.splice(position, 0, newRosterEntry.id)
+        
+        const orderRes = await resetSectionOrder(
+            sectionId, 
+            selectedUnitId || 'ALL', 
+            selectedMonth + 1, 
+            selectedYear, 
+            undefined, 
+            orderedIds,
+            1 
+        )
+        
+        if (orderRes.success) {
+            clearCache()
+            await fetchData(true)
+        } else {
+            alert('Erro ao ordenar: ' + orderRes.message)
+        }
+    } catch (error) {
+        console.error(error)
+        alert('Erro ao processar inserção.')
+    } finally {
+        setLoading(false)
+        setInsertionData(null)
+    }
   }
 
   const onNurseSelected = async (nurseId: string) => {
@@ -1879,20 +1945,34 @@ export default function Schedule({
               <td className="border border-black px-1 py-0.5 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[120px] border-r-2 border-r-black text-center">
                 <div className="flex items-center justify-center gap-1">
                   {isAdmin && (
-                    <div className="flex flex-col mr-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
+                    <div className="grid grid-cols-2 gap-x-1 mr-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
                        <button 
                            onClick={() => handleInsertProfessional(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
                            className="text-blue-500 hover:text-blue-700 focus:outline-none"
-                           title="Inserir Profissional Acima"
+                           title="Inserir Profissional Existente Acima"
                        >
                            <ArrowUpCircle size={12} />
                        </button>
                        <button 
+                           onClick={() => handleCreateNewAndInsert(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                           className="text-green-500 hover:text-green-700 focus:outline-none"
+                           title="Cadastrar Novo Profissional Acima"
+                       >
+                           <PlusCircle size={12} />
+                       </button>
+                       <button 
                            onClick={() => handleInsertProfessional(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
                            className="text-blue-500 hover:text-blue-700 focus:outline-none"
-                           title="Inserir Profissional Abaixo"
+                           title="Inserir Profissional Existente Abaixo"
                        >
                            <ArrowDownCircle size={12} />
+                       </button>
+                       <button 
+                           onClick={() => handleCreateNewAndInsert(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                           className="text-green-500 hover:text-green-700 focus:outline-none"
+                           title="Cadastrar Novo Profissional Abaixo"
+                       >
+                           <PlusCircle size={12} />
                        </button>
                     </div>
                   )}
@@ -3569,6 +3649,20 @@ ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
               nurses={data.nurses}
               sectionTitle={data.sections.find(s => s.id === insertionData?.sectionId)?.title}
               existingNurseIds={[]} // Allow adding someone already in the list for double scale
+          />
+      )}
+
+      {/* Nurse Creation Modal for Insertion */}
+      {isCreationModalOpen && (
+          <NurseCreationModal 
+              isOpen={isCreationModalOpen}
+              onClose={() => setIsCreationModalOpen(false)}
+              onSuccess={onNurseCreated}
+              defaultSectionId={insertionData?.sectionId}
+              defaultUnitId={selectedUnitId}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              sections={data.sections}
           />
       )}
     </div>
