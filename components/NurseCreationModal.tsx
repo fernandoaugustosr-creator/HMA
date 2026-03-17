@@ -56,12 +56,6 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
 
     const formData = new FormData(e.currentTarget)
     
-    // Se não houver cargo selecionado, usa o padrão. 
-    // IMPORTANTE: Garantir que não force COORDENACAO_GERAL a menos que seja explicitamente selecionado.
-    if (!formData.get('role')) {
-        formData.set('role', defaultRole)
-    }
-    
     if (defaultSectionId && !formData.get('sectionId')) {
         formData.set('sectionId', defaultSectionId)
     }

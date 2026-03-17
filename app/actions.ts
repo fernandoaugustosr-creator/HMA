@@ -471,7 +471,7 @@ export async function createNurse(prevState: any, formData: FormData) {
   const crm = formData.get('crm') as string
   const phone = formData.get('phone') as string
   const vinculo = formData.get('vinculo') as string
-  const role = formData.get('role') as string || 'ENFERMEIRO'
+  const role = formData.get('role') as string || ''
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
   const sector = formData.get('sector') as string // Manual sector name if provided
