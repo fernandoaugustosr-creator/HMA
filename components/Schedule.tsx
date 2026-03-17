@@ -1812,7 +1812,7 @@ export default function Schedule({
                   <input
                     type="number"
                     defaultValue={rowNumber}
-                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 appearance-none m-0 p-0 text-black font-bold print:text-[8px]"
+                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 appearance-none m-0 p-0 text-black font-bold print:text-[7px]"
                     onKeyDown={async (e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
@@ -1849,7 +1849,7 @@ export default function Schedule({
                     }}
                   />
                 ) : (
-                  <span className="text-black font-bold print:text-[8px]">{rowNumber}</span>
+                  <span className="text-black font-bold print:text-[7px]">{rowNumber}</span>
                 )}
               </td>
               <td className="border border-black px-1 py-0.5 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[120px] border-r-2 border-r-black text-center">
@@ -1950,7 +1950,7 @@ export default function Schedule({
                      if (displayObs === '1 ED AB') displayObs = ''
                      if (displayObs === 'AB') displayObs = ''
                      
-                     return <span className={`text-xs font-bold ${nameColorClass} uppercase print:text-[8px]`}>
+                     return <span className={`text-xs font-bold ${nameColorClass} uppercase print:text-[7.5px]`}>
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
@@ -2040,7 +2040,7 @@ export default function Schedule({
                       // Fallback to nurse.id causes shifts from other rosters (same nurse) to leak into this one.
                       const shift = shiftsLookup.lookup[`${nurse.unique_key}_${dateStr}`]
 
-                let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-4 print:w-5 text-center text-[10px] print:text-[8px] leading-none relative text-black font-bold"
+                let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-3.5 print:w-4 text-center text-[10px] print:text-[7px] leading-none relative text-black font-bold"
                 let content = null
 
                 // Priority: Special Leaves > Shift > Absence > Generic Folga (implicit)
@@ -2143,7 +2143,7 @@ export default function Schedule({
                   </td>
                 )
               })}
-              <td className="border border-black px-0.5 py-0.5 text-center w-16 text-xs print:text-[8px] font-bold">{displayTotal}</td>
+              <td className="border border-black px-0.5 py-0.5 text-center w-16 text-xs print:text-[7.5px] font-bold">{displayTotal}</td>
             </tr>
           )
         })}
@@ -2570,7 +2570,7 @@ export default function Schedule({
 
                  {visibleSections.map((section, index) => (
                     <div key={section.id}>
-                       <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[8px]">
+                       <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[7px]">
                              <colgroup>
                                 <col className="w-8 print:w-10" />
                                 <col className="w-[180px] print:w-[120px]" />
@@ -3113,14 +3113,14 @@ export default function Schedule({
           .schedule-root {
             margin: 0 !important;
             padding: 0 !important;
-            padding-left: 10mm !important; /* Safety margin for paper edges */
+            padding-left: 5mm !important; /* Safety margin for paper edges */
             background-color: #ffffff !important;
-            width: 133.33% !important; /* compensate for scale(0.75) */
-            transform: scale(0.75) !important;
+            width: 142.85% !important; /* compensate for scale(0.7) */
+            transform: scale(0.7) !important;
             transform-origin: top left !important;
           }
           .schedule-root * {
-            font-size: 8px !important;
+            font-size: 7.5px !important;
           }
         }
       `}</style>
