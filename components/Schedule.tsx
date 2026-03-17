@@ -2657,8 +2657,6 @@ export default function Schedule({
       </div>
 
       <div className="print:bg-white bg-white">
-        <div className="mb-1"></div>
-
       <div className={`overflow-x-visible w-full border-none shadow-none relative schedule-root ${printOnly ? 'print:overflow-visible' : ''}`}>
         {loading ? (
              <div className="text-center py-4">Carregando...</div>
@@ -2932,12 +2930,6 @@ export default function Schedule({
         )}
       </div>
       </div>
-      
-
-
-
-
-
 
       <LeaveManagerModal
         isOpen={!!leaveModalType}
@@ -2982,7 +2974,7 @@ export default function Schedule({
       )}
 
       {/* Footer Legends */}
-      <div className="mt-0 space-y-2 print:mt-0 bg-white">
+      <div className="mt-0 space-y-2 print:mt-0 bg-white print-footer-legend">
         {isAdmin && (
         <div className="flex flex-col items-end gap-2 mb-2 no-print">
             <div className="flex flex-wrap gap-2 justify-end">
@@ -3098,9 +3090,6 @@ export default function Schedule({
 
       </div>
 
-     
-      <div className="hidden print:block h-0 w-full mb-0 pb-0"></div>
-      
       {/* Unit Creation Modal */}
       {isAddingUnit && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -3221,16 +3210,28 @@ export default function Schedule({
             padding: 0 !important;
             padding-left: 5mm !important; /* Safety margin for paper edges */
             background-color: #ffffff !important;
-            width: 117.65% !important; /* compensate for scale(0.85) */
-            transform: scale(0.85) !important;
-            transform-origin: top left !important;
+            width: 100% !important;
+            zoom: 0.85; /* Better for print, doesn't leave gaps */
             text-rendering: optimizeLegibility !important;
             -webkit-print-color-adjust: exact !important;
+          }
+          /* Fallback for browsers that don't support zoom (like Firefox) */
+          @supports not (zoom: 1) {
+            .schedule-root {
+              width: 117.65% !important;
+              transform: scale(0.85) !important;
+              transform-origin: top left !important;
+              margin-bottom: -15% !important;
+            }
           }
           .schedule-root * {
             font-size: 12px !important;
             color: inherit;
             border-color: black !important;
+          }
+          .print-footer-legend {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
           }
           .schedule-root .print-header-number, 
           .schedule-root .print-header-number * {
