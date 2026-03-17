@@ -1895,14 +1895,14 @@ export default function Schedule({
           return (
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
-                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-12 ${isAdmin ? '' : ''}`}
+                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-16 ${isAdmin ? '' : ''}`}
                 title={isAdmin ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
                 {isAdmin ? (
                   <input
                     type="number"
                     defaultValue={rowNumber}
-                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 appearance-none m-0 p-0 text-black font-bold print:text-[7px]"
+                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 appearance-none m-0 p-0 text-black font-bold print:text-[12px]"
                     onKeyDown={async (e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
@@ -1939,7 +1939,7 @@ export default function Schedule({
                     }}
                   />
                 ) : (
-                  <span className="text-black font-bold print:text-[7px]">{rowNumber}</span>
+                  <span className="text-black font-bold print:text-[12px]">{rowNumber}</span>
                 )}
               </td>
               <td className="border border-black px-1 py-0.5 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[120px] border-r-2 border-r-black text-center">
@@ -2056,7 +2056,7 @@ export default function Schedule({
                      if (displayObs === '1 ED AB') displayObs = ''
                      if (displayObs === 'AB') displayObs = ''
                      
-                     return <span className={`text-xs font-bold ${nameColorClass} uppercase print:text-[7.5px]`}>
+                     return <span className={`text-xs font-bold ${nameColorClass} uppercase print:text-[12px]`}>
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
@@ -2146,7 +2146,7 @@ export default function Schedule({
                       // Fallback to nurse.id causes shifts from other rosters (same nurse) to leak into this one.
                       const shift = shiftsLookup.lookup[`${nurse.unique_key}_${dateStr}`]
 
-                let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-3.5 print:w-4 text-center text-[10px] print:text-[7px] leading-none relative text-black font-bold"
+                let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-5 print:w-5 text-center text-[10px] print:text-[12px] leading-none relative text-black font-bold"
                 let content = null
 
                 // Priority: Special Leaves > Shift > Absence > Generic Folga (implicit)
@@ -2249,7 +2249,7 @@ export default function Schedule({
                   </td>
                 )
               })}
-              <td className="border border-black px-0.5 py-0.5 text-center w-16 text-xs print:text-[7.5px] font-bold">{displayTotal}</td>
+              <td className="border border-black px-0.5 py-0.5 text-center w-16 text-xs print:text-[12px] font-bold">{displayTotal}</td>
             </tr>
           )
         })}
@@ -2678,14 +2678,14 @@ export default function Schedule({
                     <div key={section.id}>
                        <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[7px]">
                              <colgroup>
-                                <col className="w-8 print:w-12" />
-                                <col className="w-[180px] print:w-[130px]" />
-                                <col className="w-20 print:w-16" />
-                                <col className="w-20 print:w-16" />
-                                <col className="w-16 print:w-14" />
-                                {!isSetorHidden && <col className="w-20 print:w-16" />}
-                                {daysArray.map(d => <col key={d.day} className="w-4 print:w-3.5" />)}
-                                <col className="w-12 print:w-10" />
+                                <col className="w-8 print:w-16" />
+                                <col className="w-[180px] print:w-[150px]" />
+                                <col className="w-20 print:w-24" />
+                                <col className="w-20 print:w-24" />
+                                <col className="w-16 print:w-20" />
+                                {!isSetorHidden && <col className="w-20 print:w-24" />}
+                                {daysArray.map(d => <col key={d.day} className="w-4 print:w-5" />)}
+                                <col className="w-12 print:w-16" />
                              </colgroup>
                              <thead>
                                 {/* Header Row 1: Unit Title - Only for first section */}
@@ -2727,7 +2727,7 @@ export default function Schedule({
                                 {/* Main Headers Row 3 (Columns) */}
                                 <tr className="bg-[#1e3a5f] text-white">
                                     <th 
-                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#1e3a5f] z-20 font-bold cursor-pointer select-none text-sm print:text-[9px]"
+                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#1e3a5f] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] print:w-16"
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
@@ -2749,7 +2749,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[120px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[9px] group" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[150px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
@@ -2767,14 +2767,14 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-14 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-20 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>
                                     {isAdmin ? (
                                         <select 
                                             value={dynamicField}
                                             onChange={(e) => handleDynamicFieldChange(e.target.value as any)}
-                                            className="bg-[#1e3a5f] text-white border-none outline-none font-bold text-sm print:text-[9px] uppercase cursor-pointer hover:text-blue-200 text-center w-full appearance-none"
+                                            className="bg-[#1e3a5f] text-white border-none outline-none font-bold text-sm print:text-[14px] uppercase cursor-pointer hover:text-blue-200 text-center w-full appearance-none"
                                         >
                                             <option value="coren">COREN</option>
                                             <option value="crm">CRM</option>
@@ -2788,7 +2788,7 @@ export default function Schedule({
                                     )}
                                 </th>
                                 {!isSetorHidden && (
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f] group relative" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f] group relative" rowSpan={2}>
                                     {isAdmin && (
                                         <button 
                                             onClick={(e) => {
@@ -2831,20 +2831,20 @@ export default function Schedule({
                                 </th>
                                 )}
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-3.5 text-[10px] print:text-[8px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[12px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
                                     {weekday}
                                     </th>
                                 ))}
-                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-10 font-bold text-sm print:text-[9px] bg-[#1e3a5f]">TOTAL</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-16 font-bold text-sm print:text-[14px] bg-[#1e3a5f]">TOTAL</th>
                             </tr>
                             {/* Main Headers Row 2 */}
                             <tr className="bg-[#1e3a5f] text-white">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-3.5 text-[10px] print:text-[8px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[12px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
                                       {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-10 font-bold text-sm print:text-[9px] bg-[#1e3a5f]">PLANTÃO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-16 font-bold text-sm print:text-[14px] bg-[#1e3a5f]">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -3228,7 +3228,7 @@ export default function Schedule({
             -webkit-print-color-adjust: exact !important;
           }
           .schedule-root * {
-            font-size: 10px !important;
+            font-size: 12px !important;
             color: inherit;
             border-color: black !important;
           }
@@ -3242,7 +3242,7 @@ export default function Schedule({
             font-size: 16px !important;
           }
           .schedule-root th {
-            font-size: 12px !important;
+            font-size: 14px !important;
           }
           .schedule-root td, .schedule-root th {
             color: black;
