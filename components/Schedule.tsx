@@ -2611,14 +2611,14 @@ export default function Schedule({
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-sm print:text-[10px]">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px]">
                                         {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
                                     </th>
                                 </tr>
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-sm print:text-[10px] relative group">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px] relative group">
                                         ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
                                         {isAdmin && (
                                             <button 
@@ -2647,7 +2647,7 @@ export default function Schedule({
                                 {/* Main Headers Row 3 (Columns) */}
                                 <tr className="bg-[#1e3a5f] text-white">
                                     <th 
-                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#1e3a5f] z-20 font-bold cursor-pointer select-none text-xs print:text-[8px]"
+                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#1e3a5f] z-20 font-bold cursor-pointer select-none text-sm print:text-[9px]"
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
@@ -2669,7 +2669,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[120px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-xs print:text-[8px] group" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[120px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[9px] group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
@@ -2687,14 +2687,14 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-xs print:text-[8px] bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-xs print:text-[8px] bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-14 font-bold text-xs print:text-[8px] bg-[#1e3a5f]" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-14 font-bold text-sm print:text-[9px] bg-[#1e3a5f]" rowSpan={2}>
                                     {isAdmin ? (
                                         <select 
                                             value={dynamicField}
                                             onChange={(e) => handleDynamicFieldChange(e.target.value as any)}
-                                            className="bg-[#1e3a5f] text-white border-none outline-none font-bold text-xs print:text-[8px] uppercase cursor-pointer hover:text-blue-200 text-center w-full appearance-none"
+                                            className="bg-[#1e3a5f] text-white border-none outline-none font-bold text-sm print:text-[9px] uppercase cursor-pointer hover:text-blue-200 text-center w-full appearance-none"
                                         >
                                             <option value="coren">COREN</option>
                                             <option value="crm">CRM</option>
@@ -2708,7 +2708,7 @@ export default function Schedule({
                                     )}
                                 </th>
                                 {!isSetorHidden && (
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-xs print:text-[8px] bg-[#1e3a5f] group relative" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-16 font-bold text-sm print:text-[9px] bg-[#1e3a5f] group relative" rowSpan={2}>
                                     {isAdmin && (
                                         <button 
                                             onClick={(e) => {
@@ -2755,7 +2755,7 @@ export default function Schedule({
                                     {weekday}
                                     </th>
                                 ))}
-                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-10 font-bold text-xs print:text-[8px] bg-[#1e3a5f]">TOTAL</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-10 font-bold text-sm print:text-[9px] bg-[#1e3a5f]">TOTAL</th>
                             </tr>
                             {/* Main Headers Row 2 */}
                             <tr className="bg-[#1e3a5f] text-white">
@@ -2764,7 +2764,7 @@ export default function Schedule({
                                       {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-10 font-bold text-xs print:text-[8px] bg-[#1e3a5f]">PLANTÃO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-10 font-bold text-sm print:text-[9px] bg-[#1e3a5f]">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -3151,6 +3151,9 @@ export default function Schedule({
             font-size: 8px !important;
             color: inherit;
             border-color: black !important;
+          }
+          .schedule-root th {
+            font-size: 10px !important;
           }
           .schedule-root td, .schedule-root th {
             color: black;
