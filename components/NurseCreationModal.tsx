@@ -256,16 +256,6 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                     <input
                       type="checkbox"
                       name="vinculo"
-                      value="ESCALA DUPLA"
-                      defaultChecked={nurseToEdit?.vinculo?.includes('ESCALA DUPLA') || (nurseToEdit?.observation || '').includes('1ED')}
-                      className="h-4 w-4"
-                    />
-                    <span>ESCALA DUPLA</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      name="vinculo"
                       value="SELETIVO"
                       defaultChecked={nurseToEdit?.vinculo?.includes('SELETIVO')}
                       className="h-4 w-4"
@@ -291,10 +281,10 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                 <label className="block text-sm font-medium text-gray-700">Cargo</label>
                 <select 
                     name="role" 
-                    defaultValue={nurseToEdit?.role || defaultRole}
+                    defaultValue={nurseToEdit?.role || ''}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
                 >
-                    <option value="">Selecione um cargo</option>
+                    <option value="">Selecione um cargo (Vazio)</option>
                     <option value="ENFERMEIRO">Enfermeiro(a)</option>
                     <option value="TECNICO">Técnico de Enfermagem</option>
                     <option value="MEDICO">Médico(a)</option>
