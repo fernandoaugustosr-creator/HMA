@@ -1015,7 +1015,7 @@ export default function Schedule({
     setIsCreationModalOpen(true)
   }
 
-  const onNurseCreated = async () => {
+  const onNurseCreated = async (rosterId?: string) => {
     if (!insertionData) return
     setIsCreationModalOpen(false)
     
@@ -1023,112 +1023,14 @@ export default function Schedule({
     setLoading(true)
     
     try {
-        // Find the new roster entry ID
-        const freshData = await fetchData(true)
-        if (!freshData) {
-            setLoading(false)
-            return
-        }
-        
-        const currentRosterInThisContext = freshData.roster.filter(r => 
-            r.section_id === sectionId && 
-            r.month === selectedMonth + 1 && 
-            r.year === selectedYear && 
-            (!selectedUnitId || r.unit_id === selectedUnitId)
-        )
-        
-        // Find the one that is NOT in the previous ordered list
-        const previousIdsSet = new Set(previousOrderedIds)
-        const newRosterEntry = currentRosterInThisContext.find(r => !previousIdsSet.has(r.id))
-        
-        if (!newRosterEntry) {
-            setLoading(false)
-            return
-        }
-
-        const orderedIds = [...previousOrderedIds]
-        orderedIds.splice(position, 0, newRosterEntry.id)
-        
-        const orderRes = await resetSectionOrder(
-            sectionId, 
-            selectedUnitId || 'ALL', 
-            selectedMonth + 1, 
-            selectedYear, 
-            undefined, 
-            orderedIds,
-            1 
-        )
-        
-        if (orderRes.success) {
-            clearCache()
-            await fetchData(true)
-        } else {
-            alert('Erro ao ordenar: ' + orderRes.message)
-        }
-    } catch (error) {
-        console.error(error)
-        alert('Erro ao processar inserção.')
-    } finally {
-        setLoading(false)
-        setInsertionData(null)
-    }
-  }
-
-  const onNurseSelected = async (nurseId: string) => {
-    if (!insertionData) return
-    setIsNurseModalOpen(false)
-    
-    const { sectionId, position, orderedIds: previousOrderedIds } = insertionData
-    setLoading(true)
-    
-    try {
-        // Step 1: Capture current roster IDs in this section for comparison
-        const oldRosterIds = new Set(data.roster
-          .filter(r => r.section_id === sectionId && r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
-          .map(r => r.id))
-
-        // Step 2: Assign nurse to roster (puts at end)
-        const res = await assignNurseToRoster(
-            nurseId, 
-            sectionId, 
-            selectedUnitId, 
-            selectedMonth + 1, 
-            selectedYear, 
-            '', 
-            undefined, 
-            true // allow duplicate
-        )
-        
-        if (res.success) {
-            // Step 3: Fetch fresh data to get the new roster ID
-            const freshData = await fetchData(true)
-            if (!freshData) {
-                setLoading(false)
-                return
-            }
-            
-            // Step 4: Find the new roster entry ID
-            const currentRosterInThisContext = freshData.roster.filter(r => 
-                r.section_id === sectionId && 
-                r.month === selectedMonth + 1 && 
-                r.year === selectedYear && 
-                (!selectedUnitId || r.unit_id === selectedUnitId)
-            )
-            
-            const newRosterEntry = currentRosterInThisContext.find(r => !oldRosterIds.has(r.id))
-            
-            if (!newRosterEntry) {
-                setLoading(false)
-                return
-            }
-
-            // Step 5: Construct the NEW ordered list of roster IDs
+        if (rosterId) {
+            // Construct the NEW ordered list of roster IDs
             const orderedIds = [...previousOrderedIds]
             
             // Insert the new ID at the target position
-            orderedIds.splice(position, 0, newRosterEntry.id)
+            orderedIds.splice(position, 0, rosterId)
             
-            // Step 6: Use resetSectionOrder to apply this final order
+            // Update the list_order for the entire section (this revalidates)
             const orderRes = await resetSectionOrder(
                 sectionId, 
                 selectedUnitId || 'ALL', 
@@ -1146,7 +1048,9 @@ export default function Schedule({
                 alert('Erro ao ordenar: ' + orderRes.message)
             }
         } else {
-            alert('Erro ao adicionar: ' + res.message)
+            // Fallback for when rosterId isn't returned (e.g. legacy update mode)
+            clearCache()
+            await fetchData(true)
         }
     } catch (error) {
         console.error(error)
@@ -1157,14 +1061,57 @@ export default function Schedule({
     }
   }
 
+  const onNurseSelected = async (nurseId: string) => {
+    if (!insertionData) return
+    setIsNurseModalOpen(false)
+    
+    // Open the DoubleShiftModal to choose the bond type (1ED, AB, or Normal)
+    setDoubleShiftModal({
+      isOpen: true,
+      nurseId,
+      sectionId: insertionData.sectionId,
+      // We'll pass the position info in a way that finalizeAssignNurse can use it
+      isInsertion: true,
+      insertionPosition: insertionData.position,
+      insertionOrderedIds: insertionData.orderedIds
+    })
+  }
+
   const finalizeAssignNurse = async (observation: string) => {
     if (!doubleShiftModal) return
-    const { nurseId, sectionId, rosterId } = doubleShiftModal
+    const { nurseId, sectionId, rosterId, isInsertion, insertionPosition, insertionOrderedIds } = doubleShiftModal as any
     setDoubleShiftModal(null)
+    setInsertionData(null)
     
     setLoading(true)
     try {
-        if (rosterId) {
+        if (isInsertion) {
+            // INSERTION LOGIC (using the new buttons)
+            const res = await assignNurseToRoster(
+                nurseId, 
+                sectionId, 
+                selectedUnitId, 
+                selectedMonth + 1, 
+                selectedYear, 
+                observation, 
+                undefined, 
+                true, // allow duplicate
+                null, // listOrder (initially null)
+                true  // skipRevalidate
+            )
+            
+            if (res.success && res.rosterId) {
+                const orderedIds = [...(insertionOrderedIds || [])]
+                orderedIds.splice(insertionPosition || 0, 0, res.rosterId)
+                
+                await resetSectionOrder(sectionId, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, undefined, orderedIds, 1)
+                
+                clearCache()
+                await fetchData(true)
+            } else {
+                alert('Erro ao adicionar: ' + res.message)
+            }
+        } else if (rosterId) {
              // REASSIGN (REPLACE) LOGIC
              // Goal: Replace the nurse in this specific roster entry while keeping its position
              const rosterItem = data.roster.find(r => r.id === rosterId)
@@ -1200,31 +1147,18 @@ export default function Schedule({
                  selectedYear, 
                  observation, 
                  rosterItem.created_at, 
-                 allowDuplicate
+                 allowDuplicate,
+                 null, // listOrder
+                 true  // skipRevalidate
              )
              
-             if (addRes.success) {
-                // Step 4: Fetch fresh data to get the new roster ID
-                const freshData = await fetchData(true)
-                if (!freshData) {
-                    setLoading(false)
-                    return
-                }
+             if (addRes.success && (addRes as any).rosterId) {
+                const newRosterId = (addRes as any).rosterId
 
-                // Step 5: Find the new ID (it's the one not in our previous list)
-                const oldIdsSet = new Set(orderedIds.filter(id => id !== rosterId))
-                const newEntry = freshData.roster.find(r => 
-                    r.section_id === sectionId && 
-                    r.month === selectedMonth + 1 && 
-                    r.year === selectedYear && 
-                    (!selectedUnitId || r.unit_id === selectedUnitId) &&
-                    !oldIdsSet.has(r.id)
-                )
-
-                if (newEntry && positionIndex !== -1) {
-                    // Step 6: Construct the final order replacing the old ID with the new one at the EXACT SAME POSITION
+                if (positionIndex !== -1) {
+                    // Step 4: Construct the final order replacing the old ID with the new one at the EXACT SAME POSITION
                     const finalOrderedIds = [...orderedIds]
-                    finalOrderedIds[positionIndex] = newEntry.id
+                    finalOrderedIds[positionIndex] = newRosterId
                     
                     await resetSectionOrder(sectionId, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, undefined, finalOrderedIds, 1)
                 }

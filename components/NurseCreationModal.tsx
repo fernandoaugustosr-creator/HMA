@@ -6,7 +6,7 @@ import { createNurse, updateNurse } from '@/app/actions'
 interface NurseCreationModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (rosterId?: string) => void
   defaultRole?: string
   defaultSectionId?: string
   defaultUnitId?: string
@@ -129,7 +129,7 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     }
 
     if (result.success) {
-      onSuccess()
+      onSuccess((result as any).rosterId)
       onClose()
     } else {
       setError(result.message || 'Erro ao salvar servidor')

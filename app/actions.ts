@@ -519,6 +519,8 @@ export async function createNurse(prevState: any, formData: FormData) {
 
     db.nurses.push(newNurse)
 
+    let lastRosterId: string | undefined = undefined
+
     // Add to roster automatically
     if (finalSectionId) {
         const now = new Date()
@@ -528,8 +530,9 @@ export async function createNurse(prevState: any, formData: FormData) {
         // Ensure monthly_rosters exists
         if (!db.monthly_rosters) db.monthly_rosters = []
 
+        const newRosterId = randomUUID()
         db.monthly_rosters.push({
-            id: randomUUID(),
+            id: newRosterId,
             nurse_id: newNurse.id,
             section_id: finalSectionId,
             unit_id: unitId,
@@ -538,15 +541,17 @@ export async function createNurse(prevState: any, formData: FormData) {
             sector: sector || '', // History for this month
             created_at: new Date().toISOString()
         })
+        lastRosterId = newRosterId
     }
 
     writeDb(db)
     
     revalidatePath('/servidores')
-    return { success: true, message: 'Servidor cadastrado com sucesso!' }
+    return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId }
   }
 
   const supabase = createClient()
+  let lastRosterId: string | undefined = undefined
   
   let finalSectionId = sectionId
   if (!finalSectionId) {
@@ -591,18 +596,20 @@ export async function createNurse(prevState: any, formData: FormData) {
       const rosterMonth = customMonth || (now.getMonth() + 1)
       const rosterYear = customYear || now.getFullYear()
       
-      await supabase.from('monthly_rosters').insert({
+      const { data: insertedRoster } = await supabase.from('monthly_rosters').insert({
           nurse_id: insertedNurse.id,
           section_id: finalSectionId,
           unit_id: unitId,
           month: rosterMonth,
           year: rosterYear,
           sector: sector || '' // History for this month
-      })
+      }).select('id').single()
+      
+      if (insertedRoster) lastRosterId = insertedRoster.id
   }
 
   revalidatePath('/servidores')
-  return { success: true, message: 'Servidor cadastrado com sucesso!' }
+  return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId }
 }
 
 export const getSections = cache(async () => {
@@ -2919,7 +2926,8 @@ export async function assignNurseToRoster(
   observation?: string, 
   createdAt?: string,
   allowDuplicate: boolean = false,
-  listOrder?: number | null
+  listOrder?: number | null,
+  skipRevalidate: boolean = false
 ) {
   try {
     await checkAdmin()
@@ -2929,6 +2937,7 @@ export async function assignNurseToRoster(
 
   // Only update the specific month (no propagation)
   const monthsToUpdate = [month]
+  let lastInsertedId: string | undefined = undefined
 
   if (isLocalMode()) {
     const db = readDb()
@@ -2966,9 +2975,11 @@ export async function assignNurseToRoster(
           if (observation !== undefined) db.monthly_rosters[existingIndex].observation = observation
           if (createdAt) db.monthly_rosters[existingIndex].created_at = createdAt
           if (finalOrder !== undefined) db.monthly_rosters[existingIndex].list_order = finalOrder
+          lastInsertedId = db.monthly_rosters[existingIndex].id
         } else {
+          const newId = randomUUID()
           db.monthly_rosters.push({
-            id: randomUUID(),
+            id: newId,
             nurse_id: nurseId,
             section_id: sectionId,
             unit_id: unitId,
@@ -2978,12 +2989,13 @@ export async function assignNurseToRoster(
             created_at: createdAt || new Date().toISOString(),
             list_order: finalOrder
           })
+          lastInsertedId = newId
         }
     })
 
     writeDb(db)
-    revalidatePath('/')
-    return { success: true }
+    if (!skipRevalidate) revalidatePath('/')
+    return { success: true, rosterId: lastInsertedId }
   }
 
   const supabase = createClient()
@@ -3024,21 +3036,6 @@ export async function assignNurseToRoster(
         }
     }
 
-    if (!existing && !allowDuplicate) {
-        // Clear shifts for this month if adding new (and not forcing duplicate)
-        // COMMENTED OUT TO PREVENT CROSS-UNIT DATA LOSS
-        // Adding a nurse to a new unit should NOT delete their shifts in other units.
-        // const startDate = `${year}-${String(m).padStart(2, '0')}-01`
-        // const lastDay = new Date(year, m, 0).getDate()
-        // const endDate = `${year}-${String(m).padStart(2, '0')}-${lastDay}`
-        
-        // await supabase.from('shifts')
-        //    .delete()
-        //    .eq('nurse_id', nurseId)
-        //    .gte('date', startDate)
-        //    .lte('date', endDate)
-    }
-
     const payload: any = {
         nurse_id: nurseId, 
         section_id: sectionId, 
@@ -3073,16 +3070,18 @@ export async function assignNurseToRoster(
     if (finalOrder !== undefined) payload.list_order = finalOrder
 
     let error;
+    let resultId: string | undefined = undefined
+
     if (allowDuplicate) {
         // If allowing duplicates, always insert a new record
-        const { error: insertError } = await supabase
+        const { data: inserted, error: insertError } = await supabase
             .from('monthly_rosters')
             .insert(payload)
+            .select('id')
+            .single()
         error = insertError
+        resultId = inserted?.id
     } else {
-        // If NOT allowing duplicates, we try to update if exists, or insert if not.
-        // We use the unit-scoped 'existing' record we already fetched above to ensure we don't hijack records from other units.
-        
         if (existing) {
             // Update existing in THIS unit
             const { error: updateError } = await supabase
@@ -3090,28 +3089,33 @@ export async function assignNurseToRoster(
                 .update(payload)
                 .eq('id', existing.id)
             error = updateError
+            resultId = existing.id
         } else {
             // Insert new for THIS unit (even if nurse exists in other units)
-            const { error: insertError } = await supabase
+            const { data: inserted, error: insertError } = await supabase
                 .from('monthly_rosters')
                 .insert(payload)
+                .select('id')
+                .single()
             error = insertError
+            resultId = inserted?.id
         }
     }
 
     if (error) {
                 console.error('Error adding/updating roster:', error)
                 if (error.code === '23505') {
-                    // Include constraint name in message to help debug if needed
                     const constraint = (error as any).constraint || 'desconhecida'
                     return { success: false, message: `Erro: O sistema bloqueou a duplicidade (Constraint: ${constraint}). Solicite ao suporte para rodar o script V11.` }
                 }
                 return { success: false, message: error.message }
             }
+    
+    lastInsertedId = resultId
   }
 
-  revalidatePath('/')
-  return { success: true, warning: warningMsg }
+  if (!skipRevalidate) revalidatePath('/')
+  return { success: true, warning: warningMsg, rosterId: lastInsertedId }
   } catch (err: any) {
       console.error('Unhandled error in assignNurseToRoster:', err)
       return { success: false, message: `Erro ao processar: ${err.message || 'Erro desconhecido'}` }
@@ -3791,11 +3795,27 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
     const { data, error } = await query
     if (error) throw error
 
+    // If we have orderedRosterIds, verify that all are present.
+    // If some are missing (especially if one was just inserted), retry once after a short delay.
+    let finalData = data || []
+    if (orderedRosterIds && orderedRosterIds.length > 0) {
+        const foundIds = new Set(finalData.map(d => d.id))
+        const missing = orderedRosterIds.filter(id => !foundIds.has(id))
+        
+        if (missing.length > 0) {
+            console.log(`resetSectionOrder: Missing ${missing.length} IDs. Retrying after 800ms...`)
+            await new Promise(resolve => setTimeout(resolve, 800))
+            const { data: retryData, error: retryError } = await query
+            if (!retryError && retryData) {
+                finalData = retryData
+            }
+        }
+    }
+
     let sorted: any[] = []
-    
     if (orderedRosterIds && orderedRosterIds.length > 0) {
       // Explicitly construct sorted list based on orderedRosterIds
-      const candidateMap = new Map(data?.map(d => [d.id, d]))
+      const candidateMap = new Map(finalData.map(d => [d.id, d]))
       
       // 1. Add items present in orderedRosterIds
       for (const id of orderedRosterIds) {
