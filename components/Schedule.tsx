@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
@@ -427,13 +427,13 @@ export default function Schedule({
   }
   
   // Cache to store fetched data by month-year key
-  const scheduleCache = React.useRef<Record<string, ScheduleData>>({})
+  const scheduleCache = useRef<Record<string, ScheduleData>>({})
 
   const clearCache = () => {
     scheduleCache.current = {}
   }
 
-  const fetchData = React.useCallback(async (forceRefresh = false, showLoading = true) => {
+  const fetchData = useCallback(async (forceRefresh = false, showLoading = true) => {
     if (showLoading) setLoading(true)
     const cacheKey = `${selectedMonth}-${selectedYear}-${selectedUnitId}`
 
@@ -1494,8 +1494,8 @@ export default function Schedule({
     }
   }
 
-  const daysInMonth = React.useMemo(() => new Date(selectedYear, selectedMonth + 1, 0).getDate(), [selectedYear, selectedMonth])
-  const daysArray = React.useMemo(() => Array.from({ length: daysInMonth }, (_, i) => {
+  const daysInMonth = useMemo(() => new Date(selectedYear, selectedMonth + 1, 0).getDate(), [selectedYear, selectedMonth])
+  const daysArray = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => {
     const date = new Date(selectedYear, selectedMonth, i + 1)
     return {
       day: i + 1,
@@ -1505,7 +1505,7 @@ export default function Schedule({
   }), [daysInMonth, selectedYear, selectedMonth])
 
   // Optimize roster lookup for O(1) access
-  const rosterMap = React.useMemo(() => {
+  const rosterMap = useMemo(() => {
       const map: Record<string, any[]> = {}
       if (data.roster) {
           data.roster.forEach(r => {
@@ -1519,7 +1519,7 @@ export default function Schedule({
   }, [data.roster, selectedMonth, selectedYear])
 
   // Identify valid roster IDs for the current unit context
-  const currentUnitRosterIds = React.useMemo(() => {
+  const currentUnitRosterIds = useMemo(() => {
       const set = new Set<string>()
       if (data.roster) {
           data.roster.forEach(r => {
@@ -1531,7 +1531,7 @@ export default function Schedule({
       return set
   }, [data.roster, selectedMonth, selectedYear, selectedUnitId])
 
-  const activeNurses = React.useMemo(() => {
+  const activeNurses = useMemo(() => {
       return data.nurses.flatMap(nurse => {
           const rosterEntries = rosterMap[nurse.id]
           if (rosterEntries && rosterEntries.length > 0) {
@@ -1553,12 +1553,12 @@ export default function Schedule({
 
   // Optimize: Pre-sort nurses to avoid sorting on every render in the dropdown
   // Use data.nurses directly to ensure unique entries in dropdown
-  const sortedUniqueNurses = React.useMemo(() => {
+  const sortedUniqueNurses = useMemo(() => {
       return [...data.nurses].sort((a, b) => a.name.localeCompare(b.name))
   }, [data.nurses])
 
   // Optimize: Group nurses by section to avoid filtering on every render
-  const nursesBySection = React.useMemo(() => {
+  const nursesBySection = useMemo(() => {
       const grouped: Record<string, Nurse[]> = {}
       activeNurses.forEach(n => {
           if (n.section_id && n.is_rostered) {
@@ -1594,7 +1594,7 @@ export default function Schedule({
   }, [activeNurses])
 
   // Optimize data access with lookups
-  const shiftsLookup = React.useMemo(() => {
+  const shiftsLookup = useMemo(() => {
       const lookup: Record<string, Shift> = {} // Key: "rosterId_date" (or nurseId for unrostered)
       const countLookup: Record<string, number> = {} // Key: rosterId
       const weekendCountLookup: Record<string, number> = {} // Key: rosterId
