@@ -88,20 +88,37 @@ export default function PublicScheduleList() {
     }
 
     printTimeoutRef.current = setTimeout(() => {
+        const oldTitle = document.title
+        if (selectedRelease) {
+            const fileName = `Escala_${selectedRelease.unit_name}_${MONTHS[selectedRelease.month - 1]}_${selectedRelease.year}`.replace(/\s+/g, '_')
+            document.title = fileName
+        }
+        
         window.print()
+        
         printTimeoutRef.current = null
-        setTimeout(() => setIsPrinting(false), 1000)
+        setTimeout(() => {
+            document.title = oldTitle
+            setIsPrinting(false)
+        }, 1000)
     }, 1200)
-  }, [])
+  }, [selectedRelease])
 
   const handlePrint = (release: any) => {
     if (isPrinting) return
 
+    const fileName = `Escala_${release.unit_name}_${MONTHS[release.month - 1]}_${release.year}`.replace(/\s+/g, '_')
+    const oldTitle = document.title
+
     if (selectedRelease?.id === release.id) {
         setIsPrinting(true)
+        document.title = fileName
         setTimeout(() => {
             window.print()
-            setTimeout(() => setIsPrinting(false), 1000)
+            setTimeout(() => {
+                document.title = oldTitle
+                setIsPrinting(false)
+            }, 1000)
         }, 100)
     } else {
         setIsPrinting(true)
