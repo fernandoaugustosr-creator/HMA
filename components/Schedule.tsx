@@ -225,26 +225,14 @@ export default function Schedule({
   const [selectedMonth, setSelectedMonth] = useState(() => {
     if (initialMonth !== undefined) return initialMonth
     const now = new Date()
-    const m = now.getMonth()
-    const y = now.getFullYear()
-    const daysInMonth = new Date(y, m + 1, 0).getDate()
-    // If within 10 days of end of month, show next month
-    if (daysInMonth - now.getDate() <= 10) {
-        return m === 11 ? 0 : m + 1
-    }
-    return m
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    return nextMonth.getMonth()
   })
   const [selectedYear, setSelectedYear] = useState(() => {
     if (initialYear !== undefined) return initialYear
     const now = new Date()
-    const m = now.getMonth()
-    const y = now.getFullYear()
-    const daysInMonth = new Date(y, m + 1, 0).getDate()
-    // If within 10 days of end of month, show next month
-    if (daysInMonth - now.getDate() <= 10) {
-        return m === 11 ? y + 1 : y
-    }
-    return y
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    return nextMonth.getFullYear()
   })
   const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], absences: [], sections: [], units: [] })
   const [loading, setLoading] = useState(true)
@@ -1919,7 +1907,7 @@ export default function Schedule({
                       
                       if (newValue === rowNumber) return
 
-                      const ok = confirm(`Deseja reiniciar a numeração a partir deste item começando em ${newValue}?`)
+                      const ok = confirm(`Ao mudar para ${newValue}, este profissional e todos os abaixo dele serão renumerados sequencialmente (${newValue}, ${newValue + 1}, ${newValue + 2}...). A ordem da lista não será alterada. Deseja continuar?`)
                       if (!ok) {
                         e.target.value = String(rowNumber)
                         return
@@ -2733,12 +2721,11 @@ export default function Schedule({
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
-                                    const ok = confirm('Reiniciar numeração deste grupo começando em 1?')
+                                    const ok = confirm('Deseja reiniciar toda a numeração deste grupo começando em 1? A ordem visual será preservada.')
                                     if (!ok) return
                                     setLoading(true)
-                                    const currentNurses = (nursesBySection[section.id] || []).filter(n => !selectedUnitId || !n.unit_id || n.unit_id === selectedUnitId)
-                                    const orderedIds = currentNurses.map(n => n.unique_key || '')
-                                    const res = await resetSectionOrder(section.id, selectedUnitId || null, selectedMonth + 1, selectedYear, undefined, orderedIds)
+                                    const orderedIds = orderedProfessionals.map(p => p.unique_key || '')
+                                    const res = await resetSectionOrder(section.id, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, undefined, orderedIds)
                                     if (!res.success) {
                                       alert(res.message || 'Erro ao reiniciar numeração')
                                     } else {
