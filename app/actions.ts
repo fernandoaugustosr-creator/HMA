@@ -27,7 +27,7 @@ export async function getSystemRoles() {
     { id: 'COORDENACAO_GERAL', label: 'Coordenação Geral' },
     { id: 'COORDENADOR', label: 'Coordenador' },
     { id: 'ENFERMEIRO', label: 'Enfermeiro' },
-    { id: 'TECNICO', label: 'Técnico de Enfermagem' }
+    { id: 'TECNICO', label: 'Téc. de Enfermagem' }
   ]
 
   if (isLocalMode()) {
@@ -499,7 +499,7 @@ export async function createNurse(prevState: any, formData: FormData) {
     let finalSectionId = sectionId
     if (!finalSectionId) {
        if (role === 'ENFERMEIRO') finalSectionId = db.schedule_sections.find(s => s.title === 'ENFERMEIROS')?.id || null
-       else if (role === 'TECNICO') finalSectionId = db.schedule_sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')?.id || null
+       else if (role === 'TECNICO') finalSectionId = db.schedule_sections.find(s => s.title === 'TÉC. DE ENFERMAGEM')?.id || null
     }
 
     const newNurse = {
@@ -558,7 +558,7 @@ export async function createNurse(prevState: any, formData: FormData) {
       const { data: sections } = await supabase.from('schedule_sections').select('*')
       if (sections) {
           if (role === 'ENFERMEIRO' || role === 'COORDENADOR') finalSectionId = sections.find(s => s.title === 'ENFERMEIROS')?.id || null
-          else if (role === 'TECNICO') finalSectionId = sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')?.id || null
+          else if (role === 'TECNICO') finalSectionId = sections.find(s => s.title === 'TÉC. DE ENFERMAGEM')?.id || null
       }
   }
 
@@ -4245,7 +4245,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     
     if (role === 'COORDENADOR' || role === 'ENFERMEIRO') {
         const enfermeirosSection = db.schedule_sections.find(s => s.title === 'ENFERMEIROS')
-        const tecnicosSection = db.schedule_sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')
+        const tecnicosSection = db.schedule_sections.find(s => s.title === 'TÉC. DE ENFERMAGEM')
         
         if (enfermeirosSection) {
              if (!finalSectionId || (tecnicosSection && finalSectionId === tecnicosSection.id)) {
@@ -4254,7 +4254,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
         }
     } else if (role === 'TECNICO') {
         const enfermeirosSection = db.schedule_sections.find(s => s.title === 'ENFERMEIROS')
-        const tecnicosSection = db.schedule_sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')
+        const tecnicosSection = db.schedule_sections.find(s => s.title === 'TÉC. DE ENFERMAGEM')
         
         if (tecnicosSection) {
              if (!finalSectionId || (enfermeirosSection && finalSectionId === enfermeirosSection.id)) {
@@ -4318,7 +4318,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   
   if (sections) {
     const enfermeirosId = sections.find(s => s.title === 'ENFERMEIROS')?.id
-    const tecnicosId = sections.find(s => s.title === 'TÉCNICOS DE ENFERMAGEM')?.id
+    const tecnicosId = sections.find(s => s.title === 'TÉC. DE ENFERMAGEM')?.id
     
     if (role === 'COORDENADOR' || role === 'ENFERMEIRO') {
         if (enfermeirosId) {

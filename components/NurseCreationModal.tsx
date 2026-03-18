@@ -288,7 +288,7 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                 >
                     <option value="">Campo Vazio</option>
                     <option value="ENFERMEIRO">Enfermeiro(a)</option>
-                    <option value="TECNICO">Técnico de Enfermagem</option>
+                    <option value="TECNICO">Téc. de Enfermagem</option>
                     <option value="MEDICO">Médico(a)</option>
                     <option value="COORDENADOR">Coordenador(a)</option>
                     <option value="COORDENACAO_GERAL">Coordenação Geral</option>

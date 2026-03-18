@@ -1874,7 +1874,13 @@ export default function Schedule({
                       }
 
                       setLoading(true)
-                      const orderedRosterIds = orderedProfessionals.map(p => p.unique_key || '')
+                      
+                      // FIX: Use the FULL list of professionals in this section to preserve order of non-filtered items
+                      const allProfessionalsInSection = (nursesBySection[section.id] || [])
+                          .filter(n => !selectedUnitId || n.unit_id === selectedUnitId)
+                      
+                      const orderedRosterIds = allProfessionalsInSection.map(p => p.unique_key || '')
+                      
                       const res = await resetSectionOrder(section.id, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, nurse.unique_key, orderedRosterIds, newValue)
                       if (!res.success) {
                         alert(res.message || 'Erro ao reiniciar numeração')
@@ -2421,7 +2427,7 @@ export default function Schedule({
             >
                 <option value="ALL">Todas</option>
                 <option value="ENFERMEIRO">Enfermeiro(a)</option>
-                <option value="TECNICO">Técnico de Enfermagem</option>
+                <option value="TECNICO">Téc. de Enfermagem</option>
                 <option value="MEDICO">Médico(a)</option>
             </select>
             </div>
@@ -2635,10 +2641,16 @@ export default function Schedule({
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
-                                    const ok = confirm('Deseja reiniciar toda a numeração deste grupo começando em 1? A ordem visual será preservada.')
+                                    const ok = confirm('Deseja reiniciar toda a numeração deste grupo começando em 1? A ordem visual de TODOS os profissionais deste grupo (mesmo os ocultos por filtro) será preservada.')
                                     if (!ok) return
                                     setLoading(true)
-                                    const orderedIds = orderedProfessionals.map(p => p.unique_key || '')
+                                    
+                                    // FIX: Use the FULL list of professionals in this section to preserve order of non-filtered items
+                                    const allProfessionalsInSection = (nursesBySection[section.id] || [])
+                                        .filter(n => !selectedUnitId || n.unit_id === selectedUnitId)
+                                    
+                                    const orderedIds = allProfessionalsInSection.map(p => p.unique_key || '')
+                                    
                                     const res = await resetSectionOrder(section.id, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, undefined, orderedIds)
                                     if (!res.success) {
                                       alert(res.message || 'Erro ao reiniciar numeração')

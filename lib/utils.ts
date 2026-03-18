@@ -3,7 +3,7 @@ export function formatRole(role: string | null | undefined): string {
   const upperRole = role.toUpperCase()
   switch (upperRole) {
     case 'TECNICO':
-      return 'Técnico de Enfermagem'
+      return 'Téc. de Enfermagem'
     case 'ENFERMEIRO':
       return 'Enfermeiro(a)'
     case 'COORDENADOR':

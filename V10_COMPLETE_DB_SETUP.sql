@@ -187,8 +187,8 @@ SELECT 'ENFERMEIROS', 1
 WHERE NOT EXISTS (SELECT 1 FROM schedule_sections WHERE title = 'ENFERMEIROS');
 
 INSERT INTO schedule_sections (title, position)
-SELECT 'TÉCNICOS DE ENFERMAGEM', 2
-WHERE NOT EXISTS (SELECT 1 FROM schedule_sections WHERE title = 'TÉCNICOS DE ENFERMAGEM');
+SELECT 'TÉC. DE ENFERMAGEM', 2
+WHERE NOT EXISTS (SELECT 1 FROM schedule_sections WHERE title = 'TÉC. DE ENFERMAGEM');
 
 -- Inserir Unidades Padrão
 INSERT INTO units (title)

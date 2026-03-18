@@ -134,5 +134,5 @@ select 'ENFERMEIROS', 1
 where not exists (select 1 from schedule_sections where title = 'ENFERMEIROS');
 
 insert into schedule_sections (title, position)
-select 'TÉCNICOS DE ENFERMAGEM', 2
-where not exists (select 1 from schedule_sections where title = 'TÉCNICOS DE ENFERMAGEM');
+select 'TÉC. DE ENFERMAGEM', 2
+where not exists (select 1 from schedule_sections where title = 'TÉC. DE ENFERMAGEM');
