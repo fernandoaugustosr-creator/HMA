@@ -433,8 +433,8 @@ export default function Schedule({
     scheduleCache.current = {}
   }
 
-  const fetchData = React.useCallback(async (forceRefresh = false) => {
-    setLoading(true)
+  const fetchData = React.useCallback(async (forceRefresh = false, showLoading = true) => {
+    if (showLoading) setLoading(true)
     const cacheKey = `${selectedMonth}-${selectedYear}-${selectedUnitId}`
 
     if (!forceRefresh && scheduleCache.current[cacheKey]) {
@@ -453,7 +453,7 @@ export default function Schedule({
             setIsSetorHidden(false)
         }
 
-        setLoading(false)
+        if (showLoading) setLoading(false)
         onLoaded?.()
         return
     }
@@ -478,10 +478,87 @@ export default function Schedule({
     } catch (error) {
       console.error('Error fetching schedule:', error)
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
       onLoaded?.()
     }
   }, [selectedMonth, selectedYear, selectedUnitId, onLoaded])
+
+  const saveQueue = useRef<{ nurseId: string, rosterId?: string, date: string, type: string }[]>([])
+  const saveTimeout = useRef<NodeJS.Timeout | null>(null)
+
+  const processQueue = async () => {
+    if (saveQueue.current.length === 0) return
+    
+    const shiftsToSave = [...saveQueue.current]
+    saveQueue.current = []
+    
+    try {
+        const res = await saveShifts(shiftsToSave as any)
+        if (res.success) {
+            clearCache()
+            // Silent refresh to sync IDs and ensure consistency
+            await fetchData(true, false) 
+        } else {
+            console.error('Background save error:', res.message)
+            // If background save fails, we should probably force a visible refresh to show the real state
+            await fetchData(true, true)
+        }
+    } catch (e) {
+        console.error('Background save failed:', e)
+        await fetchData(true, true)
+    }
+  }
+
+  const optimisticSaveShifts = (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[]) => {
+    // 1. Update local state immediately for instant feedback
+    setData(prev => {
+        const currentShifts = prev.shifts || []
+        const newShifts = [...currentShifts]
+        
+        shiftsToSave.forEach(update => {
+            // Find existing shift for this nurse/roster on this date
+            const index = newShifts.findIndex(s => 
+                s.shift_date === update.date && 
+                (update.rosterId ? s.roster_id === update.rosterId : s.nurse_id === update.nurseId)
+            )
+            
+            if (update.type === 'DELETE') {
+                if (index !== -1) newShifts.splice(index, 1)
+            } else {
+                if (index !== -1) {
+                    newShifts[index] = { ...newShifts[index], shift_type: update.type as any }
+                } else {
+                    newShifts.push({
+                        id: `temp-${Date.now()}-${Math.random()}`,
+                        nurse_id: update.nurseId,
+                        roster_id: update.rosterId,
+                        shift_date: update.date,
+                        shift_type: update.type as any
+                    })
+                }
+            }
+        })
+        return { ...prev, shifts: newShifts }
+    })
+
+    // 2. Add to queue for background processing
+    // Filter out duplicates in the queue - keep only the latest update for each cell
+    shiftsToSave.forEach(update => {
+        const existingIdx = saveQueue.current.findIndex(q => 
+            q.date === update.date && 
+            (update.rosterId ? q.rosterId === update.rosterId : q.nurseId === update.nurseId)
+        )
+        if (existingIdx !== -1) {
+            saveQueue.current[existingIdx] = update
+        } else {
+            saveQueue.current.push(update)
+        }
+    })
+
+    // 3. Debounce the actual server call
+    if (saveTimeout.current) clearTimeout(saveTimeout.current)
+    saveTimeout.current = setTimeout(processQueue, 1500) // Wait 1.5s of inactivity
+  }
 
   useEffect(() => {
     fetchData()
@@ -1232,7 +1309,15 @@ export default function Schedule({
 
   const handleSaveShifts = async () => {
     if (!shiftModalData) return
-    setLoading(true)
+    
+    // Save recurrence preference
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('enf_hma_last_recurrence', recurrence)
+        localStorage.setItem('enf_hma_last_custom_days', customRecurrenceDays)
+    }
+
+    // Close modal immediately for better UX
+    setIsShiftModalOpen(false)
     
     try {
         const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
@@ -1383,94 +1468,29 @@ export default function Schedule({
             const conflictingDates: string[] = []
             
             shiftsToSave.forEach(newShift => {
-                // Check if nurse has a shift on this date in ANOTHER roster
                 const conflict = data.shifts?.some(s => 
                     s.nurse_id === newShift.nurseId && 
                     s.shift_date === newShift.date && 
-                    // Conflict if roster_id is DIFFERENT (meaning another unit or another line)
-                    // If s.roster_id is null, it's legacy. If legacy is bound to another unit, it's a conflict.
-                    // But we don't know easily where legacy is bound here without re-running binding logic.
-                    // Simplest check: s.roster_id exists AND is different from newShift.rosterId
                     (s.roster_id && s.roster_id !== newShift.rosterId)
                 )
-                
                 if (conflict) {
-                    // Double check if the conflicting roster belongs to a DIFFERENT unit (optional, but requested "OUTRA ESCALA")
-                    // If it's the same unit but different line (ED), user might still want warning.
-                    // User said "DUPLICIDADE" (Duplicity).
                     conflictingDates.push(newShift.date.split('-').reverse().join('/'))
                 }
             })
 
             if (conflictingDates.length > 0) {
-                // Unique dates
                 const uniqueDates = Array.from(new Set(conflictingDates))
                 const message = `ATENÇÃO: O profissional já possui plantão em OUTRA ESCALA nas seguintes datas:\n\n${uniqueDates.join(', ')}\n\nDeseja realmente inserir duplicidade?`
-                
-                if (!confirm(message)) {
-                    setLoading(false)
-                    return
-                }
+                if (!confirm(message)) return
             }
         }
 
-        const res = await saveShifts(shiftsToSave)
-
-        if (!res.success) {
-            alert('Erro ao salvar: ' + (res.message || 'Erro desconhecido'))
-            await fetchData(true)
-            return
-        }
-
-        // Optimistic UI Update: update shifts in local state
-        setData(prev => {
-            const currentShifts = prev.shifts || []
-            const newShifts = [...currentShifts]
-            
-            shiftsToSave.forEach(sToSave => {
-                if (sToSave.type === 'DELETE') {
-                    // Remove matching shift
-                    const idx = newShifts.findIndex(ns => 
-                        ns.nurse_id === sToSave.nurseId && 
-                        ns.shift_date === sToSave.date && 
-                        ns.roster_id === sToSave.rosterId
-                    )
-                    if (idx !== -1) newShifts.splice(idx, 1)
-                } else {
-                    // Add or Update
-                    const existingIdx = newShifts.findIndex(ns => 
-                        ns.nurse_id === sToSave.nurseId && 
-                        ns.shift_date === sToSave.date && 
-                        ns.roster_id === sToSave.rosterId
-                    )
-                    const newShiftObj = {
-                        id: `temp-${Date.now()}-${Math.random()}`,
-                        nurse_id: sToSave.nurseId,
-                        roster_id: sToSave.rosterId,
-                        shift_date: sToSave.date,
-                        shift_type: sToSave.type as any
-                    }
-                    if (existingIdx !== -1) {
-                        newShifts[existingIdx] = newShiftObj
-                    } else {
-                        newShifts.push(newShiftObj)
-                    }
-                }
-            })
-            
-            return { ...prev, shifts: newShifts }
-        })
-
-        setIsShiftModalOpen(false)
-        clearCache()
-        // No need for immediate fetchData(true) as we updated state optimistically
-        // await fetchData(true) 
+        // USE OUR NEW OPTIMISTIC SAVER
+        optimisticSaveShifts(shiftsToSave as any)
 
     } catch (error) {
         console.error("Error saving shifts:", error)
-        alert('Erro ao salvar turno. Verifique o console.')
-    } finally {
-        setLoading(false)
+        alert('Erro ao salvar turno.')
     }
   }
 
@@ -2184,16 +2204,14 @@ export default function Schedule({
                       else if (k === 't') type = 'afternoon'
                       else if (k === 'delete' || k === 'backspace') type = 'DELETE'
                       if (!type) return
-                      setLoading(true)
-                      await saveShifts([{
+                      
+                      // USE OPTIMISTIC SAVE FOR INSTANT FEEDBACK
+                      optimisticSaveShifts([{
                         nurseId: nurse.id,
                         rosterId: nurse.unique_key,
                         date: dateStr,
                         type
                       } as any])
-                      clearCache()
-                      await fetchData(true)
-                      setLoading(false)
                     } : undefined}
                     title={isAdmin ? "Clique para gerenciar plantão" : undefined}
                   >
