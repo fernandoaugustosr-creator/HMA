@@ -2,20 +2,26 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
-  const currentUser = request.cookies.get('session_user')?.value
+  const session = request.cookies.get('session_user')
+  const path = request.nextUrl.pathname
 
-  // Se não estiver logado e não estiver na página de login, redirecionar para login
-  if (!currentUser && !request.nextUrl.pathname.startsWith('/login')) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  // Public paths that don't require authentication
+  // We now allow '/' to be public
+  if (path === '/login' || path === '/') {
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    return NextResponse.next()
   }
+
+  if (!session) {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  const currentUser = session.value
   
   // Se estiver logado
   if (currentUser) {
-    // Se tentar acessar a página de login, redirecionar para home
-    if (request.nextUrl.pathname.startsWith('/login')) {
-      return NextResponse.redirect(new URL('/', request.url))
-    }
-
     try {
       const user = JSON.parse(currentUser)
       // Se precisar trocar a senha e não estiver na página de alterar senha
@@ -24,7 +30,7 @@ export function middleware(request: NextRequest) {
       }
     } catch (e) {
       // Erro no cookie, força logout
-      const response = NextResponse.redirect(new URL('/login', request.url))
+      const response = NextResponse.redirect(new URL('/', request.url))
       response.cookies.delete('session_user')
       return response
     }
