@@ -285,9 +285,11 @@ export default function DownloadsPage() {
             overflow: hidden; /* Prevent scrollbars or extra pages */
           }
           .print-schedule-root {
-            width: 117.65%;
+            width: 100%;
             background-color: #ffffff !important;
             display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
             zoom: 0.85; /* Use 85% scale */
           }
           

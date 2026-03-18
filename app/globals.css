@@ -148,7 +148,7 @@ html, body {
   .print-schedule-root {
     page-break-after: auto;
     page-break-inside: avoid;
-    width: 117.65%;
+    width: 100%;
     zoom: 0.85;
   }
   

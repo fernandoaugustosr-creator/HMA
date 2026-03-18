@@ -1945,35 +1945,39 @@ export default function Schedule({
               <td className="border border-black px-1 py-0.5 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[120px] border-r-2 border-r-black text-center">
                 <div className="flex items-center justify-center gap-1">
                   {isAdmin && (
-                    <div className="grid grid-cols-2 gap-x-1 mr-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
-                       <button 
-                           onClick={() => handleInsertProfessional(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                           className="text-blue-500 hover:text-blue-700 focus:outline-none"
-                           title="Inserir Profissional Existente Acima"
-                       >
-                           <ArrowUpCircle size={12} />
-                       </button>
-                       <button 
-                           onClick={() => handleCreateNewAndInsert(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                           className="text-green-500 hover:text-green-700 focus:outline-none"
-                           title="Cadastrar Novo Profissional Acima"
-                       >
-                           <PlusCircle size={12} />
-                       </button>
-                       <button 
-                           onClick={() => handleInsertProfessional(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                           className="text-blue-500 hover:text-blue-700 focus:outline-none"
-                           title="Inserir Profissional Existente Abaixo"
-                       >
-                           <ArrowDownCircle size={12} />
-                       </button>
-                       <button 
-                           onClick={() => handleCreateNewAndInsert(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                           className="text-green-500 hover:text-green-700 focus:outline-none"
-                           title="Cadastrar Novo Profissional Abaixo"
-                       >
-                           <PlusCircle size={12} />
-                       </button>
+                    <div className="flex flex-col gap-0.5 mr-2 no-print opacity-0 group-hover:opacity-100 transition-opacity">
+                       <div className="flex gap-1">
+                          <button 
+                              onClick={() => handleInsertProfessional(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                              className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0.5 bg-blue-50 rounded"
+                              title="Inserir profissional JÁ CADASTRADO acima desta linha"
+                          >
+                              <ArrowUpCircle size={16} />
+                          </button>
+                          <button 
+                              onClick={() => handleCreateNewAndInsert(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                              className="text-green-600 hover:text-green-800 hover:scale-125 transition-all p-0.5 bg-green-50 rounded"
+                              title="CADASTRAR NOVO profissional acima desta linha"
+                          >
+                              <PlusCircle size={16} />
+                          </button>
+                       </div>
+                       <div className="flex gap-1">
+                          <button 
+                              onClick={() => handleInsertProfessional(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                              className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0.5 bg-blue-50 rounded"
+                              title="Inserir profissional JÁ CADASTRADO abaixo desta linha"
+                          >
+                              <ArrowDownCircle size={16} />
+                          </button>
+                          <button 
+                              onClick={() => handleCreateNewAndInsert(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                              className="text-green-600 hover:text-green-800 hover:scale-125 transition-all p-0.5 bg-green-50 rounded"
+                              title="CADASTRAR NOVO profissional abaixo desta linha"
+                          >
+                              <PlusCircle size={16} />
+                          </button>
+                       </div>
                     </div>
                   )}
                   {isAdmin && (
@@ -2768,22 +2772,7 @@ export default function Schedule({
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
                                 <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-20 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>
-                                    {isAdmin ? (
-                                        <select 
-                                            value={dynamicField}
-                                            onChange={(e) => handleDynamicFieldChange(e.target.value as any)}
-                                            className="bg-[#1e3a5f] text-white border-none outline-none font-bold text-sm print:text-[14px] uppercase cursor-pointer hover:text-blue-200 text-center w-full appearance-none"
-                                        >
-                                            <option value="coren">COREN</option>
-                                            <option value="crm">CRM</option>
-                                            <option value="phone">TELEFONE</option>
-                                            <option value="cpf">CPF</option>
-                                            <option value="vinculo">VÍNCULO</option>
-                                            <option value="role">CATEGORIA</option>
-                                        </select>
-                                    ) : (
-                                        <span className="uppercase">{dynamicField === 'role' ? 'CATEGORIA' : dynamicField}</span>
-                                    )}
+                                    <span className="uppercase">{dynamicField === 'role' ? 'CATEGORIA' : dynamicField}</span>
                                 </th>
                                 {!isSetorHidden && (
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f] group relative" rowSpan={2}>
@@ -3210,7 +3199,7 @@ export default function Schedule({
             padding: 0 !important;
             padding-left: 5mm !important; /* Safety margin for paper edges */
             background-color: #ffffff !important;
-            width: 117.65% !important; /* compensate for 0.85 zoom/scale */
+            width: 100% !important;
             zoom: 0.85; /* Better for print, doesn't leave gaps */
             text-rendering: optimizeLegibility !important;
             -webkit-print-color-adjust: exact !important;
