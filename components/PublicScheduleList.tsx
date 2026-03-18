@@ -219,8 +219,8 @@ export default function PublicScheduleList() {
       {/* Hidden Print Area */}
       <div className="hidden print:block bg-white print-schedule-root">
         {selectedRelease && (
-          <div className="w-full flex justify-center">
-            <div className="w-[95%]">
+          <div className="w-full flex justify-start items-start">
+            <div className="w-full">
               <Schedule 
                 key={selectedRelease.id}
                 isAdmin={false} 
@@ -239,24 +239,24 @@ export default function PublicScheduleList() {
         @media print {
           @page {
             size: landscape;
-            margin: 0;
+            margin: 5mm;
           }
           body {
-            overflow: hidden;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           .print-schedule-root {
-            width: 100%;
+            width: 100% !important;
             background-color: #ffffff !important;
-            display: flex;
-            justify-content: flex-start;
-            align-items: flex-start;
+            display: block !important;
             zoom: 0.85;
           }
           @supports not (zoom: 1) {
             .print-schedule-root {
-              width: 117.65%;
-              transform: scale(0.85);
-              transform-origin: top left;
+              width: 117.65% !important;
+              transform: scale(0.85) !important;
+              transform-origin: top left !important;
             }
           }
         }

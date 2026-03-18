@@ -262,22 +262,8 @@ export default function DownloadsPage() {
       {/* Hidden Print Area - Only visible quando imprimir */}
       <div className="hidden print:block bg-white print-schedule-root">
         {selectedRelease && (
-          <div className="w-full flex justify-center">
-            <div className="w-[95%]">
-              {/* Header logos removed as per request to save space */}
-              {/* <div className="flex w-full items-center justify-between mb-0">
-                <img 
-                  src="/logo-hma.png" 
-                  alt="Logo HMA" 
-                  className="h-16 object-contain"
-                />
-                <div className="flex-1" />
-                <img 
-                  src="/logo-prefeitura.png" 
-                  alt="Logo Prefeitura" 
-                  className="h-16 object-contain"
-                />
-              </div> */}
+          <div className="w-full flex justify-start items-start">
+            <div className="w-full">
               <Schedule 
                 key={selectedRelease.id}
                 isAdmin={false} 
@@ -296,25 +282,25 @@ export default function DownloadsPage() {
         @media print {
           @page {
             size: landscape;
-            margin: 0;
+            margin: 5mm;
           }
           body {
-            overflow: hidden; /* Prevent scrollbars or extra pages */
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           .print-schedule-root {
-            width: 100%;
+            width: 100% !important;
             background-color: #ffffff !important;
-            display: flex;
-            justify-content: flex-start;
-            align-items: flex-start;
+            display: block !important;
             zoom: 0.85; /* Use 85% scale */
           }
           
           @supports not (zoom: 1) {
             .print-schedule-root {
-              width: 117.65%;
-              transform: scale(0.85);
-              transform-origin: top left;
+              width: 117.65% !important;
+              transform: scale(0.85) !important;
+              transform-origin: top left !important;
             }
           }
         }
