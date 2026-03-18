@@ -282,7 +282,7 @@ export default function DownloadsPage() {
         @media print {
           @page {
             size: landscape;
-            margin: 5mm;
+            margin: 5mm 15mm;
           }
           body {
             overflow: visible !important;
