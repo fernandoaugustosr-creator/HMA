@@ -52,8 +52,8 @@ export default function LandingPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4 md:p-8 font-sans print:block print:bg-white print:p-0">
-      <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-start print:block">
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-start sm:justify-center p-4 md:p-8 font-sans print:block print:bg-white print:p-0 overflow-y-auto py-12 sm:py-8">
+      <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-start print:block mb-8">
         
         {/* Left Side: Login Form */}
         <div className="lg:col-span-5 bg-white p-8 md:p-10 rounded-3xl shadow-2xl shadow-indigo-100 border border-white relative overflow-hidden print:hidden">
@@ -138,7 +138,7 @@ export default function LandingPageContent() {
 
         {/* Right Side: Public Schedule List */}
         <div className="lg:col-span-7 space-y-6 print:block print:w-full print:m-0 print:p-0">
-          <div className="bg-white/60 backdrop-blur-sm p-6 md:p-8 rounded-3xl border border-white shadow-sm h-full min-h-[500px] print:bg-white print:p-0 print:border-none print:shadow-none print:m-0">
+          <div className="bg-white/60 backdrop-blur-sm p-6 md:p-8 rounded-3xl border border-white shadow-sm h-auto min-h-[400px] print:bg-white print:p-0 print:border-none print:shadow-none print:m-0">
             <div className="flex items-center justify-between mb-6 print:hidden">
                 <div>
                     <h2 className="text-2xl font-black text-gray-900 tracking-tight">Escalas Publicadas</h2>
