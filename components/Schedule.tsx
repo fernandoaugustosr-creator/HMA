@@ -3077,7 +3077,7 @@ export default function Schedule({
         @media print {
           @page {
             size: landscape;
-            margin: 0;
+            margin: 5mm 15mm !important;
           }
           .no-print {
             display: none !important;
