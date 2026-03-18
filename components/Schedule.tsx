@@ -2594,14 +2594,14 @@ export default function Schedule({
                              <thead>
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
-                                <tr className="bg-[#1e3a5f] text-white">
+                                <tr className="bg-[#85b1e2] text-black">
                                     <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px]">
                                         {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
                                     </th>
                                 </tr>
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
-                                <tr className="bg-[#1e3a5f] text-white">
+                                <tr className="bg-[#85b1e2] text-black">
                                     <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px] relative group">
                                         ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
                                         {isAdmin && (
@@ -2629,9 +2629,9 @@ export default function Schedule({
                                     </th>
                                 </tr>
                                 {/* Main Headers Row 3 (Columns) */}
-                                <tr className="bg-[#1e3a5f] text-white">
+                                <tr className="bg-[#85b1e2] text-black">
                                     <th 
-                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#1e3a5f] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] print:w-6"
+                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#85b1e2] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] print:w-6"
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin) return
@@ -2652,7 +2652,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[224px] sticky left-8 bg-[#1e3a5f] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[224px] sticky left-8 bg-[#85b1e2] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
@@ -2670,13 +2670,13 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>CATEGORIA</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-20 font-bold text-sm print:text-[14px] bg-[#1e3a5f]" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>CATEGORIA</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-20 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>
                                     <span className="uppercase">{dynamicField === 'role' ? 'CATEGORIA' : dynamicField}</span>
                                 </th>
                                 {!isSetorHidden && (
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#1e3a5f] group relative" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2] group relative" rowSpan={2}>
                                     {isAdmin && (
                                         <button 
                                             onClick={(e) => {
@@ -2719,20 +2719,20 @@ export default function Schedule({
                                 </th>
                                 )}
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[12px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[12px] font-bold ${isWeekend ? 'bg-[#3b5998] text-white' : 'bg-[#85b1e2] text-black'}`}>
                                     {weekday}
                                     </th>
                                 ))}
-                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-16 font-bold text-sm print:text-[14px] bg-[#1e3a5f]">TOTAL</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-16 font-bold text-sm print:text-[14px] bg-[#85b1e2]">TOTAL</th>
                             </tr>
                             {/* Main Headers Row 2 */}
-                            <tr className="bg-[#1e3a5f] text-white">
+                            <tr className="bg-[#85b1e2] text-black">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[12px] font-bold ${isWeekend ? 'bg-[#3b5998]' : 'bg-[#5072a7]'}`}>
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[12px] font-bold ${isWeekend ? 'bg-[#3b5998] text-white' : 'bg-[#85b1e2] text-black'}`}>
                                       {day}
                                     </th>
                                 ))}
-                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-16 font-bold text-sm print:text-[14px] bg-[#1e3a5f]">PLANTÃO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-12 print:w-16 font-bold text-sm print:text-[14px] bg-[#85b1e2]">PLANTÃO</th>
                             </tr>
                         </thead>
                         <tbody>
