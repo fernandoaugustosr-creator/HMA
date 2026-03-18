@@ -2594,14 +2594,14 @@ export default function Schedule({
                              <thead>
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
-                                <tr className="bg-[#85b1e2] text-black">
+                                <tr className="bg-[#1e3a5f] text-white">
                                     <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px]">
                                         {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
                                     </th>
                                 </tr>
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
-                                <tr className="bg-[#85b1e2] text-black">
+                                <tr className="bg-[#1e3a5f] text-white">
                                     <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px] relative group">
                                         ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
                                         {isAdmin && (
