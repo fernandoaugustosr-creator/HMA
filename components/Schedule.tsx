@@ -235,6 +235,8 @@ export default function Schedule({
     return nextMonth.getFullYear()
   })
   const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], absences: [], sections: [], units: [] })
+  const [allNurses, setAllNurses] = useState<Nurse[]>([])
+  const [isFetchingAllNurses, setIsFetchingAllNurses] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
@@ -432,6 +434,25 @@ export default function Schedule({
   const clearCache = () => {
     scheduleCache.current = {}
   }
+
+  const fetchAllNursesList = useCallback(async () => {
+    if (allNurses.length > 0) return
+    setIsFetchingAllNurses(true)
+    try {
+        const nurses = await getAllNurses()
+        setAllNurses(nurses as Nurse[])
+    } catch (e) {
+        console.error('Error fetching all nurses', e)
+    } finally {
+        setIsFetchingAllNurses(false)
+    }
+  }, [allNurses.length])
+
+  useEffect(() => {
+    if (isNurseModalOpen) {
+        fetchAllNursesList()
+    }
+  }, [isNurseModalOpen, fetchAllNursesList])
 
   const fetchData = useCallback(async (forceRefresh = false, showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -1552,10 +1573,11 @@ export default function Schedule({
   }, [data.nurses, rosterMap])
 
   // Optimize: Pre-sort nurses to avoid sorting on every render in the dropdown
-  // Use data.nurses directly to ensure unique entries in dropdown
+  // Use allNurses if available, otherwise fallback to rostered nurses
   const sortedUniqueNurses = useMemo(() => {
-      return [...data.nurses].sort((a, b) => a.name.localeCompare(b.name))
-  }, [data.nurses])
+      const source = allNurses.length > 0 ? allNurses : data.nurses
+      return [...source].sort((a, b) => a.name.localeCompare(b.name))
+  }, [data.nurses, allNurses])
 
   // Optimize: Group nurses by section to avoid filtering on every render
   const nursesBySection = useMemo(() => {
@@ -2993,7 +3015,7 @@ export default function Schedule({
             if (!activeLeaves) return null
 
             return (
-                <div key={type} className="bg-white text-black border border-black px-1 py-0.5 text-xs print:text-[8px] font-bold uppercase flex items-center">
+                <div key={type} className="bg-white text-black border border-black px-1 py-0.5 text-xs print:text-[10px] font-bold uppercase flex items-center">
                     <span className="mr-2 whitespace-nowrap">{label}:</span>
                     <span className="font-normal truncate">{activeLeaves}</span>
                 </div>
@@ -3201,6 +3223,18 @@ export default function Schedule({
             background-color: #facc15 !important; 
             color: black !important;
           }
+          /* Special Leaves Colors for Print */
+          .schedule-root .bg-yellow-100 { background-color: #fef9c3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .schedule-root .bg-green-100 { background-color: #dcfce7 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .schedule-root .bg-pink-100 { background-color: #fce7f3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .schedule-root .bg-cyan-100 { background-color: #cffafe !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .schedule-root .bg-blue-100 { background-color: #dbeafe !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          
+          .schedule-root .text-yellow-800 { color: #854d0e !important; }
+          .schedule-root .text-green-800 { color: #166534 !important; }
+          .schedule-root .text-pink-800 { color: #9d174d !important; }
+          .schedule-root .text-cyan-800 { color: #155e75 !important; }
+          .schedule-root .text-blue-800 { color: #1e40af !important; }
           .schedule-root .bg-yellow-400 * {
             color: black !important;
           }
@@ -3567,7 +3601,7 @@ ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
               isOpen={isNurseModalOpen}
               onClose={() => setIsNurseModalOpen(false)}
               onSelect={onNurseSelected}
-              nurses={data.nurses}
+              nurses={allNurses.length > 0 ? allNurses : data.nurses}
               sectionTitle={data.sections.find(s => s.id === insertionData?.sectionId)?.title}
               existingNurseIds={[]} // Allow adding someone already in the list for double scale
           />

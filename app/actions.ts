@@ -1985,59 +1985,21 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       // Initialize monthly_rosters if missing
       if (!db.monthly_rosters) db.monthly_rosters = []
 
-      // AUTO-MIGRATION: If roster is empty for this month/year, and it's current or past month
-      // populate it to preserve existing view. Future months start empty.
-      const now = new Date()
-      const currentMonth = now.getMonth() + 1
-      const currentYear = now.getFullYear()
-      const isCurrentOrPast = year < currentYear || (year === currentYear && month <= currentMonth)
-
-      const rosterForMonth = db.monthly_rosters.filter(r => r.month === month && r.year === year)
+      const roster = db.monthly_rosters.filter(r => r.month === month && r.year === year && (!unitId || r.unit_id === unitId))
+      const rosterNurseIds = new Set(roster.map(r => r.nurse_id))
       
-      if (rosterForMonth.length === 0 && db.nurses.length > 0 && isCurrentOrPast) {
-          // Check if we should migrate. Only if this is the first time usage or specific month.
-          // For safety, let's migrate if *no* rosters exist at all (first run after update)
-          // OR if it's a past/current month that happens to be empty (maybe cleared manually? no, we want to default populate)
-          
-          console.log('Migrating static assignments to monthly roster (Local)...')
-          db.nurses.forEach(n => {
-              if (n.section_id) {
-                  db.monthly_rosters.push({
-                      id: randomUUID(),
-                      nurse_id: n.id,
-                      section_id: n.section_id,
-                      unit_id: n.unit_id || null,
-                      month: month,
-                      year: year,
-                      created_at: new Date().toISOString()
-                  })
-              }
-          })
-          writeDb(db)
-      }
-
-      // Re-read roster after potential migration
-      const finalRoster = db.monthly_rosters.filter(r => r.month === month && r.year === year && (!unitId || r.unit_id === unitId))
-      
-      // Filter shifts
-      // Optimization: if unitId is present, we could filter shifts by nurse/roster, but for local mode it's fast enough.
+      const nurses = db.nurses.filter(n => rosterNurseIds.has(n.id))
       const shifts = db.shifts.filter(s => s.shift_date >= startDate && s.shift_date <= endDate)
-      
-      // Filter timeOffs
       const timeOffs = db.time_off_requests.filter(t => 
-        t.status === 'approved' && 
+        ['approved', 'pending'].includes(t.status) && 
         ((t.start_date <= endDate && t.end_date >= startDate))
       )
-      
-      // Get releases (metadata)
       const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year)
-
-      // Get absences
       const absences = (db.absences || []).filter(a => a.date >= startDate && a.date <= endDate)
 
       return {
-        nurses: db.nurses || [],
-        roster: finalRoster || [],
+        nurses: nurses || [],
+        roster: roster || [],
         shifts: shifts || [],
         timeOffs: timeOffs || [],
         absences: absences || [],
@@ -2049,181 +2011,58 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
 
     const supabase = createClient()
     
-    // OPTIMIZED FETCHING STRATEGY
-    if (unitId) {
-        // 1. Fetch Roster for Unit to identify relevant nurses
-        const { data: unitRoster, error: rosterError } = await supabase
-            .from('monthly_rosters')
-            .select('*')
-            .eq('month', month)
-            .eq('year', year)
-            .eq('unit_id', unitId)
-        
-        if (rosterError && rosterError.code !== 'PGRST116') console.error('Error fetching unit roster:', rosterError)
-        
-        const roster = unitRoster || []
-        // Extract Nurse IDs involved in this unit's roster
-        const unitNurseIds = Array.from(new Set(roster.map(r => r.nurse_id)))
-        
-        // 2. Parallel fetch of other data
-        // Note: We still fetch ALL nurses to support the "Add Nurse" dropdown, 
-        // but we optimize shifts, timeOffs, and absences to only relevant nurses.
-        const queries: any[] = [
-            supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
-            supabase.from('units').select('*'),
-            supabase.from('nurses').select('*').range(0, 19999).order('name'),
-            supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
-        ]
-
-        // Only fetch shifts/absences if we have nurses
-        let shiftsPromise, timeOffsPromise, absencesPromise
-
-        if (unitNurseIds.length > 0) {
-            // Chunking to avoid URL length limits if many nurses
-            // Supabase/PostgREST can handle reasonable amounts, but let's be safe if > 100
-            // For simplicity, if < 200 nurses, single query. If > 200, we might fallback to full fetch or batch.
-            // Assuming unit has < 200 nurses usually.
-            
-            shiftsPromise = supabase.from('shifts')
-                .select('id, nurse_id, date, type, roster_id, created_at')
-                .gte('date', startDate)
-                .lte('date', endDate)
-                .in('nurse_id', unitNurseIds) // Fetch shifts for these nurses (including legacy)
-
-            timeOffsPromise = supabase.from('time_off_requests')
-                .select('id, nurse_id, start_date, end_date, type, status, unit_id')
-                .in('status', ['approved', 'pending'])
-                .or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`)
-                .in('nurse_id', unitNurseIds)
-
-            absencesPromise = supabase.from('absences')
-                .select('*')
-                .gte('date', startDate)
-                .lte('date', endDate)
-                .in('nurse_id', unitNurseIds)
-        } else {
-            shiftsPromise = Promise.resolve({ data: [] })
-            timeOffsPromise = Promise.resolve({ data: [] })
-            absencesPromise = Promise.resolve({ data: [] })
-        }
-        
-        const [
-            { data: sections },
-            { data: units },
-            { data: nurses },
-            { data: releases },
-            { data: rawShifts },
-            { data: timeOffsData },
-            { data: absencesData }
-        ] = await Promise.all([
-            ...queries,
-            shiftsPromise,
-            timeOffsPromise,
-            absencesPromise
-        ])
-
-        const shifts = rawShifts?.map((s: any) => ({
-            ...s,
-            shift_date: s.date,
-            shift_type: s.type
-        })) || []
-
-        return {
-            nurses: nurses || [],
-            roster: roster,
-            shifts: shifts,
-            timeOffs: timeOffsData || [],
-            absences: absencesData || [],
-            sections: sections || [],
-            units: units || [],
-            releases: releases || []
-        }
-    }
-
-    // GLOBAL FETCH (Fallback or explicit global view)
-    // Parallel fetching for performance optimization
+    // FETCH EVERYTHING IN PARALLEL WITHOUT SEQUENTIAL PRE-FETCH
     const [
-        { data: sections, error: sectionsError },
+        { data: sections },
         { data: units },
-        { data: nurses, error: nursesError },
-        { data: rosterData, error: rosterError },
-        { data: rawShifts, error: shiftsError },
-        { data: timeOffsData, error: timeOffsError },
-        { data: releases, error: releasesError },
-        { data: absencesData, error: absencesError }
+        { data: rosterData },
+        { data: rawShifts },
+        { data: timeOffsData },
+        { data: releases },
+        { data: absencesData }
     ] = await Promise.all([
         supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
-        supabase.from('nurses').select('*').range(0, 19999).order('name'),
-        supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year).range(0, 19999),
-        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 49999),
-        supabase.from('time_off_requests').select('id, nurse_id, start_date, end_date, type, status, unit_id').in('status', ['approved', 'pending']).or(`and(start_date.lte.${endDate},end_date.gte.${startDate})`),
+        supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year).eq('unit_id', unitId || ''),
+        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate),
+        supabase.from('time_off_requests')
+            .select('id, nurse_id, start_date, end_date, type, status, unit_id')
+            .in('status', ['approved', 'pending'])
+            .lte('start_date', endDate)
+            .gte('end_date', startDate),
         supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
-        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate).range(0, 9999)
+        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate)
     ])
 
-    if (sectionsError) console.error('Error fetching sections:', sectionsError)
-    if (nursesError) console.error('Error fetching nurses:', nursesError)
-    if (shiftsError) console.error('Error fetching shifts:', shiftsError)
-    if (timeOffsError) console.error('Error fetching timeOffs:', timeOffsError)
-    if (rosterError && rosterError.code !== 'PGRST116') console.error('Error fetching roster:', rosterError)
-    if (releasesError && releasesError.code !== 'PGRST116') console.error('Error fetching releases:', releasesError)
-    if (absencesError) console.error('Error fetching absences:', absencesError)
+    const roster = rosterData || []
 
-    let roster = rosterData || []
-
-    // AUTO-MIGRATION (Supabase)
-    const now = new Date()
-    const currentMonth = now.getMonth() + 1
-    const currentYear = now.getFullYear()
-    const isCurrentOrPast = year < currentYear || (year === currentYear && month <= currentMonth)
-
-    if ((!roster || roster.length === 0) && isCurrentOrPast && nurses && nurses.length > 0) {
-        console.log('Migrating static assignments to monthly roster (Supabase)...')
-        const toInsert = nurses
-            .filter(n => n.section_id)
-            .map(n => ({
-                nurse_id: n.id,
-                section_id: n.section_id,
-                unit_id: n.unit_id,
-                month,
-                year
-            }))
-        
-        if (toInsert.length > 0) {
-            const { error: insertError } = await supabase
-                .from('monthly_rosters')
-                .upsert(toInsert, { onConflict: 'nurse_id, month, year' })
-            
-            if (!insertError) {
-                 // Fetch the newly created roster to ensure we have the IDs and correct data
-                 const { data: newRoster } = await supabase
-                    .from('monthly_rosters')
-                    .select('*')
-                    .eq('month', month)
-                    .eq('year', year)
-                 roster = newRoster || []
-            } else {
-                console.error('Error migrating roster:', insertError)
-            }
-        }
+    // Fetch only nurses that are in the roster
+    const nurseIds = Array.from(new Set(roster.map(r => r.nurse_id)))
+    let nurses: any[] = []
+    
+    if (nurseIds.length > 0) {
+        const { data: rosterNurses } = await supabase
+            .from('nurses')
+            .select('*')
+            .in('id', nurseIds)
+        nurses = rosterNurses || []
     }
 
-    const shifts = rawShifts?.map(s => ({
-      ...s,
-      shift_date: s.date,
-      shift_type: s.type
+    const shifts = rawShifts?.map((s: any) => ({
+        ...s,
+        shift_date: s.date,
+        shift_type: s.type
     })) || []
 
     return {
-      nurses: nurses || [],
-      roster: roster || [],
-      shifts: shifts || [],
-      timeOffs: timeOffsData || [],
-      absences: absencesData || [],
-      sections: sections || [],
-      units: units || [],
-      releases: releases || []
+        nurses: nurses,
+        roster: roster,
+        shifts: shifts,
+        timeOffs: timeOffsData || [],
+        absences: absencesData || [],
+        sections: sections || [],
+        units: units || [],
+        releases: releases || []
     }
   } catch (error) {
     console.error('Critical error in getMonthlyScheduleData:', error)
@@ -2239,6 +2078,21 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       releases: []
     }
   }
+}
+
+export async function getAllNurses() {
+    if (isLocalMode()) {
+        const db = readDb()
+        return db.nurses || []
+    }
+    const supabase = createClient()
+    const { data, error } = await supabase
+        .from('nurses')
+        .select('*')
+        .range(0, 19999)
+        .order('name')
+    if (error) throw error
+    return data || []
 }
 
 export async function releaseSchedule(month: number, year: number, unitId: string | null) {

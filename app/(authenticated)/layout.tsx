@@ -18,12 +18,12 @@ export default function AuthenticatedLayout({
   const user = JSON.parse(sessionCookie.value)
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-white overflow-hidden">
-      <div className="no-print h-full overflow-y-auto md:overflow-visible">
+    <div className="flex flex-col md:flex-row min-h-screen bg-white">
+      <div className="no-print md:h-screen md:sticky md:top-0">
         <Sidebar user={user} />
       </div>
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <div className="flex-1 p-2 overflow-y-auto bg-gray-50/30">
+      <main className="flex-1 flex flex-col">
+        <div className="flex-1 p-2 bg-gray-50/30">
             {children}
         </div>
       </main>
