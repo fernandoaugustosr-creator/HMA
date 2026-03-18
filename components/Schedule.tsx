@@ -1165,15 +1165,24 @@ export default function Schedule({
     setLoading(true)
     try {
         if (rosterId) {
-             // REASSIGN LOGIC
+             // REASSIGN (REPLACE) LOGIC
+             // Goal: Replace the nurse in this specific roster entry while keeping its position
              const rosterItem = data.roster.find(r => r.id === rosterId)
              if (!rosterItem) {
-                 alert('Erro: Servidor original não encontrado.')
+                 alert('Erro: Registro original não encontrado na escala.')
                  setLoading(false)
                  return
              }
+
+             // Step 1: Capture the current order of IDs in this section
+             const currentSectionRoster = data.roster
+                .filter(r => r.section_id === sectionId && r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
+                .sort((a, b) => (a.list_order || 0) - (b.list_order || 0))
              
-             // Remove old
+             const orderedIds = currentSectionRoster.map(r => r.id)
+             const positionIndex = orderedIds.indexOf(rosterId)
+
+             // Step 2: Remove the old entry
              const removeRes = await removeRosterEntry(rosterId)
              if (!removeRes.success) {
                  alert('Erro ao remover servidor anterior: ' + removeRes.message)
@@ -1181,29 +1190,52 @@ export default function Schedule({
                  return
              }
 
-             // Add new
+             // Step 3: Add the new nurse (this puts them at the end initially)
              const allowDuplicate = observation.includes('ED')
-             
-             const res = await assignNurseToRoster(
+             const addRes = await assignNurseToRoster(
                  nurseId, 
-                 rosterItem.section_id, 
-                 rosterItem.unit_id, 
+                 sectionId, 
+                 selectedUnitId, 
                  selectedMonth + 1, 
                  selectedYear, 
                  observation, 
                  rosterItem.created_at, 
-                 allowDuplicate, 
-                 rosterItem.list_order
+                 allowDuplicate
              )
              
-             if (res.success) {
+             if (addRes.success) {
+                // Step 4: Fetch fresh data to get the new roster ID
+                const freshData = await fetchData(true)
+                if (!freshData) {
+                    setLoading(false)
+                    return
+                }
+
+                // Step 5: Find the new ID (it's the one not in our previous list)
+                const oldIdsSet = new Set(orderedIds.filter(id => id !== rosterId))
+                const newEntry = freshData.roster.find(r => 
+                    r.section_id === sectionId && 
+                    r.month === selectedMonth + 1 && 
+                    r.year === selectedYear && 
+                    (!selectedUnitId || r.unit_id === selectedUnitId) &&
+                    !oldIdsSet.has(r.id)
+                )
+
+                if (newEntry && positionIndex !== -1) {
+                    // Step 6: Construct the final order replacing the old ID with the new one at the EXACT SAME POSITION
+                    const finalOrderedIds = [...orderedIds]
+                    finalOrderedIds[positionIndex] = newEntry.id
+                    
+                    await resetSectionOrder(sectionId, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, undefined, finalOrderedIds, 1)
+                }
+                
                 clearCache()
                 await fetchData(true)
              } else {
-                 alert('Erro ao adicionar novo servidor: ' + res.message)
+                 alert('Erro ao adicionar novo servidor: ' + addRes.message)
              }
         } else {
-            // ADD LOGIC
+            // ADD TO END LOGIC (from bottom button)
             const isAlreadyInThisSection = data.roster.some(r => 
                 r.nurse_id === nurseId && 
                 r.section_id === sectionId && 
@@ -1216,17 +1248,11 @@ export default function Schedule({
 
             const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear, observation, undefined, allowDuplicate)
             if (res.success) {
-                if ((res as any).warning) {
-                    alert((res as any).warning)
-                }
+                if ((res as any).warning) alert((res as any).warning)
                 clearCache()
                 await fetchData(true)
             } else {
-                if (res.message && res.message.includes('script V11')) {
-                    setShowSqlModal(true)
-                } else {
-                    alert('Erro ao adicionar: ' + res.message)
-                }
+                alert('Erro ao adicionar: ' + res.message)
             }
         }
     } catch (error: any) {
@@ -1933,39 +1959,21 @@ export default function Schedule({
               <td className="border border-black px-1 py-0.5 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[120px] border-r-2 border-r-black text-center">
                 <div className="flex items-center justify-center gap-1">
                   {isAdmin && (
-                    <div className="flex flex-col gap-0.5 mr-2 no-print opacity-0 group-hover:opacity-100 transition-opacity">
-                       <div className="flex gap-1">
-                          <button 
-                              onClick={() => handleInsertProfessional(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                              className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0.5 bg-blue-50 rounded"
-                              title="Inserir profissional JÁ CADASTRADO acima desta linha"
-                          >
-                              <ArrowUpCircle size={16} />
-                          </button>
-                          <button 
-                              onClick={() => handleCreateNewAndInsert(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                              className="text-green-600 hover:text-green-800 hover:scale-125 transition-all p-0.5 bg-green-50 rounded"
-                              title="CADASTRAR NOVO profissional acima desta linha"
-                          >
-                              <PlusCircle size={16} />
-                          </button>
-                       </div>
-                       <div className="flex gap-1">
-                          <button 
-                              onClick={() => handleInsertProfessional(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                              className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0.5 bg-blue-50 rounded"
-                              title="Inserir profissional JÁ CADASTRADO abaixo desta linha"
-                          >
-                              <ArrowDownCircle size={16} />
-                          </button>
-                          <button 
-                              onClick={() => handleCreateNewAndInsert(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                              className="text-green-600 hover:text-green-800 hover:scale-125 transition-all p-0.5 bg-green-50 rounded"
-                              title="CADASTRAR NOVO profissional abaixo desta linha"
-                          >
-                              <PlusCircle size={16} />
-                          </button>
-                       </div>
+                    <div className="flex flex-col gap-1 mr-2 no-print opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button 
+                           onClick={() => handleInsertProfessional(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                           className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0.5 bg-blue-50 rounded"
+                           title="Inserir profissional JÁ CADASTRADO acima desta linha"
+                       >
+                           <ArrowUpCircle size={16} />
+                       </button>
+                       <button 
+                           onClick={() => handleInsertProfessional(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
+                           className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0.5 bg-blue-50 rounded"
+                           title="Inserir profissional JÁ CADASTRADO abaixo desta linha"
+                       >
+                           <ArrowDownCircle size={16} />
+                       </button>
                     </div>
                   )}
                   {isAdmin && (
@@ -1982,13 +1990,26 @@ export default function Schedule({
                       value={nurse.id} 
                       onChange={(e) => handleReassign(nurse.unique_key || '', e.target.value)}
                       className={`w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold cursor-pointer outline-none uppercase no-print appearance-none text-center ${
-                        (nurse.vinculo && nurse.vinculo.toUpperCase().includes('SELETIVO')) ? 'text-green-600' :
+                        ((nurse.vinculo || '').toUpperCase().includes('SELETIVO') || (nurse.vinculo || '').toUpperCase().includes('CELETISTA')) ? 'text-green-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
                         'text-black'
                       }`}
                     >
-                      {sortedUniqueNurses.map(n => {
+                      {/* Option for current nurse to ensure header displays correctly */}
+                      {(() => {
+                          const vinculo = (nurse.vinculo || '').toUpperCase().trim()
+                          let suffix = ''
+                          if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
+                          if ((nurse.observation || '').toUpperCase().includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
+                          return (
+                            <option value={nurse.id} className="text-black font-bold">
+                                {nurse.name}{suffix}
+                            </option>
+                          )
+                      })()}
+
+                      {sortedUniqueNurses.filter(n => n.id !== nurse.id).map(n => {
                         const rosterEntries = rosterMap[n.id] || []
                         const isInCurrentContext = rosterEntries.some(r => r.section_id === section.id && (!selectedUnitId || r.unit_id === selectedUnitId))
 
@@ -2002,7 +2023,6 @@ export default function Schedule({
                         const vinculo = (n.vinculo || '').toUpperCase().trim()
                         let suffix = ''
                         if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
-                        // if (rosterEntries.some(r => r.observation?.includes('1ED'))) suffix += ' (1ED)'
                         if (rosterEntries.some(r => r.observation?.includes('AB')) || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
 
                         let label = `${n.name}${suffix}`
@@ -2017,7 +2037,7 @@ export default function Schedule({
                             <option 
                                 key={n.id} 
                                 value={n.id}
-                                className={`text-black not-italic normal-case ${isInCurrentContext ? 'font-bold text-blue-600' : 'font-normal'} ${n.id === nurse.id ? 'hidden' : ''}`}
+                                className={`text-black not-italic normal-case ${isInCurrentContext ? 'font-bold text-blue-600' : 'font-normal'}`}
                                 style={{ color: isInCurrentContext ? undefined : 'black' }}
                             >
                                 {label}
@@ -2030,7 +2050,7 @@ export default function Schedule({
                   {(() => {
                      const obs = (nurse.observation || '').toUpperCase().trim()
                      const vinculo = (nurse.vinculo || '').toUpperCase().trim()
-                     const isSeletivo = vinculo.includes('SELETIVO')
+                     const isSeletivo = vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')
                      
                      let nameColorClass = "text-black"
                      if (isSeletivo) {
@@ -2250,61 +2270,21 @@ export default function Schedule({
         <tr className="no-print bg-white">
           <td className="border border-black px-1 py-1 sticky left-0 bg-yellow-400 z-10"></td>
           <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black w-[180px]">
-             <select 
-                onChange={(e) => handleAssignNurse(e.target.value, section.id)}
-                className="flex items-center gap-1 text-xs text-blue-600 italic w-full bg-transparent border-none outline-none cursor-pointer hover:text-blue-800"
-                value=""
+             <button 
+                onClick={() => {
+                    const currentRosterIds = (nursesBySection[section.id] || [])
+                        .filter(n => !selectedUnitId || n.unit_id === selectedUnitId)
+                        .map(n => n.unique_key || '')
+                    
+                    handleInsertProfessional(section.id, currentRosterIds.length, 'below', currentRosterIds)
+                }}
+                className="flex items-center gap-2 text-xs text-blue-600 font-bold w-full hover:text-blue-800 transition-colors py-1 px-2"
              >
-                <option value="" disabled>+ Adicionar Profissional...</option>
-                {sortedUniqueNurses
-                    .map(nurse => {
-                        const rosterEntries = rosterMap[nurse.id] || []
-                        const isInCurrentContext = rosterEntries.some(r => r.section_id === section.id && (!selectedUnitId || r.unit_id === selectedUnitId))
-                        
-                        // Construct label with location info
-                        const locations = rosterEntries.map(r => {
-                             const sTitle = data.sections.find(s => s.id === r.section_id)?.title
-                             const uTitle = data.units.find(u => u.id === r.unit_id)?.title
-                             return `${sTitle}${uTitle ? ` (${uTitle})` : ''}`
-                        }).filter(Boolean).join(', ')
-
-                        const vinculo = (nurse.vinculo || '').toUpperCase().trim()
-                        let suffix = ''
-                        if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
-                        if (rosterEntries.some(r => r.observation?.includes('1ED'))) suffix += ' (1ED)'
-                        if (rosterEntries.some(r => r.observation?.includes('AB')) || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
-
-                        let label = `${nurse.name}${suffix}`
-                        
-                        if (isInCurrentContext) {
-                            // label += ' (Já nesta lista)'
-                        } else if (locations) {
-                            label += ` - ${locations}`
-                        }
-                        
-                        return (
-                            <option 
-                                key={nurse.id} 
-                                value={nurse.id} 
-                                className={`text-black not-italic ${isInCurrentContext ? 'font-bold text-blue-600' : ''}`}
-                            >
-                                {label}
-                            </option>
-                        )
-                    })
-                }
-             </select>
+                <PlusCircle size={14} />
+                <span>Adicionar Profissional ao final</span>
+             </button>
           </td>
-          <td className="border border-black px-1 py-1"></td>
-          <td className="border border-black px-1 py-1"></td>
-          <td className="border border-black px-1 py-1"></td>
-          {daysArray.map(({ day, isWeekend }) => (
-            <td 
-              key={`placeholder-${day}`} 
-              className={`border border-black px-0 py-0 ${isWeekend ? 'bg-[#3b5998]' : ''}`}
-            ></td>
-          ))}
-          <td className="border border-black px-1 py-1"></td>
+          <td className="border border-black px-1 py-1" colSpan={(isSetorHidden ? 3 : 4) + daysInMonth + 1}></td>
         </tr>
         )}
       </>
