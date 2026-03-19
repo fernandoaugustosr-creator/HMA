@@ -50,7 +50,6 @@ interface Shift {
   roster_id?: string
   shift_date: string
   shift_type: 'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn'
-  is_red?: boolean
   created_at?: string
 }
 
@@ -271,8 +270,7 @@ export default function Schedule({
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [shiftModalData, setShiftModalData] = useState<{nurseId: string, rosterId?: string, nurseName: string, date: string} | null>(null)
-  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn' | 'delete'>('day')
-  const [shiftIsRed, setShiftIsRed] = useState(false)
+  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'delete'>('day')
   const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6' | 'custom'>('off4')
   const [customRecurrenceDays, setCustomRecurrenceDays] = useState<string>('')
   const [limitShifts, setLimitShifts] = useState<string>('')
@@ -319,8 +317,6 @@ export default function Schedule({
   const [unitNumber, setUnitNumber] = useState<string>('')
   const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO'>('ALL')
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
-  const [isSaving, setIsSaving] = useState(false)
 
   const applyReplicationToTargets = async (targetsToUpdate: { id: string }[]) => {
       if (!replicationData) return
@@ -466,11 +462,8 @@ export default function Schedule({
   }, [isNurseModalOpen, leaveModalType, fetchAllNursesList])
 
   const fetchData = useCallback(async (forceRefresh = false, showLoading = true) => {
-    // PROTECT LOCAL EDITS: If saving is in progress, skip fetching to avoid overwriting state
-    if (saveQueue.current.length > 0 || isSaving) {
-        console.log('Fetch skipped: Save in progress to protect local data.')
-        return
-    }
+    // Skip fetching if a manual save is already in progress to avoid race conditions
+    if (isSaving) return
 
     if (showLoading) setLoading(true)
     const cacheKey = `${selectedMonth}-${selectedYear}-${selectedUnitId}`
@@ -479,7 +472,7 @@ export default function Schedule({
         const cachedData = scheduleCache.current[cacheKey]
         setData(cachedData)
         
-        // Ensure dynamic field and footer are also set from cache
+        // Ensure metadata fields are set from cache
         const meta = cachedData.releases && cachedData.releases.length > 0 ? cachedData.releases[0] : null
         if (meta) {
             setFooterText(meta.footer_text || '')
@@ -498,14 +491,6 @@ export default function Schedule({
 
     try {
       const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear, selectedUnitId)
-      
-      // DOUBLE PROTECTION: If a save started while we were waiting for the server, 
-      // DO NOT overwrite the local optimistic state with stale data from server.
-      if (saveQueue.current.length > 0 || isSaving) {
-          console.log('Fetch completed but skipped state update: Save in progress.')
-          return
-      }
-
       const newData = result as ScheduleData
       scheduleCache.current[cacheKey] = newData
       setData(newData)
@@ -527,126 +512,28 @@ export default function Schedule({
       if (showLoading) setLoading(false)
       onLoaded?.()
     }
-  }, [selectedMonth, selectedYear, selectedUnitId, onLoaded])
+  }, [selectedMonth, selectedYear, selectedUnitId, onLoaded, isSaving])
 
-  const saveQueue = useRef<{ nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[]>([])
-  const saveTimeout = useRef<NodeJS.Timeout | null>(null)
-
-  const processQueue = async () => {
-    if (saveQueue.current.length === 0) {
-        setSaveStatus('idle')
-        setIsSaving(false)
-        return
-    }
+  const handleDirectSaveShifts = async (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[]) => {
+    if (shiftsToSave.length === 0) return
     
-    setSaveStatus('saving')
     setIsSaving(true)
-    const shiftsToSave = [...saveQueue.current]
-    saveQueue.current = []
-    
     try {
-        // PRESERVE 'DELETE' in uppercase, lowercase others
-        const sanitizedShifts = shiftsToSave.map(s => ({
-            ...s,
-            type: s.type === 'DELETE' ? 'DELETE' : s.type.toLowerCase()
-        }))
-
-        console.log(`Saving ${sanitizedShifts.length} shifts to server...`)
-        const res = await saveShifts(sanitizedShifts as any)
-        
+        const res = await saveShifts(shiftsToSave as any)
         if (res.success) {
-            console.log('Save successful, refreshing data...')
-            // After successful save, clear cache and FORCE REFRESH from server
             clearCache()
-            await fetchData(true, false) // force refresh, don't show loading overlay
-            
-            setSaveStatus('success')
-            // Give extra time for the "Success!" indicator to show
-            setTimeout(() => {
-                setSaveStatus('idle')
-                setIsSaving(false)
-            }, 1500)
+            // Success! Now fetch the fresh data from the server
+            await fetchData(true, true)
         } else {
-            console.error('Save failed:', res.message)
-            setSaveStatus('error')
-            alert('Erro ao salvar no servidor: ' + res.message)
-            setIsSaving(false)
-            await fetchData(true, true) // force refresh with loading to recover state
+            alert('Erro ao salvar plantões: ' + res.message)
+            await fetchData(true, true)
         }
     } catch (e) {
-        setSaveStatus('error')
-        console.error('Background save failed:', e)
-        setIsSaving(false)
+        console.error('Save failed:', e)
+        alert('Erro técnico ao salvar. Tente novamente.')
         await fetchData(true, true)
-    }
-  }
-
-  const optimisticSaveShifts = (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[], immediate = false) => {
-    setSaveStatus('saving')
-    setIsSaving(true)
-    
-    // 1. Update local state immediately for instant feedback
-    setData(prev => {
-        const currentShifts = prev.shifts || []
-        const newShifts = [...currentShifts]
-        
-        shiftsToSave.forEach(update => {
-            const shiftTypeFormatted = (update.type === 'DELETE' ? 'DELETE' : update.type.toLowerCase()) as any;
-            
-            // Find existing shift for this nurse/roster on this date
-            // Match EXACTLY by rosterId if provided, or by nurseId if rosterId is null (legacy)
-            const index = newShifts.findIndex(s => 
-                s.shift_date === update.date && 
-                (update.rosterId ? s.roster_id === update.rosterId : (!s.roster_id && s.nurse_id === update.nurseId))
-            )
-            
-            if (shiftTypeFormatted === 'DELETE') {
-                if (index !== -1) {
-                    // For optimistic UI, just remove it. 
-                    // Server side will handle the masking with FOLGA_VAZIA if it was a legacy shift.
-                    newShifts.splice(index, 1)
-                }
-            } else {
-                if (index !== -1) {
-                    newShifts[index] = { 
-                        ...newShifts[index], 
-                        shift_type: shiftTypeFormatted, 
-                        is_red: !!update.isRed 
-                    }
-                } else {
-                    newShifts.push({
-                        id: `temp-${Date.now()}-${Math.random()}`,
-                        nurse_id: update.nurseId,
-                        roster_id: update.rosterId,
-                        shift_date: update.date,
-                        shift_type: shiftTypeFormatted,
-                        is_red: !!update.isRed
-                    })
-                }
-            }
-            
-            // 2. Add to background save queue
-            const existingIdx = saveQueue.current.findIndex(q => 
-                q.date === update.date && 
-                (update.rosterId ? q.rosterId === update.rosterId : q.nurseId === update.nurseId)
-            )
-            if (existingIdx !== -1) {
-                saveQueue.current[existingIdx] = update
-            } else {
-                saveQueue.current.push(update)
-            }
-        })
-        return { ...prev, shifts: newShifts }
-    })
-
-    // 3. Debounce the background save
-    if (saveTimeout.current) clearTimeout(saveTimeout.current)
-    
-    if (immediate) {
-        processQueue()
-    } else {
-        // Debounce (REDUCED to 1s for faster response)
-        saveTimeout.current = setTimeout(processQueue, 1000)
+    } finally {
+        setIsSaving(false)
     }
   }
 
@@ -1365,13 +1252,6 @@ export default function Schedule({
   }
 
   const handleCellClick = (nurse: Nurse, dateStr: string, explicitRosterId?: string) => {
-    // If saving is in progress, block new manual edits to prevent race conditions
-    if (saveQueue.current.length > 0 || isSaving) {
-        // Optional: show a small toast or just ignore
-        console.warn('Save in progress, blocking edit')
-        return
-    }
-
     // Robust rosterId resolution
     // Priority: Explicit ID (from clicked row) > Nurse Property > Fallback Search
     let rosterId = explicitRosterId || (nurse.is_rostered ? nurse.unique_key : undefined)
@@ -1393,17 +1273,7 @@ export default function Schedule({
         nurseName: nurse.name,
         date: dateStr
     })
-    
-    // Find current shift if exists to restore state
-    const currentShift = shiftsLookup.lookup[`${rosterId || nurse.id}_${dateStr}`]
-    if (currentShift) {
-        setShiftType(currentShift.shift_type)
-        setShiftIsRed(!!currentShift.is_red)
-    } else {
-        setShiftType('day')
-        setShiftIsRed(false)
-    }
-
+    setShiftType('day')
     // Restore last recurrence preference
     const savedRecurrence = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_recurrence') as any || 'none') : 'none'
     setRecurrence(savedRecurrence)
@@ -1423,11 +1293,8 @@ export default function Schedule({
         localStorage.setItem('enf_hma_last_custom_days', customRecurrenceDays)
     }
 
-    // Close modal immediately for better UX
-    setIsShiftModalOpen(false)
-    
     try {
-        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[] = []
+        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
         let stopReason = '' // Track why generation stopped
         
         if (shiftType === 'delete' && deleteWholeMonth) {
@@ -1447,14 +1314,13 @@ export default function Schedule({
             // Standard logic
             const startDate = new Date(shiftModalData.date + 'T12:00:00') // Avoid timezone issues
             const startMonth = startDate.getMonth()
-            const startYear = startDate.getFullYear()
             
             // Calculate dates based on recurrence
             let currentDateIter = new Date(startDate)
             let count = 0
             
             // Robust limit handling
-            let limit = 1000 
+            let limit = 1000 // Default to high number (effectively infinity for a month)
             const limitStr = String(limitShifts || '').trim()
             if (limitStr !== '') {
                 const parsed = parseInt(limitStr)
@@ -1466,12 +1332,13 @@ export default function Schedule({
             // Safety break to prevent infinite loops
             let safetyCounter = 0
             const MAX_ITERATIONS = 500
+            stopReason = 'month_change' // Default assumption if loop finishes normally
             
             // Loop while in the same month as start date
             console.log('Starting shift generation loop', { startDate, startMonth, recurrence, limit })
-            while (currentDateIter.getMonth() === startMonth && currentDateIter.getFullYear() === startYear) {
+            while (currentDateIter.getMonth() === startMonth && currentDateIter.getFullYear() === startDate.getFullYear()) {
                 if (safetyCounter >= MAX_ITERATIONS) {
-                    console.error('Safety limit reached in shift generation loop')
+                    console.log('Safety limit reached')
                     stopReason = 'safety_limit'
                     break
                 }
@@ -1480,13 +1347,15 @@ export default function Schedule({
                 // Special handling for Mon-Fri recurrence
                 if (recurrence === 'mon_fri') {
                     const dayOfWeek = currentDateIter.getDay()
-                    if (dayOfWeek === 0 || dayOfWeek === 6) { // 0=Sun, 6=Sat
+                    if (dayOfWeek === 0 || dayOfWeek === 6) {
+                        // Skip weekends
                         currentDateIter.setDate(currentDateIter.getDate() + 1)
                         continue
                     }
                 }
 
                 if (limitShifts && count >= limit) {
+                     console.log('User limit reached', { count, limit })
                      stopReason = 'user_limit'
                      break
                 }
@@ -1497,8 +1366,7 @@ export default function Schedule({
                     nurseId: shiftModalData.nurseId,
                     rosterId: shiftModalData.rosterId,
                     date: dateString,
-                    type: shiftType === 'delete' ? 'DELETE' : shiftType, // USE RAW LOWERCASE TYPE
-                    isRed: shiftIsRed
+                    type: shiftType === 'delete' ? 'DELETE' : shiftType
                 })
 
                 count++
@@ -1508,28 +1376,40 @@ export default function Schedule({
                     break
                 }
                 
-                // Safe date increment
-                currentDateIter.setDate(currentDateIter.getDate() + 1)
-                
-                // For non-daily recurrence, we skip more days
-                if (recurrence === '12x36') currentDateIter.setDate(currentDateIter.getDate() + 1)
-                else if (recurrence === 'every3') currentDateIter.setDate(currentDateIter.getDate() + 2)
-                else if (recurrence === '24x72') currentDateIter.setDate(currentDateIter.getDate() + 3)
-                else if (recurrence === 'off4') currentDateIter.setDate(currentDateIter.getDate() + 4)
-                else if (recurrence === 'off5') currentDateIter.setDate(currentDateIter.getDate() + 5)
-                else if (recurrence === 'off6') currentDateIter.setDate(currentDateIter.getDate() + 6)
-                else if (recurrence === 'custom') {
+                // Increment based on recurrence - Safe mutation
+                const nextDate = new Date(currentDateIter)
+                if (recurrence === 'daily' || recurrence === 'mon_fri') {
+                    nextDate.setDate(nextDate.getDate() + 1)
+                } else if (recurrence === '12x36') {
+                    nextDate.setDate(nextDate.getDate() + 2)
+                } else if (recurrence === 'every3') {
+                    nextDate.setDate(nextDate.getDate() + 3)
+                } else if (recurrence === '24x72') {
+                    nextDate.setDate(nextDate.getDate() + 4)
+                } else if (recurrence === 'off4') {
+                    nextDate.setDate(nextDate.getDate() + 5)
+                } else if (recurrence === 'off5') {
+                    nextDate.setDate(nextDate.getDate() + 6)
+                } else if (recurrence === 'off6') {
+                    nextDate.setDate(nextDate.getDate() + 7)
+                } else if (recurrence === 'custom') {
                     const days = parseInt(customRecurrenceDays)
-                    if (!isNaN(days) && days > 1) {
-                        currentDateIter.setDate(currentDateIter.getDate() + (days - 1))
+                    if (!isNaN(days) && days > 0) {
+                        nextDate.setDate(nextDate.getDate() + days)
+                    } else {
+                        stopReason = 'invalid_custom'
+                        break // Invalid custom days
                     }
+                } else {
+                    // Unknown recurrence or explicit 'none' handled above
+                    stopReason = 'unknown_recurrence'
+                    break
                 }
+                currentDateIter = nextDate
             }
-            stopReason = stopReason || 'month_end'
+            console.log('Loop finished', { count, stopReason, lastDate: currentDateIter })
         }
 
-        console.log(`Generated ${shiftsToSave.length} shifts to save. Reason: ${stopReason}`)
-        
         // CONFLICT DETECTION & CONFIRMATION
         // Only if adding/updating (not deleting)
         if (shiftType !== 'delete') {
@@ -1554,7 +1434,6 @@ export default function Schedule({
                                     `\nDeseja confirmar a inclusão?`
                  
                  if (!confirm(confirmMsg)) {
-                     setLoading(false)
                      return
                  }
             }
@@ -1579,8 +1458,11 @@ export default function Schedule({
             }
         }
 
-        // USE OUR NEW OPTIMISTIC SAVER (IMMEDIATE for modal)
-        optimisticSaveShifts(shiftsToSave as any, true);
+        // USE DIRECT SAVER
+        await handleDirectSaveShifts(shiftsToSave as any)
+        
+        // Close modal only on success
+        setIsShiftModalOpen(false)
 
     } catch (error) {
         console.error("Error saving shifts:", error)
@@ -2245,17 +2127,13 @@ export default function Schedule({
                        content = "FO" + pendingSuffix
                    }
                  }
-                 else if (shift && shift.shift_type !== 'folga_vazia') {
+                 else if (shift) {
                    if (shift.shift_type === 'day') content = 'D'
                    else if (shift.shift_type === 'night') content = 'N'
                    else if (shift.shift_type === 'morning') content = 'M'
                    else if (shift.shift_type === 'afternoon') content = 'T'
                    else if (shift.shift_type === 'mt') content = 'MT'
                    else if (shift.shift_type === 'dn') content = 'DN'
-                   
-                   if (shift.is_red) {
-                       cellClass = cellClass.replace('text-black', 'text-red-600 font-extrabold').replace('text-white', 'text-red-400 font-extrabold')
-                   }
                 }
                 else if (absence) {
                    // content = "FT"
@@ -2281,9 +2159,6 @@ export default function Schedule({
                     id={`cell-${nurse.unique_key}-${dateStr}`}
                     tabIndex={isAdmin ? 0 : -1}
                     onKeyDown={isAdmin ? async (e) => {
-                      // Block keyboard edits if saving is in progress
-                      if (saveQueue.current.length > 0 || isSaving) return
-
                       const k = e.key.toLowerCase()
                       if (isSpecialLeave) return
                       if (['d','n','m','t','delete','backspace','arrowright','arrowleft'].includes(k)) {
@@ -2589,21 +2464,9 @@ export default function Schedule({
         </div>
         <div className="flex gap-2 w-full md:w-auto justify-center mt-2">
            {isSaving && (
-                <div className={`flex items-center gap-2 px-3 py-1 border rounded no-print h-[38px] ${
-                    saveStatus === 'saving' ? 'bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse' :
-                    saveStatus === 'success' ? 'bg-green-50 text-green-700 border-green-200' :
-                    saveStatus === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
-                    'bg-gray-50 text-gray-700 border-gray-200'
-                }`}>
-                    {saveStatus === 'saving' && <span className="animate-spin h-3 w-3 border-2 border-indigo-700 border-t-transparent rounded-full"></span>}
-                    {saveStatus === 'success' && <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
-                    {saveStatus === 'error' && <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>}
-                    <span className="text-xs font-medium">
-                        {saveStatus === 'saving' ? 'Salvando...' : 
-                         saveStatus === 'success' ? 'Salvo com sucesso!' : 
-                         saveStatus === 'error' ? 'Erro ao salvar' : 
-                         'Sincronizando...'}
-                    </span>
+                <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded animate-pulse no-print h-[38px]">
+                    <span className="animate-spin h-3 w-3 border-2 border-indigo-700 border-t-transparent rounded-full"></span>
+                    <span className="text-xs font-medium">Salvando...</span>
                 </div>
            )}
            {loading ? (
@@ -3070,7 +2933,6 @@ export default function Schedule({
         )}
 
         {/* Dynamic Legend List - Shows who is on leave */}
-        <div className="flex flex-col gap-1 mt-4 no-print-break">
         {['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].map(type => {
             const label = type === 'ferias' ? 'FÉRIAS' : 
                          type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
@@ -3079,20 +2941,29 @@ export default function Schedule({
             
             // Find nurses with this leave type in this month
             const pad = (n: number) => n.toString().padStart(2, '0')
-            const monthStartStr = `${selectedYear}-${pad(selectedMonth + 1)}-01`
-            const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
-            const monthEndStr = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDayOfMonth)}`
+            const monthStart = `${selectedYear}-${pad(selectedMonth + 1)}-01`
+            const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+            const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
 
             const activeLeaves = data.timeOffs
                 .filter(t => {
                     if (t.type !== type) return false
                     if (!t.start_date || !t.end_date) return false
-                    
-                    // Simple month overlap check
-                    if (t.end_date < monthStartStr || t.start_date > monthEndStr) return false
+                    if (t.end_date < monthStart) return false
+                    if (t.start_date > monthEnd) return false
 
-                    // If unit is selected, filter by unit_id
-                    if (selectedUnitId && t.unit_id && t.unit_id !== selectedUnitId) return false
+                    // Filter by selected unit if applicable
+                    if (selectedUnitId) {
+                        if (t.unit_id && t.unit_id !== selectedUnitId) return false
+                        
+                        const isInUnit = data.roster.some(r => 
+                            r.nurse_id === t.nurse_id && 
+                            r.month === selectedMonth + 1 && 
+                            r.year === selectedYear && 
+                            r.unit_id === selectedUnitId
+                        )
+                        if (!isInUnit) return false
+                    }
 
                     return true
                 })
@@ -3112,11 +2983,10 @@ export default function Schedule({
                 </div>
             )
         })}
-        </div>
 
         {/* Footer Text Display */}
         {footerText && (
-            <div className="mt-1 text-xs print:text-[10px] print:font-bold text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
+            <div className="mt-1 text-xs print:text-[8px] text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
                 {footerText}
             </div>
         )}
@@ -3276,15 +3146,6 @@ export default function Schedule({
           .schedule-root .print-header-text * {
             font-size: 16px !important;
           }
-          .schedule-root .whitespace-pre-wrap {
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            font-weight: bold !important;
-            color: black !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
           .schedule-root th {
             font-size: 14px !important;
           }
@@ -3405,24 +3266,6 @@ export default function Schedule({
                     </div>
                 </div>
 
-                {/* Red Color Toggle */}
-                {shiftType !== 'delete' && (
-                    <div className="mb-6 bg-red-50 p-3 rounded-lg border border-red-100">
-                        <label className="flex items-center gap-3 cursor-pointer">
-                            <input 
-                                type="checkbox" 
-                                checked={shiftIsRed} 
-                                onChange={(e) => setShiftIsRed(e.target.checked)}
-                                className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
-                            />
-                            <div>
-                                <p className="text-sm font-bold text-red-700">Cor da Letra: Vermelho</p>
-                                <p className="text-xs text-red-600/70">A letra do turno ficará vermelha para este registro.</p>
-                            </div>
-                        </label>
-                    </div>
-                )}
-
                 {shiftType === 'delete' && (
                     <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded">
                         <label className="flex items-center gap-2 cursor-pointer">
@@ -3507,14 +3350,21 @@ export default function Schedule({
                     <button 
                         onClick={() => setIsShiftModalOpen(false)}
                         className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                        disabled={isSaving}
                     >
                         Cancelar
                     </button>
                     <button 
                         onClick={handleSaveShifts}
-                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold"
+                        className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold flex items-center gap-2 ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        disabled={isSaving}
                     >
-                        Salvar Alterações
+                        {isSaving ? (
+                            <>
+                                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                                Salvando...
+                            </>
+                        ) : 'Salvar Alterações'}
                     </button>
                 </div>
             </div>
