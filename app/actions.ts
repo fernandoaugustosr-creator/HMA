@@ -2023,7 +2023,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
         supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year).eq('unit_id', unitId || '').range(0, 19999),
-        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 49999),
+        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, is_red, created_at').gte('date', startDate).lte('date', endDate).range(0, 49999),
         supabase.from('time_off_requests')
             .select('id, nurse_id, start_date, end_date, type, status, unit_id')
             .in('status', ['approved', 'pending'])
@@ -2048,7 +2048,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     const shifts = rawShifts?.map((s: any) => ({
         ...s,
         shift_date: s.date,
-        shift_type: s.type
+        shift_type: (s.type || '').toLowerCase() // FORCE LOWERCASE FOR COMPATIBILITY
     })) || []
 
     return {
@@ -4496,7 +4496,7 @@ export async function deleteSection(id: string) {
   return { success: true }
 }
 
-export async function saveShifts(shifts: { nurseId: string, rosterId?: string, date: string, type: string }[]) {
+export async function saveShifts(shifts: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[]) {
   try {
     await checkAdmin()
   } catch (e) {
@@ -4568,6 +4568,7 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
           roster_id: shift.rosterId || undefined,
           shift_date: shift.date,
           shift_type: shift.type,
+          is_red: !!shift.isRed,
           updated_at: new Date().toISOString()
         }
         
@@ -4611,89 +4612,48 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
         const rosterId = rKey === 'legacy' ? null : rKey
 
         if (rosterId) {
-            // Check for legacy shifts (but DO NOT DELETE THEM anymore)
-            // We keep them as "Global Fallbacks" for other rosters.
-            // If we are clearing a cell (DELETE type), we must "Mask" the legacy shift
-            // by inserting an explicit empty/blocked shift in the current roster.
-            
-            const { data: legacyShifts } = await supabase
+            // ROSTER-SPECIFIC SHIFT: Delete then Insert (More reliable than upsert without constraints)
+            // 1. Delete existing for this roster/date
+            await supabase
                 .from('shifts')
-                .select('*')
+                .delete()
+                .eq('roster_id', rosterId)
+                .in('date', dates)
+
+            // 2. Insert new shifts (excluding DELETES)
+            const toInsert = batch.filter(s => s.type !== 'DELETE').map(s => ({
+                nurse_id: s.nurseId,
+                roster_id: rosterId,
+                date: s.date,
+                type: s.type.toLowerCase(), // ALWAYS SAVE IN LOWERCASE
+                is_red: !!s.isRed
+            }))
+
+            if (toInsert.length > 0) {
+                const { error: insertError } = await supabase
+                    .from('shifts')
+                    .insert(toInsert)
+                
+                if (insertError) {
+                    console.error('Error inserting new shifts:', insertError)
+                    return { success: false, message: 'Erro ao salvar plantões: ' + insertError.message }
+                }
+            }
+        } else {
+            // LEGACY/GLOBAL SHIFT: Delete by nurse_id where roster_id is null
+            await supabase
+                .from('shifts')
+                .delete()
                 .eq('nurse_id', nurseId)
                 .is('roster_id', null)
                 .in('date', dates)
 
-            const legacyDates = new Set(legacyShifts?.map(s => s.date) || [])
-
-            // Process "Deletes" (Clear cell)
-            const deletes = batch.filter(s => s.type === 'DELETE')
-            if (deletes.length > 0) {
-                // For dates with Legacy shift: Upsert 'FOLGA_VAZIA' (Mask)
-                const toMask = deletes.filter(s => legacyDates.has(s.date))
-                if (toMask.length > 0) {
-                     const maskInserts = toMask.map(s => ({
-                         nurse_id: s.nurseId,
-                         roster_id: rosterId,
-                         date: s.date,
-                         type: 'FOLGA_VAZIA' // Explicit empty mask
-                     }))
-                     await supabase.from('shifts').upsert(maskInserts, { onConflict: 'roster_id, date' })
-                }
-
-                // For dates WITHOUT Legacy shift: Delete the specific shift (Standard cleanup)
-                const toDeleteDates = deletes.filter(s => !legacyDates.has(s.date)).map(s => s.date)
-                if (toDeleteDates.length > 0) {
-                    await supabase
-                        .from('shifts')
-                        .delete()
-                        .eq('roster_id', rosterId)
-                        .in('date', toDeleteDates)
-                }
-            }
-            
-            // Process "Inserts/Updates" (Set value)
-            const upserts = batch.filter(s => s.type !== 'DELETE').map(s => ({
-                nurse_id: s.nurseId,
-                roster_id: rosterId,
-                date: s.date,
-                type: s.type
-            }))
-
-            if (upserts.length > 0) {
-                const { error: insertError } = await supabase
-                    .from('shifts')
-                    .upsert(upserts, { onConflict: 'roster_id, date' })
-                
-                if (insertError) {
-                    console.error('Error inserting new shifts:', insertError)
-                    if (insertError.code === '23505') {
-                        return { success: false, message: 'Erro de duplicidade: Execute o script V14 no Supabase.' }
-                    }
-                    return { success: false, message: 'Erro ao salvar: ' + insertError.message }
-                }
-            }
-        } else {
-            // Legacy/Fallback behavior: Delete by nurse_id where roster_id is null
-            const { error: deleteError } = await supabase
-                .from('shifts')
-                .delete()
-                .eq('nurse_id', nurseId)
-                .is('roster_id', null) // Be explicit to avoid deleting roster-specific shifts
-                .in('date', dates)
-
-            if (deleteError) {
-                console.error('Error deleting old shifts:', deleteError)
-                return { success: false, message: 'Erro ao limpar turnos antigos: ' + deleteError.message }
-            }
-
-            // Shared insert logic moved here for Legacy
-            const toInsert = batch
-            .filter(s => s.type !== 'DELETE')
-            .map(s => ({
+            const toInsert = batch.filter(s => s.type !== 'DELETE').map(s => ({
                 nurse_id: s.nurseId,
                 roster_id: null,
                 date: s.date,
-                type: s.type
+                type: s.type.toLowerCase(), // ALWAYS SAVE IN LOWERCASE
+                is_red: !!s.isRed
             }))
 
             if (toInsert.length > 0) {
@@ -4702,7 +4662,7 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
                     .insert(toInsert)
                  if (insertError) {
                     console.error('Error inserting legacy shifts:', insertError)
-                    return { success: false, message: 'Erro ao salvar turnos antigos: ' + insertError.message }
+                    return { success: false, message: 'Erro ao salvar plantões antigos: ' + insertError.message }
                  }
             }
         }

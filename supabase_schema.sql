@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS shifts (
     nurse_id UUID REFERENCES nurses(id) ON DELETE CASCADE,
     date DATE NOT NULL,
     type TEXT NOT NULL, -- 'D', 'N', etc.
+    roster_id UUID REFERENCES monthly_rosters(id) ON DELETE CASCADE,
+    is_red BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 

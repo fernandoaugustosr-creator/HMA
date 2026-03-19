@@ -50,6 +50,7 @@ interface Shift {
   roster_id?: string
   shift_date: string
   shift_type: 'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn'
+  is_red?: boolean
   created_at?: string
 }
 
@@ -270,7 +271,8 @@ export default function Schedule({
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [shiftModalData, setShiftModalData] = useState<{nurseId: string, rosterId?: string, nurseName: string, date: string} | null>(null)
-  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'delete'>('day')
+  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn' | 'delete'>('day')
+  const [shiftIsRed, setShiftIsRed] = useState(false)
   const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6' | 'custom'>('off4')
   const [customRecurrenceDays, setCustomRecurrenceDays] = useState<string>('')
   const [limitShifts, setLimitShifts] = useState<string>('')
@@ -517,7 +519,7 @@ export default function Schedule({
     }
   }, [selectedMonth, selectedYear, selectedUnitId, onLoaded])
 
-  const saveQueue = useRef<{ nurseId: string, rosterId?: string, date: string, type: string }[]>([])
+  const saveQueue = useRef<{ nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[]>([])
   const saveTimeout = useRef<NodeJS.Timeout | null>(null)
 
   const processQueue = async () => {
@@ -550,7 +552,7 @@ export default function Schedule({
     }
   }
 
-  const optimisticSaveShifts = (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[]) => {
+  const optimisticSaveShifts = (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[]) => {
     setIsSaving(true)
     // 1. Update local state immediately for instant feedback
     setData(prev => {
@@ -559,23 +561,29 @@ export default function Schedule({
         
         shiftsToSave.forEach(update => {
             // Find existing shift for this nurse/roster on this date
+            // Match EXACTLY by rosterId if provided, or by nurseId if rosterId is null (legacy)
             const index = newShifts.findIndex(s => 
                 s.shift_date === update.date && 
-                (update.rosterId ? s.roster_id === update.rosterId : s.nurse_id === update.nurseId)
+                (update.rosterId ? s.roster_id === update.rosterId : (!s.roster_id && s.nurse_id === update.nurseId))
             )
             
             if (update.type === 'DELETE') {
                 if (index !== -1) newShifts.splice(index, 1)
             } else {
                 if (index !== -1) {
-                    newShifts[index] = { ...newShifts[index], shift_type: update.type as any }
+                    newShifts[index] = { 
+                        ...newShifts[index], 
+                        shift_type: update.type as any, 
+                        is_red: !!update.isRed 
+                    }
                 } else {
                     newShifts.push({
                         id: `temp-${Date.now()}-${Math.random()}`,
                         nurse_id: update.nurseId,
                         roster_id: update.rosterId,
                         shift_date: update.date,
-                        shift_type: update.type as any
+                        shift_type: update.type as any,
+                        is_red: !!update.isRed
                     })
                 }
             }
@@ -1338,7 +1346,17 @@ export default function Schedule({
         nurseName: nurse.name,
         date: dateStr
     })
-    setShiftType('day')
+    
+    // Find current shift if exists to restore state
+    const currentShift = shiftsLookup.lookup[`${rosterId || nurse.id}_${dateStr}`]
+    if (currentShift) {
+        setShiftType(currentShift.shift_type)
+        setShiftIsRed(!!currentShift.is_red)
+    } else {
+        setShiftType('day')
+        setShiftIsRed(false)
+    }
+
     // Restore last recurrence preference
     const savedRecurrence = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_recurrence') as any || 'none') : 'none'
     setRecurrence(savedRecurrence)
@@ -1362,7 +1380,7 @@ export default function Schedule({
     setIsShiftModalOpen(false)
     
     try {
-        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
+        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[] = []
         let stopReason = '' // Track why generation stopped
         
         if (shiftType === 'delete' && deleteWholeMonth) {
@@ -1382,13 +1400,14 @@ export default function Schedule({
             // Standard logic
             const startDate = new Date(shiftModalData.date + 'T12:00:00') // Avoid timezone issues
             const startMonth = startDate.getMonth()
+            const startYear = startDate.getFullYear()
             
             // Calculate dates based on recurrence
             let currentDateIter = new Date(startDate)
             let count = 0
             
             // Robust limit handling
-            let limit = 1000 // Default to high number (effectively infinity for a month)
+            let limit = 1000 
             const limitStr = String(limitShifts || '').trim()
             if (limitStr !== '') {
                 const parsed = parseInt(limitStr)
@@ -1400,13 +1419,12 @@ export default function Schedule({
             // Safety break to prevent infinite loops
             let safetyCounter = 0
             const MAX_ITERATIONS = 500
-            stopReason = 'month_change' // Default assumption if loop finishes normally
             
             // Loop while in the same month as start date
             console.log('Starting shift generation loop', { startDate, startMonth, recurrence, limit })
-            while (currentDateIter.getMonth() === startMonth && currentDateIter.getFullYear() === startDate.getFullYear()) {
+            while (currentDateIter.getMonth() === startMonth && currentDateIter.getFullYear() === startYear) {
                 if (safetyCounter >= MAX_ITERATIONS) {
-                    console.log('Safety limit reached')
+                    console.error('Safety limit reached in shift generation loop')
                     stopReason = 'safety_limit'
                     break
                 }
@@ -1415,15 +1433,13 @@ export default function Schedule({
                 // Special handling for Mon-Fri recurrence
                 if (recurrence === 'mon_fri') {
                     const dayOfWeek = currentDateIter.getDay()
-                    if (dayOfWeek === 0 || dayOfWeek === 6) {
-                        // Skip weekends
+                    if (dayOfWeek === 0 || dayOfWeek === 6) { // 0=Sun, 6=Sat
                         currentDateIter.setDate(currentDateIter.getDate() + 1)
                         continue
                     }
                 }
 
                 if (limitShifts && count >= limit) {
-                     console.log('User limit reached', { count, limit })
                      stopReason = 'user_limit'
                      break
                 }
@@ -1434,7 +1450,8 @@ export default function Schedule({
                     nurseId: shiftModalData.nurseId,
                     rosterId: shiftModalData.rosterId,
                     date: dateString,
-                    type: shiftType === 'delete' ? 'DELETE' : shiftType
+                    type: shiftType === 'delete' ? 'DELETE' : shiftType, // USE RAW LOWERCASE TYPE
+                    isRed: shiftIsRed
                 })
 
                 count++
@@ -1444,39 +1461,30 @@ export default function Schedule({
                     break
                 }
                 
-                // Increment based on recurrence - Safe mutation
-                const nextDate = new Date(currentDateIter)
-                if (recurrence === 'daily' || recurrence === 'mon_fri') {
-                    nextDate.setDate(nextDate.getDate() + 1)
-                } else if (recurrence === '12x36') {
-                    nextDate.setDate(nextDate.getDate() + 2)
-                } else if (recurrence === 'every3') {
-                    nextDate.setDate(nextDate.getDate() + 3)
-                } else if (recurrence === '24x72') {
-                    nextDate.setDate(nextDate.getDate() + 4)
-                } else if (recurrence === 'off4') {
-                    nextDate.setDate(nextDate.getDate() + 5)
-                } else if (recurrence === 'off5') {
-                    nextDate.setDate(nextDate.getDate() + 6)
-                } else if (recurrence === 'off6') {
-                    nextDate.setDate(nextDate.getDate() + 7)
-                } else if (recurrence === 'custom') {
+                // Safe date increment
+                currentDateIter.setDate(currentDateIter.getDate() + 1)
+                
+                // For non-daily recurrence, we skip more days
+                if (recurrence === '12x36') currentDateIter.setDate(currentDateIter.getDate() + 1)
+                else if (recurrence === 'every3') currentDateIter.setDate(currentDateIter.getDate() + 2)
+                else if (recurrence === '24x72') currentDateIter.setDate(currentDateIter.getDate() + 3)
+                else if (recurrence === 'off4') currentDateIter.setDate(currentDateIter.getDate() + 4)
+                else if (recurrence === 'off5') currentDateIter.setDate(currentDateIter.getDate() + 5)
+                else if (recurrence === 'off6') currentDateIter.setDate(currentDateIter.getDate() + 6)
+                else if (recurrence === 'custom') {
                     const days = parseInt(customRecurrenceDays)
-                    if (!isNaN(days) && days > 0) {
-                        nextDate.setDate(nextDate.getDate() + days)
-                    } else {
-                        stopReason = 'invalid_custom'
-                        break // Invalid custom days
+                    if (!isNaN(days) && days > 1) {
+                        currentDateIter.setDate(currentDateIter.getDate() + (days - 1))
                     }
-                } else {
-                    // Unknown recurrence or explicit 'none' handled above
-                    stopReason = 'unknown_recurrence'
-                    break
                 }
-                currentDateIter = nextDate
             }
-            console.log('Loop finished', { count, stopReason, lastDate: currentDateIter })
+            stopReason = stopReason || 'month_end'
         }
+
+        console.log(`Generated ${shiftsToSave.length} shifts to save. Reason: ${stopReason}`)
+        optimisticSaveShifts(shiftsToSave as any)
+
+    } catch (error) {
 
         // CONFLICT DETECTION & CONFIRMATION
         // Only if adding/updating (not deleting)
@@ -2200,6 +2208,10 @@ export default function Schedule({
                    else if (shift.shift_type === 'afternoon') content = 'T'
                    else if (shift.shift_type === 'mt') content = 'MT'
                    else if (shift.shift_type === 'dn') content = 'DN'
+                   
+                   if (shift.is_red) {
+                       cellClass = cellClass.replace('text-black', 'text-red-600 font-extrabold').replace('text-white', 'text-red-400 font-extrabold')
+                   }
                 }
                 else if (absence) {
                    // content = "FT"
@@ -3011,25 +3023,21 @@ export default function Schedule({
             const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
             const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
 
-            const activeLeaves = data.timeOffs
+                    const activeLeaves = data.timeOffs
                 .filter(t => {
                     if (t.type !== type) return false
                     if (!t.start_date || !t.end_date) return false
-                    if (t.end_date < monthStart) return false
-                    if (t.start_date > monthEnd) return false
+                    
+                    // Simple month overlap check
+                    const pad = (n: number) => n.toString().padStart(2, '0')
+                    const monthStartStr = `${selectedYear}-${pad(selectedMonth + 1)}-01`
+                    const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+                    const monthEndStr = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDayOfMonth)}`
+                    
+                    if (t.end_date < monthStartStr || t.start_date > monthEndStr) return false
 
-                    // Filter by selected unit if applicable
-                    if (selectedUnitId) {
-                        if (t.unit_id && t.unit_id !== selectedUnitId) return false
-                        
-                        const isInUnit = data.roster.some(r => 
-                            r.nurse_id === t.nurse_id && 
-                            r.month === selectedMonth + 1 && 
-                            r.year === selectedYear && 
-                            r.unit_id === selectedUnitId
-                        )
-                        if (!isInUnit) return false
-                    }
+                    // If unit is selected, filter by unit_id
+                    if (selectedUnitId && t.unit_id && t.unit_id !== selectedUnitId) return false
 
                     return true
                 })
@@ -3052,7 +3060,7 @@ export default function Schedule({
 
         {/* Footer Text Display */}
         {footerText && (
-            <div className="mt-1 text-xs print:text-[8px] text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
+            <div className="mt-1 text-xs print:text-[10px] print:font-bold text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
                 {footerText}
             </div>
         )}
@@ -3212,6 +3220,15 @@ export default function Schedule({
           .schedule-root .print-header-text * {
             font-size: 16px !important;
           }
+          .schedule-root .whitespace-pre-wrap {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            font-weight: bold !important;
+            color: black !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           .schedule-root th {
             font-size: 14px !important;
           }
@@ -3331,6 +3348,24 @@ export default function Schedule({
                         </button>
                     </div>
                 </div>
+
+                {/* Red Color Toggle */}
+                {shiftType !== 'delete' && (
+                    <div className="mb-6 bg-red-50 p-3 rounded-lg border border-red-100">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                checked={shiftIsRed} 
+                                onChange={(e) => setShiftIsRed(e.target.checked)}
+                                className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                            />
+                            <div>
+                                <p className="text-sm font-bold text-red-700">Cor da Letra: Vermelho</p>
+                                <p className="text-xs text-red-600/70">A letra do turno ficará vermelha para este registro.</p>
+                            </div>
+                        </label>
+                    </div>
+                )}
 
                 {shiftType === 'delete' && (
                     <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded">
