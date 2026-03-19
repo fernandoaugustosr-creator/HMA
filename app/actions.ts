@@ -4625,12 +4625,13 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
                 return { success: false, message: 'Erro ao limpar turnos antigos: ' + deleteError.message }
             }
 
-            // 2. Insert new shifts (excluding DELETES)
-            const toInsert = batch.filter(s => s.type.toUpperCase() !== 'DELETE').map(s => ({
+            // 2. Insert new shifts (including 'FOLGA_VAZIA' for deletes to mask legacy shifts)
+            const toInsert = batch.map(s => ({
                 nurse_id: s.nurseId,
                 roster_id: rosterId,
                 date: s.date,
-                type: s.type.toLowerCase(), // ALWAYS SAVE IN LOWERCASE
+                // If type is DELETE, use 'FOLGA_VAZIA' to mask any legacy shift that might exist
+                type: s.type.toUpperCase() === 'DELETE' ? 'folga_vazia' : s.type.toLowerCase(),
                 is_red: !!s.isRed
             }))
 

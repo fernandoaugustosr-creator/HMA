@@ -319,6 +319,8 @@ export default function Schedule({
   const [unitNumber, setUnitNumber] = useState<string>('')
   const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO'>('ALL')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
+  const [isSaving, setIsSaving] = useState(false)
 
   const applyReplicationToTargets = async (targetsToUpdate: { id: string }[]) => {
       if (!replicationData) return
@@ -532,10 +534,12 @@ export default function Schedule({
 
   const processQueue = async () => {
     if (saveQueue.current.length === 0) {
+        setSaveStatus('idle')
         setIsSaving(false)
         return
     }
     
+    setSaveStatus('saving')
     setIsSaving(true)
     const shiftsToSave = [...saveQueue.current]
     saveQueue.current = []
@@ -547,30 +551,40 @@ export default function Schedule({
             type: s.type === 'DELETE' ? 'DELETE' : s.type.toLowerCase()
         }))
 
+        console.log(`Saving ${sanitizedShifts.length} shifts to server...`)
         const res = await saveShifts(sanitizedShifts as any)
+        
         if (res.success) {
+            console.log('Save successful, refreshing data...')
             // After successful save, clear cache and FORCE REFRESH from server
             clearCache()
             await fetchData(true, false) // force refresh, don't show loading overlay
             
-            // Give extra time for the "Saving..." indicator to show success
+            setSaveStatus('success')
+            // Give extra time for the "Success!" indicator to show
             setTimeout(() => {
+                setSaveStatus('idle')
                 setIsSaving(false)
-            }, 500)
+            }, 1500)
         } else {
+            console.error('Save failed:', res.message)
+            setSaveStatus('error')
             alert('Erro ao salvar no servidor: ' + res.message)
             setIsSaving(false)
             await fetchData(true, true) // force refresh with loading to recover state
         }
     } catch (e) {
+        setSaveStatus('error')
         console.error('Background save failed:', e)
         setIsSaving(false)
         await fetchData(true, true)
     }
   }
 
-  const optimisticSaveShifts = (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[]) => {
+  const optimisticSaveShifts = (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[], immediate = false) => {
+    setSaveStatus('saving')
     setIsSaving(true)
+    
     // 1. Update local state immediately for instant feedback
     setData(prev => {
         const currentShifts = prev.shifts || []
@@ -587,7 +601,11 @@ export default function Schedule({
             )
             
             if (shiftTypeFormatted === 'DELETE') {
-                if (index !== -1) newShifts.splice(index, 1)
+                if (index !== -1) {
+                    // For optimistic UI, just remove it. 
+                    // Server side will handle the masking with FOLGA_VAZIA if it was a legacy shift.
+                    newShifts.splice(index, 1)
+                }
             } else {
                 if (index !== -1) {
                     newShifts[index] = { 
@@ -606,27 +624,30 @@ export default function Schedule({
                     })
                 }
             }
+            
+            // 2. Add to background save queue
+            const existingIdx = saveQueue.current.findIndex(q => 
+                q.date === update.date && 
+                (update.rosterId ? q.rosterId === update.rosterId : q.nurseId === update.nurseId)
+            )
+            if (existingIdx !== -1) {
+                saveQueue.current[existingIdx] = update
+            } else {
+                saveQueue.current.push(update)
+            }
         })
         return { ...prev, shifts: newShifts }
     })
 
-    // 2. Add to queue for background processing
-    // Filter out duplicates in the queue - keep only the latest update for each cell
-    shiftsToSave.forEach(update => {
-        const existingIdx = saveQueue.current.findIndex(q => 
-            q.date === update.date && 
-            (update.rosterId ? q.rosterId === update.rosterId : q.nurseId === update.nurseId)
-        )
-        if (existingIdx !== -1) {
-            saveQueue.current[existingIdx] = update
-        } else {
-            saveQueue.current.push(update)
-        }
-    })
-
-    // 3. Debounce the actual server call
+    // 3. Debounce the background save
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
-    saveTimeout.current = setTimeout(processQueue, 2000) // Wait 2s of inactivity
+    
+    if (immediate) {
+        processQueue()
+    } else {
+        // Debounce (REDUCED to 1s for faster response)
+        saveTimeout.current = setTimeout(processQueue, 1000)
+    }
   }
 
   useEffect(() => {
@@ -1558,8 +1579,8 @@ export default function Schedule({
             }
         }
 
-        // USE OUR NEW OPTIMISTIC SAVER
-        optimisticSaveShifts(shiftsToSave as any);
+        // USE OUR NEW OPTIMISTIC SAVER (IMMEDIATE for modal)
+        optimisticSaveShifts(shiftsToSave as any, true);
 
     } catch (error) {
         console.error("Error saving shifts:", error)
@@ -2224,7 +2245,7 @@ export default function Schedule({
                        content = "FO" + pendingSuffix
                    }
                  }
-                 else if (shift) {
+                 else if (shift && shift.shift_type !== 'folga_vazia') {
                    if (shift.shift_type === 'day') content = 'D'
                    else if (shift.shift_type === 'night') content = 'N'
                    else if (shift.shift_type === 'morning') content = 'M'
@@ -2568,9 +2589,21 @@ export default function Schedule({
         </div>
         <div className="flex gap-2 w-full md:w-auto justify-center mt-2">
            {isSaving && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded animate-pulse no-print h-[38px]">
-                    <span className="animate-spin h-3 w-3 border-2 border-indigo-700 border-t-transparent rounded-full"></span>
-                    <span className="text-xs font-medium">Salvando...</span>
+                <div className={`flex items-center gap-2 px-3 py-1 border rounded no-print h-[38px] ${
+                    saveStatus === 'saving' ? 'bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse' :
+                    saveStatus === 'success' ? 'bg-green-50 text-green-700 border-green-200' :
+                    saveStatus === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
+                    'bg-gray-50 text-gray-700 border-gray-200'
+                }`}>
+                    {saveStatus === 'saving' && <span className="animate-spin h-3 w-3 border-2 border-indigo-700 border-t-transparent rounded-full"></span>}
+                    {saveStatus === 'success' && <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                    {saveStatus === 'error' && <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>}
+                    <span className="text-xs font-medium">
+                        {saveStatus === 'saving' ? 'Salvando...' : 
+                         saveStatus === 'success' ? 'Salvo com sucesso!' : 
+                         saveStatus === 'error' ? 'Erro ao salvar' : 
+                         'Sincronizando...'}
+                    </span>
                 </div>
            )}
            {loading ? (
