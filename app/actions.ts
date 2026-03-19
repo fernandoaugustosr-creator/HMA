@@ -1986,9 +1986,8 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       if (!db.monthly_rosters) db.monthly_rosters = []
 
       const roster = db.monthly_rosters.filter(r => r.month === month && r.year === year && (!unitId || r.unit_id === unitId))
-      const rosterNurseIds = new Set(roster.map(r => r.nurse_id))
       
-      const nurses = db.nurses.filter(n => rosterNurseIds.has(n.id))
+      const nurses = db.nurses // RETURN ALL NURSES
       const shifts = db.shifts.filter(s => s.shift_date >= startDate && s.shift_date <= endDate)
       const timeOffs = db.time_off_requests.filter(t => 
         ['approved', 'pending'].includes(t.status) && 
@@ -2023,30 +2022,28 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     ] = await Promise.all([
         supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
-        supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year).eq('unit_id', unitId || ''),
-        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate),
+        supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year).eq('unit_id', unitId || '').range(0, 19999),
+        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 49999),
         supabase.from('time_off_requests')
             .select('id, nurse_id, start_date, end_date, type, status, unit_id')
             .in('status', ['approved', 'pending'])
             .lte('start_date', endDate)
-            .gte('end_date', startDate),
+            .gte('end_date', startDate)
+            .range(0, 19999),
         supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
-        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate)
+        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate).range(0, 19999)
     ])
 
     const roster = rosterData || []
 
-    // Fetch only nurses that are in the roster
-    const nurseIds = Array.from(new Set(roster.map(r => r.nurse_id)))
-    let nurses: any[] = []
-    
-    if (nurseIds.length > 0) {
-        const { data: rosterNurses } = await supabase
-            .from('nurses')
-            .select('*')
-            .in('id', nurseIds)
-        nurses = rosterNurses || []
-    }
+    // FETCH NURSES - Fetch all nurses to ensure no rows disappear unexpectedly
+    const { data: nurses, error: nursesError } = await supabase
+        .from('nurses')
+        .select('*')
+        .range(0, 19999)
+        .order('name')
+
+    if (nursesError) console.error('Error fetching nurses:', nursesError)
 
     const shifts = rawShifts?.map((s: any) => ({
         ...s,
@@ -2055,7 +2052,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     })) || []
 
     return {
-        nurses: nurses,
+        nurses: nurses || [],
         roster: roster,
         shifts: shifts,
         timeOffs: timeOffsData || [],
@@ -2081,18 +2078,30 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
 }
 
 export async function getAllNurses() {
-    if (isLocalMode()) {
-        const db = readDb()
-        return db.nurses || []
+    try {
+        if (isLocalMode()) {
+            const db = readDb()
+            return db.nurses || []
+        }
+        const supabase = createClient()
+        // Use a large range and count to ensure we get absolutely everyone
+        const { data, error, count } = await supabase
+            .from('nurses')
+            .select('*', { count: 'exact' })
+            .order('name')
+            .range(0, 19999)
+        
+        if (error) {
+            console.error('Error in getAllNurses Supabase:', error)
+            throw error
+        }
+        
+        console.log(`getAllNurses: Fetched ${data?.length} of ${count} nurses.`)
+        return data || []
+    } catch (e) {
+        console.error('Error in getAllNurses:', e)
+        return []
     }
-    const supabase = createClient()
-    const { data, error } = await supabase
-        .from('nurses')
-        .select('*')
-        .range(0, 19999)
-        .order('name')
-    if (error) throw error
-    return data || []
 }
 
 export async function releaseSchedule(month: number, year: number, unitId: string | null) {

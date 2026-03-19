@@ -18,11 +18,12 @@ interface NurseSelectionModalProps {
   onClose: () => void
   onSelect: (nurseId: string) => void
   nurses: Nurse[]
+  isFetching?: boolean
   sectionTitle?: string
   existingNurseIds?: string[]
 }
 
-export default function NurseSelectionModal({ isOpen, onClose, onSelect, nurses, sectionTitle, existingNurseIds = [] }: NurseSelectionModalProps) {
+export default function NurseSelectionModal({ isOpen, onClose, onSelect, nurses, isFetching = false, sectionTitle, existingNurseIds = [] }: NurseSelectionModalProps) {
   const [searchTerm, setSearchTerm] = useState('')
 
   const filteredNurses = useMemo(() => {
@@ -57,7 +58,12 @@ export default function NurseSelectionModal({ isOpen, onClose, onSelect, nurses,
                 </div>
 
                 <div className="flex-1 overflow-y-auto border rounded-md">
-                    {filteredNurses.length === 0 ? (
+                    {isFetching ? (
+                        <div className="p-8 text-center text-gray-500 text-sm">
+                            <span className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full inline-block mr-2 mb-2"></span>
+                            <p>Carregando todos os servidores...</p>
+                        </div>
+                    ) : filteredNurses.length === 0 ? (
                         <div className="p-8 text-center text-gray-500 text-sm">
                             <p>Nenhum profissional encontrado.</p>
                             {searchTerm && <p className="text-xs mt-1">Tente outro termo de busca.</p>}

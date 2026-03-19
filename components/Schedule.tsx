@@ -237,6 +237,7 @@ export default function Schedule({
   const [data, setData] = useState<ScheduleData>({ nurses: [], roster: [], shifts: [], timeOffs: [], absences: [], sections: [], units: [] })
   const [allNurses, setAllNurses] = useState<Nurse[]>([])
   const [isFetchingAllNurses, setIsFetchingAllNurses] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
@@ -435,12 +436,17 @@ export default function Schedule({
     scheduleCache.current = {}
   }
 
-  const fetchAllNursesList = useCallback(async () => {
-    if (allNurses.length > 0) return
+  const fetchAllNursesList = useCallback(async (force = false) => {
+    // If we already have nurses and aren't forcing, skip
+    if (!force && allNurses.length > 50) return 
+    
     setIsFetchingAllNurses(true)
     try {
         const nurses = await getAllNurses()
-        setAllNurses(nurses as Nurse[])
+        console.log('fetchAllNursesList: received', nurses?.length, 'nurses')
+        if (nurses && nurses.length > 0) {
+            setAllNurses(nurses as Nurse[])
+        }
     } catch (e) {
         console.error('Error fetching all nurses', e)
     } finally {
@@ -449,12 +455,19 @@ export default function Schedule({
   }, [allNurses.length])
 
   useEffect(() => {
-    if (isNurseModalOpen) {
-        fetchAllNursesList()
+    // When opening modals that need the full nurse list, ensure we fetch it
+    if (isNurseModalOpen || !!leaveModalType) {
+        fetchAllNursesList(true) // Force fetch to be sure we have the latest and complete list
     }
-  }, [isNurseModalOpen, fetchAllNursesList])
+  }, [isNurseModalOpen, leaveModalType, fetchAllNursesList])
 
   const fetchData = useCallback(async (forceRefresh = false, showLoading = true) => {
+    // PROTECT LOCAL EDITS: If saving is in progress, skip fetching to avoid overwriting state
+    if (saveQueue.current.length > 0 || isSaving) {
+        console.log('Fetch skipped: Save in progress to protect local data.')
+        return
+    }
+
     if (showLoading) setLoading(true)
     const cacheKey = `${selectedMonth}-${selectedYear}-${selectedUnitId}`
 
@@ -508,8 +521,12 @@ export default function Schedule({
   const saveTimeout = useRef<NodeJS.Timeout | null>(null)
 
   const processQueue = async () => {
-    if (saveQueue.current.length === 0) return
+    if (saveQueue.current.length === 0) {
+        setIsSaving(false)
+        return
+    }
     
+    setIsSaving(true)
     const shiftsToSave = [...saveQueue.current]
     saveQueue.current = []
     
@@ -517,20 +534,24 @@ export default function Schedule({
         const res = await saveShifts(shiftsToSave as any)
         if (res.success) {
             clearCache()
-            // Silent refresh to sync IDs and ensure consistency
-            await fetchData(true, false) 
+            // After successful save, wait a bit before allowing a fetch to ensure server is synced
+            setTimeout(() => {
+                setIsSaving(false)
+            }, 1000)
         } else {
-            console.error('Background save error:', res.message)
-            // If background save fails, we should probably force a visible refresh to show the real state
+            alert('Erro ao salvar: ' + res.message)
+            setIsSaving(false)
             await fetchData(true, true)
         }
     } catch (e) {
         console.error('Background save failed:', e)
+        setIsSaving(false)
         await fetchData(true, true)
     }
   }
 
   const optimisticSaveShifts = (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[]) => {
+    setIsSaving(true)
     // 1. Update local state immediately for instant feedback
     setData(prev => {
         const currentShifts = prev.shifts || []
@@ -578,7 +599,7 @@ export default function Schedule({
 
     // 3. Debounce the actual server call
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
-    saveTimeout.current = setTimeout(processQueue, 1500) // Wait 1.5s of inactivity
+    saveTimeout.current = setTimeout(processQueue, 2000) // Wait 2s of inactivity
   }
 
   useEffect(() => {
@@ -2508,6 +2529,12 @@ export default function Schedule({
             </div>
         </div>
         <div className="flex gap-2 w-full md:w-auto justify-center mt-2">
+           {isSaving && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded animate-pulse no-print h-[38px]">
+                    <span className="animate-spin h-3 w-3 border-2 border-indigo-700 border-t-transparent rounded-full"></span>
+                    <span className="text-xs font-medium">Salvando...</span>
+                </div>
+           )}
            {loading ? (
                <button disabled className="bg-gray-300 text-gray-500 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm h-[38px] w-full md:w-48 cursor-not-allowed">
                   <span className="animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></span>
@@ -2880,7 +2907,8 @@ export default function Schedule({
             fetchData(true)
             setLeaveModalType(null)
         }}
-        nurses={data.nurses}
+        nurses={allNurses.length > 0 ? allNurses : data.nurses}
+        isFetchingNurses={isFetchingAllNurses || (allNurses.length === 0 && data.nurses.length === 0)}
         existingLeaves={data.timeOffs}
         type={leaveModalType || 'ferias'}
         selectedMonth={selectedMonth}
@@ -3602,6 +3630,7 @@ ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
               onClose={() => setIsNurseModalOpen(false)}
               onSelect={onNurseSelected}
               nurses={allNurses.length > 0 ? allNurses : data.nurses}
+              isFetching={isFetchingAllNurses}
               sectionTitle={data.sections.find(s => s.id === insertionData?.sectionId)?.title}
               existingNurseIds={[]} // Allow adding someone already in the list for double scale
           />

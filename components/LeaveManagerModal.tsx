@@ -12,6 +12,7 @@ interface Props {
   onClose: () => void
   onSuccess: () => void
   nurses: any[]
+  isFetchingNurses?: boolean
   existingLeaves: any[]
   type: LeaveType
   selectedMonth: number
@@ -31,7 +32,7 @@ const TYPE_CONFIG: Record<LeaveType, { title: string, color: string, bg: string,
   'cessao': { title: 'Cessão', color: 'text-cyan-600', bg: 'bg-cyan-50', border: 'border-cyan-200' }
 }
 
-export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, existingLeaves = [], type, selectedMonth, selectedYear, unitId }: Props) {
+export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, isFetchingNurses = false, existingLeaves = [], type, selectedMonth, selectedYear, unitId }: Props) {
   const [loading, setLoading] = useState(false)
   const [selectedNurseId, setSelectedNurseId] = useState('')
   const config = TYPE_CONFIG[type]
@@ -66,23 +67,23 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
   }, [existingLeaves, type, selectedMonth, selectedYear, unitId])
 
   async function handleSubmit(formData: FormData) {
+    if (!selectedNurseId) {
+        alert('Por favor, selecione um profissional.')
+        return
+    }
+
     setLoading(true)
     try {
         formData.append('type', type)
         
-        // Calculate start and end date based on selected month/year
-        // selectedMonth is 0-indexed (0 = Jan)
-        const start = new Date(selectedYear, selectedMonth, 1)
-        const end = new Date(selectedYear, selectedMonth + 1, 0) // Last day of month
-        
-        // Format as YYYY-MM-DD (handling local time offset by using explicit components)
-        // Actually, for dates like YYYY-MM-DD, we should be careful with timezones.
-        // A simple string construction is safer to avoid UTC shifting issues.
+        // Ensure nurseId is in formData (sometimes hidden input isn't captured in custom actions)
+        if (!formData.has('nurseId')) {
+            formData.append('nurseId', selectedNurseId)
+        }
         
         const pad = (n: number) => n.toString().padStart(2, '0')
         const startStr = `${selectedYear}-${pad(selectedMonth + 1)}-01`
         
-        // Get last day
         const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
         const endStr = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
         
@@ -93,15 +94,14 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
         const res = await assignLeave(null, formData)
         if (res.success) {
             alert('Cadastrado com sucesso!')
-            // Reset form? The parent re-renders, so fields might persist if not handled. 
-            // Ideally we just call onSuccess which refreshes data.
+            setSelectedNurseId('') // Clear for next one
             onSuccess()
         } else {
-            alert(res.message)
+            alert(res.message || 'Erro ao salvar registro')
         }
     } catch (error) {
-        console.error(error)
-        alert('Erro ao cadastrar')
+        console.error('Error in LeaveManagerModal handleSubmit:', error)
+        alert('Erro técnico ao cadastrar ausência.')
     } finally {
         setLoading(false)
     }
@@ -150,11 +150,17 @@ export default function LeaveManagerModal({ isOpen, onClose, onSuccess, nurses, 
                           options={nurses.map(n => ({ value: n.id, label: n.name }))}
                           value={selectedNurseId}
                           onChange={setSelectedNurseId}
-                          placeholder="Selecione um profissional..."
+                          placeholder={isFetchingNurses ? "Carregando todos os servidores..." : "Selecione um profissional..."}
                           required
                           name="nurseId"
                           className="mt-1"
+                          disabled={isFetchingNurses}
                         />
+                        {nurses.length > 0 && (
+                            <p className="text-[10px] text-gray-400 mt-1">
+                                {nurses.length} servidores carregados na lista.
+                            </p>
+                        )}
                     </div>
 
                     {unitId && (
