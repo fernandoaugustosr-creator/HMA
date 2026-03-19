@@ -4614,14 +4614,19 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
         if (rosterId) {
             // ROSTER-SPECIFIC SHIFT: Delete then Insert (More reliable than upsert without constraints)
             // 1. Delete existing for this roster/date
-            await supabase
+            const { error: deleteError } = await supabase
                 .from('shifts')
                 .delete()
                 .eq('roster_id', rosterId)
                 .in('date', dates)
+            
+            if (deleteError) {
+                console.error('Error deleting shifts before insert:', deleteError)
+                return { success: false, message: 'Erro ao limpar turnos antigos: ' + deleteError.message }
+            }
 
             // 2. Insert new shifts (excluding DELETES)
-            const toInsert = batch.filter(s => s.type !== 'DELETE').map(s => ({
+            const toInsert = batch.filter(s => s.type.toUpperCase() !== 'DELETE').map(s => ({
                 nurse_id: s.nurseId,
                 roster_id: rosterId,
                 date: s.date,
@@ -4635,20 +4640,35 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
                     .insert(toInsert)
                 
                 if (insertError) {
-                    console.error('Error inserting new shifts:', insertError)
-                    return { success: false, message: 'Erro ao salvar plantões: ' + insertError.message }
+                    // FALLBACK: If 'is_red' column is missing in Supabase, retry without it
+                    if (insertError.message?.includes('is_red') || insertError.code === '42703') {
+                        console.warn('Supabase: column is_red missing. Retrying without it.')
+                        const fallbackInsert = toInsert.map(({ is_red, ...rest }: any) => rest)
+                        const { error: retryError } = await supabase
+                            .from('shifts')
+                            .insert(fallbackInsert)
+                        if (retryError) return { success: false, message: 'Erro ao salvar (sem destaque): ' + retryError.message }
+                    } else {
+                        console.error('Error inserting new shifts:', insertError)
+                        return { success: false, message: 'Erro ao salvar plantões: ' + insertError.message }
+                    }
                 }
             }
         } else {
             // LEGACY/GLOBAL SHIFT: Delete by nurse_id where roster_id is null
-            await supabase
+            const { error: deleteError } = await supabase
                 .from('shifts')
                 .delete()
                 .eq('nurse_id', nurseId)
                 .is('roster_id', null)
                 .in('date', dates)
+            
+            if (deleteError) {
+                console.error('Error deleting legacy shifts before insert:', deleteError)
+                return { success: false, message: 'Erro ao limpar turnos antigos (legado): ' + deleteError.message }
+            }
 
-            const toInsert = batch.filter(s => s.type !== 'DELETE').map(s => ({
+            const toInsert = batch.filter(s => s.type.toUpperCase() !== 'DELETE').map(s => ({
                 nurse_id: s.nurseId,
                 roster_id: null,
                 date: s.date,
@@ -4661,8 +4681,18 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
                     .from('shifts')
                     .insert(toInsert)
                  if (insertError) {
-                    console.error('Error inserting legacy shifts:', insertError)
-                    return { success: false, message: 'Erro ao salvar plantões antigos: ' + insertError.message }
+                    // FALLBACK: If 'is_red' column is missing in Supabase, retry without it
+                    if (insertError.message?.includes('is_red') || insertError.code === '42703') {
+                        console.warn('Supabase: column is_red missing. Retrying without it.')
+                        const fallbackInsert = toInsert.map(({ is_red, ...rest }: any) => rest)
+                        const { error: retryError } = await supabase
+                            .from('shifts')
+                            .insert(fallbackInsert)
+                        if (retryError) return { success: false, message: 'Erro ao salvar plantões antigos (sem destaque): ' + retryError.message }
+                    } else {
+                        console.error('Error inserting legacy shifts:', insertError)
+                        return { success: false, message: 'Erro ao salvar plantões antigos: ' + insertError.message }
+                    }
                  }
             }
         }

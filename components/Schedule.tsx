@@ -496,6 +496,14 @@ export default function Schedule({
 
     try {
       const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear, selectedUnitId)
+      
+      // DOUBLE PROTECTION: If a save started while we were waiting for the server, 
+      // DO NOT overwrite the local optimistic state with stale data from server.
+      if (saveQueue.current.length > 0 || isSaving) {
+          console.log('Fetch completed but skipped state update: Save in progress.')
+          return
+      }
+
       const newData = result as ScheduleData
       scheduleCache.current[cacheKey] = newData
       setData(newData)
@@ -533,17 +541,26 @@ export default function Schedule({
     saveQueue.current = []
     
     try {
-        const res = await saveShifts(shiftsToSave as any)
+        // PRESERVE 'DELETE' in uppercase, lowercase others
+        const sanitizedShifts = shiftsToSave.map(s => ({
+            ...s,
+            type: s.type === 'DELETE' ? 'DELETE' : s.type.toLowerCase()
+        }))
+
+        const res = await saveShifts(sanitizedShifts as any)
         if (res.success) {
+            // After successful save, clear cache and FORCE REFRESH from server
             clearCache()
-            // After successful save, wait a bit before allowing a fetch to ensure server is synced
+            await fetchData(true, false) // force refresh, don't show loading overlay
+            
+            // Give extra time for the "Saving..." indicator to show success
             setTimeout(() => {
                 setIsSaving(false)
-            }, 1000)
+            }, 500)
         } else {
-            alert('Erro ao salvar: ' + res.message)
+            alert('Erro ao salvar no servidor: ' + res.message)
             setIsSaving(false)
-            await fetchData(true, true)
+            await fetchData(true, true) // force refresh with loading to recover state
         }
     } catch (e) {
         console.error('Background save failed:', e)
@@ -560,6 +577,8 @@ export default function Schedule({
         const newShifts = [...currentShifts]
         
         shiftsToSave.forEach(update => {
+            const shiftTypeFormatted = (update.type === 'DELETE' ? 'DELETE' : update.type.toLowerCase()) as any;
+            
             // Find existing shift for this nurse/roster on this date
             // Match EXACTLY by rosterId if provided, or by nurseId if rosterId is null (legacy)
             const index = newShifts.findIndex(s => 
@@ -567,13 +586,13 @@ export default function Schedule({
                 (update.rosterId ? s.roster_id === update.rosterId : (!s.roster_id && s.nurse_id === update.nurseId))
             )
             
-            if (update.type === 'DELETE') {
+            if (shiftTypeFormatted === 'DELETE') {
                 if (index !== -1) newShifts.splice(index, 1)
             } else {
                 if (index !== -1) {
                     newShifts[index] = { 
                         ...newShifts[index], 
-                        shift_type: update.type as any, 
+                        shift_type: shiftTypeFormatted, 
                         is_red: !!update.isRed 
                     }
                 } else {
@@ -582,7 +601,7 @@ export default function Schedule({
                         nurse_id: update.nurseId,
                         roster_id: update.rosterId,
                         shift_date: update.date,
-                        shift_type: update.type as any,
+                        shift_type: shiftTypeFormatted,
                         is_red: !!update.isRed
                     })
                 }
@@ -1325,6 +1344,13 @@ export default function Schedule({
   }
 
   const handleCellClick = (nurse: Nurse, dateStr: string, explicitRosterId?: string) => {
+    // If saving is in progress, block new manual edits to prevent race conditions
+    if (saveQueue.current.length > 0 || isSaving) {
+        // Optional: show a small toast or just ignore
+        console.warn('Save in progress, blocking edit')
+        return
+    }
+
     // Robust rosterId resolution
     // Priority: Explicit ID (from clicked row) > Nurse Property > Fallback Search
     let rosterId = explicitRosterId || (nurse.is_rostered ? nurse.unique_key : undefined)
@@ -1482,10 +1508,7 @@ export default function Schedule({
         }
 
         console.log(`Generated ${shiftsToSave.length} shifts to save. Reason: ${stopReason}`)
-        optimisticSaveShifts(shiftsToSave as any)
-
-    } catch (error) {
-
+        
         // CONFLICT DETECTION & CONFIRMATION
         // Only if adding/updating (not deleting)
         if (shiftType !== 'delete') {
@@ -1536,7 +1559,7 @@ export default function Schedule({
         }
 
         // USE OUR NEW OPTIMISTIC SAVER
-        optimisticSaveShifts(shiftsToSave as any)
+        optimisticSaveShifts(shiftsToSave as any);
 
     } catch (error) {
         console.error("Error saving shifts:", error)
@@ -2237,6 +2260,9 @@ export default function Schedule({
                     id={`cell-${nurse.unique_key}-${dateStr}`}
                     tabIndex={isAdmin ? 0 : -1}
                     onKeyDown={isAdmin ? async (e) => {
+                      // Block keyboard edits if saving is in progress
+                      if (saveQueue.current.length > 0 || isSaving) return
+
                       const k = e.key.toLowerCase()
                       if (isSpecialLeave) return
                       if (['d','n','m','t','delete','backspace','arrowright','arrowleft'].includes(k)) {
@@ -3011,6 +3037,7 @@ export default function Schedule({
         )}
 
         {/* Dynamic Legend List - Shows who is on leave */}
+        <div className="flex flex-col gap-1 mt-4 no-print-break">
         {['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].map(type => {
             const label = type === 'ferias' ? 'FÉRIAS' : 
                          type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
@@ -3019,21 +3046,16 @@ export default function Schedule({
             
             // Find nurses with this leave type in this month
             const pad = (n: number) => n.toString().padStart(2, '0')
-            const monthStart = `${selectedYear}-${pad(selectedMonth + 1)}-01`
-            const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
-            const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
+            const monthStartStr = `${selectedYear}-${pad(selectedMonth + 1)}-01`
+            const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+            const monthEndStr = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDayOfMonth)}`
 
-                    const activeLeaves = data.timeOffs
+            const activeLeaves = data.timeOffs
                 .filter(t => {
                     if (t.type !== type) return false
                     if (!t.start_date || !t.end_date) return false
                     
                     // Simple month overlap check
-                    const pad = (n: number) => n.toString().padStart(2, '0')
-                    const monthStartStr = `${selectedYear}-${pad(selectedMonth + 1)}-01`
-                    const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
-                    const monthEndStr = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDayOfMonth)}`
-                    
                     if (t.end_date < monthStartStr || t.start_date > monthEndStr) return false
 
                     // If unit is selected, filter by unit_id
@@ -3057,6 +3079,7 @@ export default function Schedule({
                 </div>
             )
         })}
+        </div>
 
         {/* Footer Text Display */}
         {footerText && (
