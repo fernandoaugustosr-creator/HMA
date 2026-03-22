@@ -33,6 +33,7 @@ export function readDb() {
       monthly_notes: [],
       monthly_schedule_metadata: [],
       users: [],
+      audit_logs: [],
       settings: {}
     }
   }

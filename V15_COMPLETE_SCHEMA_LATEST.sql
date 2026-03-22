@@ -154,6 +154,16 @@ CREATE TABLE IF NOT EXISTS shift_swaps (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Auditoria (Audit Logs)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES nurses(id) ON DELETE SET NULL,
+    user_name TEXT,
+    action TEXT NOT NULL,
+    details JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- ==============================================================================
 -- 3. AJUSTES ESTRUTURAIS IMPORTANTES (ATUALIZAÇÕES)
 -- ==============================================================================
@@ -286,6 +296,12 @@ BEGIN
 
     DROP POLICY IF EXISTS "Public access shift_swaps" ON shift_swaps;
     CREATE POLICY "Public access shift_swaps" ON shift_swaps FOR ALL USING (true) WITH CHECK (true);
+
+    DROP POLICY IF EXISTS "Public can insert audit_logs" ON audit_logs;
+    CREATE POLICY "Public can insert audit_logs" ON audit_logs FOR INSERT WITH CHECK (true);
+
+    DROP POLICY IF EXISTS "Admins can view audit_logs" ON audit_logs;
+    CREATE POLICY "Admins can view audit_logs" ON audit_logs FOR SELECT USING (true); -- Simplificado para permitir visualização
 END $$;
 
 -- ==============================================================================

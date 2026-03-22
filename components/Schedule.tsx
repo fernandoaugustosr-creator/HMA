@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
@@ -60,6 +60,7 @@ interface TimeOff {
   end_date: string
   type: string
   unit_id?: string
+  status?: string
 }
 
 interface Absence {
@@ -270,10 +271,9 @@ export default function Schedule({
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [shiftModalData, setShiftModalData] = useState<{nurseId: string, rosterId?: string, nurseName: string, date: string} | null>(null)
-  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'delete'>('day')
-  const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6' | 'custom'>('off4')
+  const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn' | 'dn4' | 'nd4' | 'delete'>('day')
+  const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6' | 'dn_off3' | 'dn_off4' | 'nd_off4' | 'dn_off5' | 'dn_off6' | 'dn_off7' | 'dn_off8' | 'custom'>('off4')
   const [customRecurrenceDays, setCustomRecurrenceDays] = useState<string>('')
-  const [limitShifts, setLimitShifts] = useState<string>('')
   const [deleteWholeMonth, setDeleteWholeMonth] = useState(false)
   
   // Sector Title Editing State
@@ -463,16 +463,17 @@ export default function Schedule({
 
   const fetchData = useCallback(async (forceRefresh = false, showLoading = true) => {
     // Skip fetching if a manual save is already in progress to avoid race conditions
-    if (isSaving) return
+    // BUT allow if it's a forced refresh (e.g. after a save)
+    if (!forceRefresh && isSaving) return
 
-    if (showLoading) setLoading(true)
     const cacheKey = `${selectedMonth}-${selectedYear}-${selectedUnitId}`
 
+    // 1. FAST CACHE ACCESS
     if (!forceRefresh && scheduleCache.current[cacheKey]) {
         const cachedData = scheduleCache.current[cacheKey]
         setData(cachedData)
         
-        // Ensure metadata fields are set from cache
+        // Metadata from cache
         const meta = cachedData.releases && cachedData.releases.length > 0 ? cachedData.releases[0] : null
         if (meta) {
             setFooterText(meta.footer_text || '')
@@ -483,15 +484,18 @@ export default function Schedule({
             setDynamicField('coren')
             setIsSetorHidden(false)
         }
-
-        if (showLoading) setLoading(false)
+        
         onLoaded?.()
         return
     }
 
+    if (showLoading) setLoading(true)
+
     try {
       const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear, selectedUnitId)
       const newData = result as ScheduleData
+      
+      // Update cache
       scheduleCache.current[cacheKey] = newData
       setData(newData)
 
@@ -517,24 +521,47 @@ export default function Schedule({
   const handleDirectSaveShifts = async (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[]) => {
     if (shiftsToSave.length === 0) return
     
+    console.log('Sending shifts to save:', shiftsToSave)
     setIsSaving(true)
     try {
         const res = await saveShifts(shiftsToSave as any)
+        console.log('Save result:', res)
         if (res.success) {
             clearCache()
-            // Success! Now fetch the fresh data from the server
+            // Success! Set isSaving to false BEFORE fetching to avoid blocking the refresh
+            setIsSaving(false)
+            
+            // Small delay to account for DB replication lag
+            await new Promise(resolve => setTimeout(resolve, 500))
             await fetchData(true, true)
         } else {
             alert('Erro ao salvar plantões: ' + res.message)
+            setIsSaving(false)
             await fetchData(true, true)
         }
     } catch (e) {
         console.error('Save failed:', e)
         alert('Erro técnico ao salvar. Tente novamente.')
+        setIsSaving(false)
         await fetchData(true, true)
     } finally {
         setIsSaving(false)
     }
+  }
+
+  const optimisticSaveShifts = async (shifts: any[]) => {
+      // Optimistic local update
+      setData(prev => ({
+          ...prev,
+          shifts: [...prev.shifts, ...shifts.map(s => ({
+              ...s,
+              id: Math.random().toString(),
+              shift_type: s.type
+          }))]
+      }))
+      
+      // Save in background
+      await handleDirectSaveShifts(shifts)
   }
 
   useEffect(() => {
@@ -803,6 +830,56 @@ export default function Schedule({
     setLoading(false)
   }
 
+  const handleExportBackup = async () => {
+      setLoading(true)
+      const res = await exportMonthlySchedule(selectedMonth + 1, selectedYear, selectedUnitId)
+      if (res.success) {
+          const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          const unitName = data.units.find(u => u.id === selectedUnitId)?.title || 'Geral'
+          a.href = url
+          a.download = `backup_escala_${unitName}_${MONTHS[selectedMonth]}_${selectedYear}.json`
+          a.click()
+          alert('Backup baixado com sucesso! Guarde este arquivo em local seguro.')
+      } else {
+          alert('Erro ao gerar backup: ' + res.message)
+      }
+      setLoading(false)
+  }
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      if (!confirm('ATENÇÃO: A importação irá sobrescrever os dados atuais desta escala com os dados do arquivo de backup. Deseja continuar?')) {
+          e.target.value = ''
+          return
+      }
+
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+          try {
+              const backupData = JSON.parse(event.target?.result as string)
+              setLoading(true)
+              const res = await importMonthlySchedule(selectedMonth + 1, selectedYear, selectedUnitId, backupData)
+              if (res.success) {
+                  alert(res.message)
+                  clearCache()
+                  await fetchData(true)
+              } else {
+                  alert(res.message)
+              }
+          } catch (err) {
+              alert('Erro ao ler arquivo de backup. Verifique se o arquivo está correto.')
+          } finally {
+              setLoading(false)
+              e.target.value = ''
+          }
+      }
+      reader.readAsText(file)
+  }
+
   const handlePrintCurrent = () => {
     if (typeof window !== 'undefined') {
       window.print()
@@ -821,6 +898,27 @@ export default function Schedule({
         fetchData(true)
     } else {
         alert(res.message || 'Erro ao excluir escala')
+    }
+    setLoading(false)
+  }
+
+  const handleClearAllDatabase = async () => {
+    if (!confirm('ATENÇÃO: Você está prestes a EXCLUIR TODOS OS DADOS de todas as escalas (todos os meses e setores) do banco de dados.')) return
+    if (!confirm('TEM CERTEZA ABSOLUTA? Esta ação é irreversível e apagará tudo.')) return
+    const code = prompt('Para confirmar a exclusão TOTAL, digite "DELETAR TUDO":')
+    if (code !== 'DELETAR TUDO') {
+        alert('Operação cancelada. O código de confirmação estava incorreto.')
+        return
+    }
+
+    setLoading(true)
+    const res = await clearAllDatabaseShifts()
+    if (res.success) {
+        alert(res.message)
+        clearCache()
+        fetchData(true)
+    } else {
+        alert(res.message)
     }
     setLoading(false)
   }
@@ -1256,7 +1354,7 @@ export default function Schedule({
     // Priority: Explicit ID (from clicked row) > Nurse Property > Fallback Search
     let rosterId = explicitRosterId || (nurse.is_rostered ? nurse.unique_key : undefined)
     
-    // Fallback: If rosterId is missing but nurse is in roster, try to find it
+    // Fallback: If rosterId is still missing but nurse is in roster, try to find it
     if (!rosterId && data.roster) {
         const entry = data.roster.find(r => 
             r.nurse_id === nurse.id && 
@@ -1274,199 +1372,263 @@ export default function Schedule({
         date: dateStr
     })
     setShiftType('day')
-    // Restore last recurrence preference
-    const savedRecurrence = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_recurrence') as any || 'none') : 'none'
+    // AUTOMATION: Default to 'daily' for better UX (as requested by user)
+    // Restore last recurrence preference if exists, otherwise use 'daily'
+    const savedRecurrence = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_recurrence') as any || 'daily') : 'daily'
     setRecurrence(savedRecurrence)
-    setLimitShifts('')
     const savedCustomDays = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_custom_days') || '') : ''
     setCustomRecurrenceDays(savedCustomDays)
     setDeleteWholeMonth(false)
     setIsShiftModalOpen(true)
   }
 
-  const handleSaveShifts = async () => {
+  const handleSaveShifts = async (overrideType?: string, overrideRecurrence?: string) => {
     if (!shiftModalData) return
     
-    // Save recurrence preference
-    if (typeof window !== 'undefined') {
-        localStorage.setItem('enf_hma_last_recurrence', recurrence)
+    const targetType = overrideType || shiftType
+    const targetRecurrence = overrideRecurrence || recurrence
+
+    if (typeof window !== 'undefined' && !overrideType) {
+        localStorage.setItem('enf_hma_last_recurrence', targetRecurrence)
         localStorage.setItem('enf_hma_last_custom_days', customRecurrenceDays)
     }
 
     try {
-        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
-        let stopReason = '' // Track why generation stopped
+        const rosterKey = shiftModalData.rosterId || shiftModalData.nurseId
+        const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
         
-        if (shiftType === 'delete' && deleteWholeMonth) {
-            // Delete whole month logic
-            const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
-            for (let day = 1; day <= lastDayOfMonth; day++) {
-                const dateString = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                shiftsToSave.push({
-                    nurseId: shiftModalData.nurseId,
-                    rosterId: shiftModalData.rosterId,
-                    date: dateString,
-                    type: 'DELETE'
-                })
+        // 1. Get ALL current shifts for this professional in the current month
+        // This is CRITICAL because the backend uses Atomic Replacement (Deletes specific days -> Inserts new)
+        const currentProfessionalShifts = data.shifts.filter(s => {
+            const dateParts = s.shift_date.split('-')
+            if (dateParts.length !== 3) return false
+            const year = parseInt(dateParts[0])
+            const month = parseInt(dateParts[1])
+            
+            return s.nurse_id === shiftModalData.nurseId &&
+                   (shiftModalData.rosterId ? s.roster_id === shiftModalData.rosterId : !s.roster_id) &&
+                   month === (selectedMonth + 1) &&
+                   year === selectedYear
+        })
+
+        // 2. Prepare a map of the month's state
+        const shiftsMap = new Map<string, string>()
+        
+        // Initialize map with EXISTING state
+        currentProfessionalShifts.forEach(s => {
+            shiftsMap.set(s.shift_date, s.shift_type)
+        })
+
+        if (targetType === 'delete') {
+            if (targetRecurrence !== 'none') {
+                // CLEAR ENTIRE MONTH
+                for (let d = 1; d <= lastDayOfMonth; d++) {
+                    const dStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                    shiftsMap.set(dStr, 'DELETE')
+                }
+            } else {
+                // DELETE SINGLE DAY
+                shiftsMap.set(shiftModalData.date, 'DELETE')
             }
-            stopReason = 'delete_whole_month'
         } else {
-            // Standard logic
-            const startDate = new Date(shiftModalData.date + 'T12:00:00') // Avoid timezone issues
-            const startMonth = startDate.getMonth()
-            
-            // Calculate dates based on recurrence
-            let currentDateIter = new Date(startDate)
-            let count = 0
-            
-            // Robust limit handling
-            let limit = 1000 // Default to high number (effectively infinity for a month)
-            const limitStr = String(limitShifts || '').trim()
-            if (limitStr !== '') {
-                const parsed = parseInt(limitStr)
-                if (!isNaN(parsed) && parsed > 0) {
-                    limit = parsed
-                }
-            }
+            const clickedDate = new Date(shiftModalData.date + 'T12:00:00')
+            const clickedDay = clickedDate.getDate()
 
-            // Safety break to prevent infinite loops
-            let safetyCounter = 0
-            const MAX_ITERATIONS = 500
-            stopReason = 'month_change' // Default assumption if loop finishes normally
-            
-            // Loop while in the same month as start date
-            console.log('Starting shift generation loop', { startDate, startMonth, recurrence, limit })
-            while (currentDateIter.getMonth() === startMonth && currentDateIter.getFullYear() === startDate.getFullYear()) {
-                if (safetyCounter >= MAX_ITERATIONS) {
-                    console.log('Safety limit reached')
-                    stopReason = 'safety_limit'
-                    break
+            if (targetRecurrence === 'none') {
+                // MANUAL SINGLE DAY ONLY
+                // Label says "Apenas este dia", so let's respect that.
+                shiftsMap.set(shiftModalData.date, targetType)
+            } else {
+                // AUTOMATION: OVERWRITE ENTIRE MONTH ACCORDING TO PATTERN
+                const getPatternInfo = (rec: string) => {
+                    if (rec === 'daily') return { period: 1, work: [0] }
+                    if (rec === 'mon_fri') return { period: 1, work: [0], skipWeekends: true }
+                    if (rec === '12x36') return { period: 2, work: [0] }
+                    if (rec === 'every3') return { period: 3, work: [0] }
+                    if (rec === '24x72') return { period: 4, work: [0] }
+                    if (rec === 'off4') return { period: 5, work: [0] }
+                    if (rec === 'off5') return { period: 6, work: [0] }
+                    if (rec === 'off6') return { period: 7, work: [0] }
+                    if (rec === 'dn_off3') return { period: 5, work: [0, 1], types: ['day', 'night'] }
+                    if (rec === 'dn_off4') return { period: 6, work: [0, 1], types: ['day', 'night'] }
+                    if (rec === 'nd_off4') return { period: 6, work: [0, 1], types: ['night', 'day'] }
+                    if (rec === 'dn_off5') return { period: 7, work: [0, 1], types: ['day', 'night'] }
+                    if (rec === 'dn_off6') return { period: 8, work: [0, 1], types: ['day', 'night'] }
+                    if (rec === 'dn_off7') return { period: 9, work: [0, 1], types: ['day', 'night'] }
+                    if (rec === 'dn_off8') return { period: 10, work: [0, 1], types: ['day', 'night'] }
+                    if (rec === 'custom') return { period: parseInt(customRecurrenceDays) || 1, work: [0] }
+                    return null
                 }
-                safetyCounter++
-                
-                // Special handling for Mon-Fri recurrence
-                if (recurrence === 'mon_fri') {
-                    const dayOfWeek = currentDateIter.getDay()
-                    if (dayOfWeek === 0 || dayOfWeek === 6) {
-                        // Skip weekends
-                        currentDateIter.setDate(currentDateIter.getDate() + 1)
-                        continue
+
+                const pattern = getPatternInfo(targetRecurrence)
+                if (pattern) {
+                    // Start by clearing if it's an automation to avoid "ghost" shifts
+                    for (let d = 1; d <= lastDayOfMonth; d++) {
+                        const dStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                        shiftsMap.set(dStr, 'DELETE')
+                    }
+
+                    // Then apply pattern from Day 1 to End
+                    for (let d = 1; d <= lastDayOfMonth; d++) {
+                        const diff = d - clickedDay
+                        const mod = ((diff % pattern.period) + pattern.period) % pattern.period
+                        
+                        if (pattern.work.includes(mod)) {
+                            const dDate = new Date(selectedYear, selectedMonth, d)
+                            if (pattern.skipWeekends && (dDate.getDay() === 0 || dDate.getDay() === 6)) continue
+                            
+                            const dStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                            const typeIdx = pattern.work.indexOf(mod)
+                            const finalType = pattern.types ? pattern.types[typeIdx] : targetType
+                            shiftsMap.set(dStr, finalType)
+                        }
                     }
                 }
+            }
+        }
 
-                if (limitShifts && count >= limit) {
-                     console.log('User limit reached', { count, limit })
-                     stopReason = 'user_limit'
-                     break
-                }
-
-                const dateString = `${currentDateIter.getFullYear()}-${String(currentDateIter.getMonth() + 1).padStart(2, '0')}-${String(currentDateIter.getDate()).padStart(2, '0')}`
-                
+        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
+        
+        if (targetRecurrence === 'none') {
+            // ONLY send the single clicked day to the server.
+            // This is faster and prevents re-saving stale month data.
+            shiftsToSave.push({
+                nurseId: shiftModalData.nurseId,
+                rosterId: shiftModalData.rosterId,
+                date: shiftModalData.date,
+                type: targetType === 'delete' ? 'DELETE' : targetType
+            })
+        } else {
+            // For automations, send the whole month's state
+            shiftsMap.forEach((type, date) => {
                 shiftsToSave.push({
                     nurseId: shiftModalData.nurseId,
                     rosterId: shiftModalData.rosterId,
-                    date: dateString,
-                    type: shiftType === 'delete' ? 'DELETE' : shiftType
+                    date: date,
+                    type: type
+                })
+            })
+        }
+
+        // 1. OPTIMISTIC LOCAL UPDATE
+        setData(prev => {
+            const newShifts = [...prev.shifts]
+            
+            if (targetRecurrence === 'none') {
+                // Update only one day locally
+                const existingIdx = newShifts.findIndex(s => 
+                    s.nurse_id === shiftModalData.nurseId && 
+                    s.shift_date === shiftModalData.date &&
+                    (shiftModalData.rosterId ? s.roster_id === shiftModalData.rosterId : !s.roster_id)
+                )
+
+                if (targetType === 'delete') {
+                    if (existingIdx !== -1) newShifts.splice(existingIdx, 1)
+                } else {
+                    const newItem = {
+                        id: existingIdx !== -1 ? newShifts[existingIdx].id : `temp-${Math.random()}`,
+                        nurse_id: shiftModalData.nurseId,
+                        roster_id: shiftModalData.rosterId,
+                        shift_date: shiftModalData.date,
+                        shift_type: targetType as any,
+                        created_at: new Date().toISOString()
+                    }
+                    if (existingIdx !== -1) newShifts[existingIdx] = newItem
+                    else newShifts.push(newItem)
+                }
+            } else {
+                // Update whole month locally for automations
+                const filteredShifts = newShifts.filter(s => {
+                    // FIX: Robust month/year extraction from string
+                    const dateParts = s.shift_date.split('-')
+                    if (dateParts.length !== 3) return true
+                    const year = parseInt(dateParts[0])
+                    const month = parseInt(dateParts[1])
+                    
+                    const isTargetProfessional = s.nurse_id === shiftModalData.nurseId &&
+                                               (shiftModalData.rosterId ? s.roster_id === shiftModalData.rosterId : !s.roster_id)
+                    const isTargetMonth = month === (selectedMonth + 1) && year === selectedYear
+                    
+                    return !(isTargetProfessional && isTargetMonth)
                 })
 
-                count++
-
-                if (recurrence === 'none') {
-                    stopReason = 'single_shift'
-                    break
-                }
-                
-                // Increment based on recurrence - Safe mutation
-                const nextDate = new Date(currentDateIter)
-                if (recurrence === 'daily' || recurrence === 'mon_fri') {
-                    nextDate.setDate(nextDate.getDate() + 1)
-                } else if (recurrence === '12x36') {
-                    nextDate.setDate(nextDate.getDate() + 2)
-                } else if (recurrence === 'every3') {
-                    nextDate.setDate(nextDate.getDate() + 3)
-                } else if (recurrence === '24x72') {
-                    nextDate.setDate(nextDate.getDate() + 4)
-                } else if (recurrence === 'off4') {
-                    nextDate.setDate(nextDate.getDate() + 5)
-                } else if (recurrence === 'off5') {
-                    nextDate.setDate(nextDate.getDate() + 6)
-                } else if (recurrence === 'off6') {
-                    nextDate.setDate(nextDate.getDate() + 7)
-                } else if (recurrence === 'custom') {
-                    const days = parseInt(customRecurrenceDays)
-                    if (!isNaN(days) && days > 0) {
-                        nextDate.setDate(nextDate.getDate() + days)
-                    } else {
-                        stopReason = 'invalid_custom'
-                        break // Invalid custom days
+                shiftsToSave.forEach(sToSave => {
+                    if (sToSave.type !== 'DELETE') {
+                        filteredShifts.push({
+                            id: `temp-${Math.random()}`,
+                            nurse_id: sToSave.nurseId,
+                            roster_id: sToSave.rosterId,
+                            shift_date: sToSave.date,
+                            shift_type: sToSave.type as any,
+                            created_at: new Date().toISOString()
+                        })
                     }
-                } else {
-                    // Unknown recurrence or explicit 'none' handled above
-                    stopReason = 'unknown_recurrence'
-                    break
-                }
-                currentDateIter = nextDate
+                })
+                return { ...prev, shifts: filteredShifts }
             }
-            console.log('Loop finished', { count, stopReason, lastDate: currentDateIter })
-        }
+            return { ...prev, shifts: newShifts }
+        })
 
-        // CONFLICT DETECTION & CONFIRMATION
-        // Only if adding/updating (not deleting)
-        if (shiftType !== 'delete') {
-            // Bulk Confirmation with Details
-            if (shiftsToSave.length > 1) {
-                 const lastShift = shiftsToSave[shiftsToSave.length - 1]
-                 const lastDate = lastShift.date.split('-').reverse().join('/')
-                 
-                 let reasonText = ''
-                 switch (stopReason) {
-                     case 'month_change': reasonText = 'Fim do mês alcançado'; break;
-                     case 'user_limit': reasonText = `Limite de ${limitShifts} plantões definido pelo usuário`; break;
-                     case 'safety_limit': reasonText = 'Limite de segurança do sistema atingido (500 iterações)'; break;
-                     case 'single_shift': reasonText = 'Plantão único'; break;
-                     default: reasonText = stopReason;
-                 }
-
-                 const confirmMsg = `Serão gerados ${shiftsToSave.length} plantões.\n` + 
-                                    `Início: ${shiftsToSave[0].date.split('-').reverse().join('/')}\n` + 
-                                    `Fim: ${lastDate}\n` +
-                                    `Motivo da parada: ${reasonText}\n` +
-                                    `\nDeseja confirmar a inclusão?`
-                 
-                 if (!confirm(confirmMsg)) {
-                     return
-                 }
-            }
-            
-            const conflictingDates: string[] = []
-            
-            shiftsToSave.forEach(newShift => {
-                const conflict = data.shifts?.some(s => 
-                    s.nurse_id === newShift.nurseId && 
-                    s.shift_date === newShift.date && 
-                    (s.roster_id && s.roster_id !== newShift.rosterId)
-                )
-                if (conflict) {
-                    conflictingDates.push(newShift.date.split('-').reverse().join('/'))
-                }
-            })
-
-            if (conflictingDates.length > 0) {
-                const uniqueDates = Array.from(new Set(conflictingDates))
-                const message = `ATENÇÃO: O profissional já possui plantão em OUTRA ESCALA nas seguintes datas:\n\n${uniqueDates.join(', ')}\n\nDeseja realmente inserir duplicidade?`
-                if (!confirm(message)) return
-            }
-        }
-
-        // USE DIRECT SAVER
-        await handleDirectSaveShifts(shiftsToSave as any)
-        
-        // Close modal only on success
         setIsShiftModalOpen(false)
+        console.log(`[handleSaveShifts] Local state updated. No server call yet. Changes will be saved when clicking 'SALVAR TUDO'.`)
 
     } catch (error) {
-        console.error("Error saving shifts:", error)
-        alert('Erro ao salvar turno.')
+        console.error("Error updating local shifts:", error)
+        alert('Erro ao atualizar escala na tela.')
+    } finally {
+        setIsSaving(false)
+    }
+  }
+
+  const handleSaveAll = async () => {
+    // 1. First, check if there's anything to save
+    const currentMonthShifts = data.shifts.filter(s => {
+        const dateParts = s.shift_date.split('-')
+        if (dateParts.length !== 3) return false
+        const year = parseInt(dateParts[0])
+        const month = parseInt(dateParts[1])
+        return month === (selectedMonth + 1) && year === selectedYear
+    })
+
+    if (currentMonthShifts.length === 0) {
+        alert('Não há plantões para salvar neste mês.')
+        return
+    }
+
+    if (!confirm(`Deseja salvar todos os ${currentMonthShifts.length} plantões preenchidos na tela para o banco de dados?`)) {
+        return
+    }
+
+    try {
+        setIsSaving(true)
+        
+        // 2. Prepare the complete batch of visible shifts
+        const batch = currentMonthShifts.map(s => ({
+            nurseId: s.nurse_id,
+            rosterId: s.roster_id,
+            date: s.shift_date,
+            type: s.shift_type
+        }))
+
+        console.log(`[handleSaveAll] ATOMIC SAVE: Sending ${batch.length} shifts for ${selectedMonth + 1}/${selectedYear}`)
+        
+        // 3. Perform the server save
+        const res = await saveShifts(batch as any)
+        
+        if (res.success) {
+            clearCache()
+            alert(`SUCESSO: ${batch.length} plantões foram gravados permanentemente no banco de dados.`)
+            console.log(`[handleSaveAll] Atomic save successful.`)
+            await fetchData(true, false) // Refresh to sync IDs and ensure persistence
+        } else {
+            console.error(`[handleSaveAll] Save failed:`, res.message)
+            alert('ERRO AO SALVAR: ' + res.message)
+        }
+    } catch (e) {
+        console.error('Save all failed:', e)
+        alert('Erro técnico ao salvar tudo. Verifique sua conexão.')
+    } finally {
+        setIsSaving(false)
     }
   }
 
@@ -1568,7 +1730,7 @@ export default function Schedule({
           })
       })
       return grouped
-  }, [activeNurses])
+  }, [activeNurses, data.roster]) // Add data.roster to ensure re-sort only when roster actually changes
 
   // Optimize data access with lookups
   const shiftsLookup = useMemo(() => {
@@ -1590,35 +1752,22 @@ export default function Schedule({
 
                   if (!rosterKey) {
                       // Legacy shift (no roster_id)
-                      // Logic: Assign legacy shifts to the FIRST roster entry found for this nurse IN THIS UNIT.
+                      // Logic: Assign legacy shifts to ALL matching roster entries found for this nurse IN THIS UNIT.
                       const rosterEntries = rosterMap[s.nurse_id]
                       if (rosterEntries && rosterEntries.length > 0) {
-                          // Find "True Home" (Oldest roster entry for this nurse in this month globally)
-                          // Legacy shifts should only attach to the oldest roster entry to prevent leakage to new units
-                          const sortedAll = [...rosterEntries].sort((a, b) => {
-                              const tA = new Date(a.created_at || 0).getTime()
-                              const tB = new Date(b.created_at || 0).getTime()
-                              if (tA !== tB) return tA - tB
-                              return (a.id || '').localeCompare(b.id || '')
-                          })
-                          const trueHomeId = sortedAll[0].id
-
                           // Filter entries to match current unit
                           const unitEntries = rosterEntries.filter(r => currentUnitRosterIds.has(r.id))
                           
                           if (unitEntries.length > 0) {
-                              const sortedEntries = [...unitEntries].sort((a, b) => {
-                                  const tA = new Date(a.created_at || 0).getTime()
-                                  const tB = new Date(b.created_at || 0).getTime()
-                                  return tA - tB
+                              // Bind to ALL roster IDs for this nurse in this unit
+                              unitEntries.forEach(entry => {
+                                  const key = `${entry.id}_${s.shift_date}`
+                                  // Only populate if not already occupied by a specific shift
+                                  if (!lookup[key]) {
+                                      lookup[key] = s
+                                  }
                               })
-                              
-                              // Strict Isolation: Only bind legacy shift if this unit holds the "True Home" roster entry
-                              if (sortedEntries[0].id === trueHomeId) {
-                                  rosterKey = sortedEntries[0].id
-                              } else {
-                                  return // Skip legacy shift for this secondary unit
-                              }
+                              return // Finished processing this legacy shift
                           } else {
                               // Nurse has roster entries but NONE in this unit.
                               // Skip this shift for this view.
@@ -1626,9 +1775,6 @@ export default function Schedule({
                           }
                       } else {
                            // Fallback if not rostered anywhere? 
-                           // If not rostered, currentUnitRosterIds won't have the nurse_id either (it has roster IDs).
-                           // If we want to show "unassigned" shifts in a global view, we keep them.
-                           // If selectedUnitId is set, we skip.
                            if (selectedUnitId) return
                            rosterKey = s.nurse_id
                       }
@@ -1678,7 +1824,9 @@ export default function Schedule({
               // Populate counts by rosterKey (Line-specific counts)
               // Fix: Ignore FOLGA_VAZIA and other non-working types in counts
               const isWorkingShift = ['day', 'night', 'morning', 'afternoon', 'mt', 'dn'].includes(s.shift_type)
-              const weight = !isWorkingShift ? 0 : (s.shift_type === 'dn' ? 2 : 1)
+              if (!isWorkingShift) return // Stop processing this shift for counts if it's not a work shift
+              
+              const weight = (s.shift_type === 'dn' ? 2 : 1)
               
               countLookup[rosterKey] = (countLookup[rosterKey] || 0) + weight
 
@@ -2414,19 +2562,6 @@ export default function Schedule({
             )}
             </div>
             <div className="w-full md:w-auto">
-            <label className="block text-sm font-medium text-black mb-1">Profissão</label>
-            <select
-                value={selectedRoleFilter}
-                onChange={(e) => setSelectedRoleFilter(e.target.value as any)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
-            >
-                <option value="ALL">Todas</option>
-                <option value="ENFERMEIRO">Enfermeiro(a)</option>
-                <option value="TECNICO">Téc. de Enfermagem</option>
-                <option value="MEDICO">Médico(a)</option>
-            </select>
-            </div>
-            <div className="w-full md:w-auto">
             <label className="block text-sm font-medium text-black mb-1">Mês</label>
             <select 
                 value={selectedMonth} 
@@ -2481,14 +2616,17 @@ export default function Schedule({
                 </div>
              ) : (
                 <>
-                <button 
-                    onClick={() => { clearCache(); fetchData(true) }}
-                    className="bg-white text-gray-700 border border-gray-300 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-gray-50 transition-colors h-[38px]"
-                    title="Recarregar dados da escala"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                    <span className="hidden md:inline">Recarregar</span>
-                </button>
+                {isAdmin && (
+                    <button 
+                        onClick={handleSaveAll}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-indigo-700 transition-colors h-[38px] font-bold"
+                        title="SALVAR TUDO no banco de dados agora"
+                        disabled={isSaving}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                        SALVAR TUDO
+                    </button>
+                )}
                 {isAdmin && (
                     <button 
                         onClick={() => {
@@ -2501,16 +2639,6 @@ export default function Schedule({
                     >
                         <Copy size={16} />
                         <span className="hidden md:inline">Copiar Modelo</span>
-                    </button>
-                )}
-                {selectedUnitId && (
-                    <button 
-                        onClick={handlePrintCurrent}
-                        className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-gray-50 transition-colors h-[38px]"
-                        title="Imprimir escala atual"
-                    >
-                        <Printer size={16} />
-                        <span className="hidden md:inline">Imprimir Escala</span>
                     </button>
                 )}
                 {isAdmin && selectedUnitId && (
@@ -3215,156 +3343,100 @@ export default function Schedule({
                 </p>
 
                 <div className="mb-4">
-                    <label className="block text-sm font-medium text-black mb-2">Tipo de Plantão</label>
-                    <div className="flex gap-2 flex-wrap">
+                    <label className="block text-sm font-medium text-black mb-2 italic">1. Preenchimento Automático (Mês Todo)</label>
+                    <div className="flex gap-2 flex-wrap mb-4 bg-blue-50 p-3 rounded border border-blue-200">
                         <button 
-                            onClick={() => setShiftType('day')}
-                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'day' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            onClick={() => handleSaveShifts('day', 'daily')}
+                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="Preencher todo o mês com Dia (D)"
                         >
                             Dia (D)
                         </button>
                         <button 
-                            onClick={() => setShiftType('night')}
-                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'night' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            onClick={() => handleSaveShifts('night', 'daily')}
+                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="Preencher todo o mês com Noite (N)"
                         >
                             Noite (N)
                         </button>
                         <button 
-                            onClick={() => setShiftType('morning')}
-                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'morning' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            onClick={() => handleSaveShifts('morning', 'daily')}
+                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="Preencher todo o mês com Manhã (M)"
                         >
                             Manhã (M)
                         </button>
                         <button 
-                            onClick={() => setShiftType('afternoon')}
-                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'afternoon' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            onClick={() => handleSaveShifts('afternoon', 'daily')}
+                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="Preencher todo o mês com Tarde (T)"
                         >
                             Tarde (T)
                         </button>
                         <button 
-                            onClick={() => setShiftType('mt')}
-                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'mt' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            onClick={() => handleSaveShifts('mt', 'daily')}
+                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="Preencher todo o mês com MT"
                         >
                             MT
                         </button>
                         <button 
-                            onClick={() => setShiftType('dn')}
-                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'dn' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            onClick={() => handleSaveShifts('dn', 'daily')}
+                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="Preencher todo o mês com DN"
                         >
                             DN
                         </button>
                         <button 
-                            onClick={() => {
-                                setShiftType('delete')
-                                setDeleteWholeMonth(false)
-                                setRecurrence('none') // Force single day deletion by default
-                            }}
-                            className={`flex-1 min-w-[60px] py-2 px-2 rounded border ${shiftType === 'delete' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-black border-gray-300 hover:bg-gray-50'}`}
+                            onClick={() => handleSaveShifts('dn', 'dn_off4')}
+                            className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="DN Folga 4 (Repetir até o fim do mês)"
                         >
-                            Limpar
+                            DN Folga 4
+                        </button>
+                        <button 
+                            onClick={() => handleSaveShifts('nd', 'nd_off4')}
+                            className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="ND Folga 4 (Repetir até o fim do mês)"
+                        >
+                            ND Folga 4
+                        </button>
+                        <button 
+                            onClick={() => handleSaveShifts('delete', 'daily')}
+                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-red-600 border-red-300 hover:bg-red-600 hover:text-white transition-colors font-bold"
+                            title="Limpar toda a linha (Mês inteiro)"
+                        >
+                            Limpar Mês
+                        </button>
+                    </div>
+
+                    <label className="block text-sm font-medium text-black mb-2 italic">2. Opção Manual (Apenas este dia)</label>
+                    <div className="flex gap-2 flex-wrap bg-gray-50 p-3 rounded border">
+                        {['day', 'night', 'morning', 'afternoon', 'mt', 'dn'].map(type => (
+                            <button 
+                                key={type}
+                                onClick={() => handleSaveShifts(type, 'none')}
+                                className="flex-1 min-w-[45px] py-1 px-1 rounded border bg-white text-gray-700 border-gray-300 hover:bg-gray-100 uppercase text-[10px]"
+                            >
+                                {type === 'day' ? 'D' : type === 'night' ? 'N' : type === 'morning' ? 'M' : type === 'afternoon' ? 'T' : type.toUpperCase()}
+                            </button>
+                        ))}
+                        <button 
+                            onClick={() => handleSaveShifts('delete', 'none')}
+                            className="flex-1 min-w-[45px] py-1 px-1 rounded border bg-white text-red-400 border-red-200 hover:bg-red-50 text-[10px]"
+                        >
+                            APAGAR
                         </button>
                     </div>
                 </div>
 
-                {shiftType === 'delete' && (
-                    <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input 
-                                type="checkbox"
-                                checked={deleteWholeMonth}
-                                onChange={e => setDeleteWholeMonth(e.target.checked)}
-                                className="w-4 h-4 text-red-600"
-                            />
-                            <span className="text-sm font-bold text-red-700">LIMPAR TODA A LINHA (MÊS INTEIRO)</span>
-                        </label>
-                        <p className="text-xs text-red-600 mt-1 ml-6">
-                            Se marcado, removerá TODOS os plantões deste profissional neste mês, independente da data selecionada.
-                        </p>
-                    </div>
-                )}
-
-                {shiftModalData.date && shiftType !== 'delete' && (
-                    <div className="mb-6">
-                        <label className="block text-sm font-medium text-black mb-2">Frequência (Preenchimento Automático)</label>
-                        <select 
-                            value={recurrence} 
-                            onChange={(e) => {
-                                const val = e.target.value as any
-                                setRecurrence(val)
-                                setLimitShifts('') // Reset limit when changing recurrence to prevent confusion
-                                if (typeof window !== 'undefined') localStorage.setItem('enf_hma_last_recurrence', val)
-                            }}
-                            className="w-full border p-2 rounded text-black bg-white"
-                        >
-                            <option value="none">Apenas este dia</option>
-                            <option value="daily">Todos os dias (Diário)</option>
-                            <option value="mon_fri">De Segunda a Sexta</option>
-                            <option value="12x36">A cada 2 dias (12x36 - Dia sim, dia não)</option>
-                            <option value="every3">A cada 3 dias</option>
-                            <option value="24x72">A cada 4 dias (24x72)</option>
-                            <option value="off4">Folga de 4 dias (Trabalha 1, Folga 4)</option>
-                            <option value="off5">Folga de 5 dias (Trabalha 1, Folga 5)</option>
-                            <option value="off6">Folga de 6 dias (Trabalha 1, Folga 6)</option>
-                            <option value="custom">Personalizado (Repetir a cada X dias)</option>
-                        </select>
-                        
-                        {recurrence === 'custom' && (
-                            <div className="mt-2">
-                                <label className="block text-sm font-medium text-black mb-1">Repetir a cada (dias)</label>
-                                <input 
-                                    type="number"
-                                    value={customRecurrenceDays}
-                                    onChange={e => {
-                                        const val = e.target.value
-                                        setCustomRecurrenceDays(val)
-                                        if (typeof window !== 'undefined') localStorage.setItem('enf_hma_last_custom_days', val)
-                                    }}
-                                    placeholder="Ex: 8 para folga de 7 dias"
-                                    className="w-full border p-2 rounded text-black bg-white text-sm"
-                                    min="1"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Ex: Coloque 2 para dia sim/dia não (12x36). Coloque 5 para Trabalha 1/Folga 4.
-                                </p>
-                            </div>
-                        )}
-
-                        <div className="mt-4">
-                             <label className="block text-sm font-medium text-black mb-1">Limitar preenchimento (Opcional)</label>
-                             <input 
-                                type="number"
-                                value={limitShifts}
-                                onChange={e => setLimitShifts(e.target.value)}
-                                placeholder="Deixe vazio para preencher até o fim do mês"
-                                className="w-full border p-2 rounded text-black bg-white text-sm"
-                                autoComplete="off"
-                             />
-                             <p className="text-xs text-gray-500 mt-1">
-                                Se preenchido, aplicará apenas para a quantidade de plantões informada. Caso contrário, preencherá até o final do mês.
-                             </p>
-                        </div>
-                    </div>
-                )}
-
-                <div className="flex justify-end gap-2 border-t pt-4">
+                <div className="flex justify-center border-t pt-4 mt-2">
                     <button 
                         onClick={() => setIsShiftModalOpen(false)}
-                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                        className={`px-6 py-2 rounded font-bold transition-colors ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-black'}`}
                         disabled={isSaving}
                     >
-                        Cancelar
-                    </button>
-                    <button 
-                        onClick={handleSaveShifts}
-                        className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold flex items-center gap-2 ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}`}
-                        disabled={isSaving}
-                    >
-                        {isSaving ? (
-                            <>
-                                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-                                Salvando...
-                            </>
-                        ) : 'Salvar Alterações'}
+                        {isSaving ? 'SALVANDO...' : 'FECHAR JANELA'}
                     </button>
                 </div>
             </div>

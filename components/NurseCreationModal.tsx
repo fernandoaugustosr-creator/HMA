@@ -182,55 +182,55 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
             </div>
         </div>
     )}
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4 text-black">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white p-5 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <h2 className="text-lg font-bold mb-3 text-black border-b pb-2">
             {nurseToEdit ? 'Editar Profissional' : 'Adicionar Novo Profissional'}
         </h2>
         
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-3 text-xs">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Nome Completo</label>
+            <label className="block text-xs font-semibold text-gray-700">Nome Completo</label>
             <input 
               type="text" 
               name="name" 
               defaultValue={nurseToEdit?.name}
               required 
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+              className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-                <label className="block text-sm font-medium text-gray-700">COREN</label>
+                <label className="block text-xs font-semibold text-gray-700">COREN</label>
                 <input 
                   type="text" 
                   name="coren" 
                   defaultValue={nurseToEdit?.coren}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                  className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
                 />
             </div>
             <div>
-                <label className="block text-sm font-medium text-gray-700">CRM</label>
+                <label className="block text-xs font-semibold text-gray-700">CRM</label>
                 <input 
                   type="text" 
                   name="crm" 
                   defaultValue={nurseToEdit?.crm}
                   placeholder="Apenas para Médicos"
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                  className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
                 />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-                <label className="block text-sm font-medium text-gray-700">Telefone</label>
+                <label className="block text-xs font-semibold text-gray-700">Telefone</label>
                 <input 
                   type="text" 
                   name="phone" 
@@ -238,39 +238,39 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                   onChange={handlePhoneChange}
                   placeholder="(00)00000-0000"
                   maxLength={14}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                  className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
                 />
             </div>
             <div>
-                <label className="block text-sm font-medium text-gray-700">Vínculo (pode marcar mais de um)</label>
-                <div className="mt-1 flex flex-col gap-1 text-sm text-gray-700">
-                  <label className="inline-flex items-center gap-2">
+                <label className="block text-xs font-semibold text-gray-700">Vínculo</label>
+                <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-700">
+                  <label className="inline-flex items-center gap-1.5">
                     <input
                       type="checkbox"
                       name="vinculo"
                       value="CONCURSO"
                       defaultChecked={nurseToEdit?.vinculo?.includes('CONCURSO')}
-                      className="h-4 w-4"
+                      className="h-3.5 w-3.5"
                     />
                     <span>CONCURSO</span>
                   </label>
-                  <label className="inline-flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5">
                     <input
                       type="checkbox"
                       name="vinculo"
                       value="SELETIVO"
                       defaultChecked={nurseToEdit?.vinculo?.includes('SELETIVO')}
-                      className="h-4 w-4"
+                      className="h-3.5 w-3.5"
                     />
                     <span>SELETIVO</span>
                   </label>
-                  <label className="inline-flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5">
                     <input
                       type="checkbox"
                       name="vinculo"
                       value="CESSÃO"
                       defaultChecked={nurseToEdit?.vinculo?.includes('CESSÃO')}
-                      className="h-4 w-4"
+                      className="h-3.5 w-3.5"
                     />
                     <span>CESSÃO</span>
                   </label>
@@ -278,13 +278,13 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-                <label className="block text-sm font-medium text-gray-700">Cargo</label>
+                <label className="block text-xs font-semibold text-gray-700">Cargo</label>
                 <select 
                     name="role" 
                     defaultValue={nurseToEdit?.role || ''}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                    className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
                 >
                     <option value="">Campo Vazio</option>
                     <option value="ENFERMEIRO">Enfermeiro(a)</option>
@@ -295,68 +295,72 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                 </select>
             </div>
             <div>
-                <label className="block text-sm font-medium text-gray-700">Setor Laboral (Histórico)</label>
+                <label className="block text-xs font-semibold text-gray-700">Setor Laboral (Histórico)</label>
                 <input 
                     type="text"
                     name="sector"
                     defaultValue={nurseToEdit?.sector || ''}
                     placeholder="Ex: UTI, PEDIATRIA..."
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
+                    className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
                 />
             </div>
           </div>
 
-          <div>
-             <label className="block text-sm font-medium text-gray-700">CPF</label>
-             <input 
-               type="text" 
-               name="cpf" 
-               value={cpf}
-               onChange={(e) => setCpf(e.target.value)}
-               placeholder="Apenas números (opcional)"
-               autoComplete="none"
-               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-black"
-             />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+                <label className="block text-xs font-semibold text-gray-700">CPF</label>
+                <input 
+                  type="text" 
+                  name="cpf" 
+                  value={cpf}
+                  onChange={(e) => setCpf(e.target.value)}
+                  placeholder="Apenas números"
+                  autoComplete="none"
+                  className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
+                />
+            </div>
+            <div>
+                <label className="block text-xs font-semibold text-gray-700">Senha (Padrão: 123456)</label>
+                <input 
+                  type="password" 
+                  name="password" 
+                  disabled={useDefaultPassword}
+                  placeholder={useDefaultPassword ? "123456" : "******"}
+                  autoComplete="new-password"
+                  className={`mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 text-sm text-black ${useDefaultPassword ? 'bg-gray-100' : 'bg-white'}`}
+                />
+            </div>
           </div>
 
-          <div>
-             <label className="block text-sm font-medium text-gray-700">Senha (Opcional - Padrão: 123456)</label>
-             <input 
-               type="password" 
-               name="password" 
-               disabled={useDefaultPassword}
-               placeholder={useDefaultPassword ? "Usando senha padrão (123456)" : "******"}
-               autoComplete="new-password"
-               className={`mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-black ${useDefaultPassword ? 'bg-gray-100' : 'bg-white'}`}
-             />
-             <div className="mt-2 flex items-center">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
                 <input
                   id="modalUseDefaultPassword"
                   name="useDefaultPassword"
                   type="checkbox"
                   value="on"
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  className="h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                   checked={useDefaultPassword}
                   onChange={(e) => setUseDefaultPassword(e.target.checked)}
                 />
-                <label htmlFor="modalUseDefaultPassword" className="ml-2 block text-sm text-gray-900">
-                  Usar senha padrão (123456)
+                <label htmlFor="modalUseDefaultPassword" className="ml-2 block text-xs text-gray-700">
+                  Usar senha padrão
                 </label>
-              </div>
+            </div>
           </div>
 
-          <div className="flex justify-end gap-2 mt-6">
+          <div className="flex justify-end gap-2 pt-2 border-t mt-4">
             <button
               type="button"
               onClick={onClose}
-              className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300"
+              className="bg-gray-100 text-gray-700 px-4 py-1.5 rounded text-sm hover:bg-gray-200"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+              className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50 font-bold"
             >
               {loading ? 'Salvando...' : 'Salvar'}
             </button>

@@ -111,37 +111,11 @@ export async function createSwapRequest(formData: FormData) {
     return { success: false, message: 'Dados incompletos: selecione enfermeiro e ambas as datas' }
   }
 
-  // 1. Role validation (Same Role Only)
+  // TRAVAMENTO REMOVIDO: Permutas permitidas entre qualquer cargo.
+  /*
   if (isLocalMode()) {
-    const db = readDb()
     const targetNurse = db.nurses.find((n: any) => n.id === requested_id)
     if (targetNurse && targetNurse.role !== user.role) {
-       // Allow exceptions for admins? User said "trocas só é permitida entre tecnicos e tecnicos e enfermeiros e enfermeiros".
-       // Assuming strict role match for the requester and requested.
-       // However, user.role might be 'COORDENADOR' but acting as nurse. 
-       // Usually Coordinator is a Nurse.
-       // Let's stick to the requested rule literally first.
-       // But wait, if I am a Coordinator (Nurse), can I swap with a Nurse?
-       // Usually yes. But the user said "tecnicos e tecnicos e enfermeiros e enfermeiros".
-       // I'll check if roles match exactly.
-       if (user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL' || user.role === 'ADMIN') {
-           // Admins might be able to swap with anyone or just override?
-           // The prompt says "as trocas só é permitida entre...".
-           // I'll assume this restriction applies to the *creation* of the swap by the user.
-           // If admin is creating, maybe they can do whatever.
-           // But let's enforce it generally for now, unless admin bypass logic exists.
-           // Existing bypass logic is for DATE.
-       }
-       
-       // Refined logic:
-       // If user is 'TECNICO', target must be 'TECNICO'.
-       // If user is 'ENFERMEIRO', target must be 'ENFERMEIRO' (or 'COORDENADOR' if they are nurses?).
-       // Simplest interpretation: strict string equality or compatible groups.
-       
-       // Let's use a helper to normalize roles if needed, but for now strict check.
-       // If user is ADMIN/COORD, they might not have a "clinical" role defined in the same way.
-       // But usually they do.
-       
        const isUserNurse = user.role === 'ENFERMEIRO' || user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL'
        const isTargetNurse = targetNurse.role === 'ENFERMEIRO' || targetNurse.role === 'COORDENADOR' || targetNurse.role === 'COORDENACAO_GERAL'
        
@@ -168,6 +142,7 @@ export async function createSwapRequest(formData: FormData) {
        }
       }
   }
+  */
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -175,11 +150,7 @@ export async function createSwapRequest(formData: FormData) {
   const requesterDateObj = new Date((requester_shift_date || '') + 'T00:00:00')
   const diffMs = requesterDateObj.getTime() - today.getTime()
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
-  const canBypassDateRules =
-    user.role === 'COORDENADOR' ||
-    user.role === 'COORDENACAO_GERAL' ||
-    user.role === 'ADMIN' ||
-    user.cpf === '02170025367'
+  const canBypassDateRules = true // TRAVAMENTO REMOVIDO: Qualquer usuário pode cadastrar permutas sem restrição de 24h antecipadas.
 
   if (!canBypassDateRules) {
     // "sempre 24h antes do plantão" implies strict future validation (diffDays >= 1)
