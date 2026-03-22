@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import MyShifts from './MyShifts'
 import AdminDailySchedule from './AdminDailySchedule'
 import PendingSwapsList from './PendingSwapsList'
+import ManagementReportButton from '@/components/ManagementReportButton'
 
 export default async function DashboardPage({
   searchParams,
@@ -129,6 +130,8 @@ export default async function DashboardPage({
     { value: 12, label: 'Dezembro' },
   ]
 
+  const currentMonthLabel = monthOptions.find(m => m.value === selectedMonth)?.label || ''
+
   const currentYearValue = now.getFullYear()
   const yearOptions = Array.from({ length: 5 }, (_, index) => currentYearValue - 2 + index)
 
@@ -197,7 +200,14 @@ export default async function DashboardPage({
       {(user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL') && (
         <div className="space-y-4 font-sans">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-800 tracking-tight">Cadastros por período</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-semibold text-gray-800 tracking-tight">Cadastros por período</h2>
+              <ManagementReportButton 
+                selectedMonth={selectedMonth} 
+                selectedYear={selectedYear} 
+                monthLabel={currentMonthLabel}
+              />
+            </div>
             <form className="flex items-center gap-2 text-sm text-gray-700">
               <label htmlFor="month" className="sr-only">
                 Mês

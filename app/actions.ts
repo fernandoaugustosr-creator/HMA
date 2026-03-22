@@ -1473,6 +1473,213 @@ export async function login(prevState: any, formData: FormData) {
   redirect('/')
 }
 
+export async function getMonthlyManagementReport(month: number, year: number) {
+  try {
+    await checkAdmin()
+    
+    let nurses: any[] = []
+    let rosters: any[] = []
+    let units: any[] = []
+    let releases: any[] = []
+
+    if (isLocalMode()) {
+      const db = readDb()
+      nurses = db.nurses || []
+      rosters = (db.monthly_rosters || []).filter((r: any) => r.month === month && r.year === year)
+      units = db.units || []
+      releases = (db.monthly_schedule_metadata || []).filter((m: any) => m.month === month && m.year === year && m.is_released)
+    } else {
+      const supabase = createClient()
+      
+      // 1. Primeiro busca as unidades e os metadados de liberação
+      const [
+        { data: unitsData, error: e3 },
+        { data: releasesData, error: e4 }
+      ] = await Promise.all([
+        supabase.from('units').select('id, title').range(0, 1000),
+        supabase.from('monthly_schedule_metadata').select('unit_id').eq('month', month).eq('year', year).eq('is_released', true).range(0, 1000)
+      ])
+
+      if (e3 || e4) throw new Error(`Erro ao buscar setores: ${e3?.message || e4?.message}`)
+
+      // 2. Busca os registros da escala (rosters)
+      const { data: rostersData, error: e2 } = await supabase
+        .from('monthly_rosters')
+        .select('id, nurse_id, unit_id, observation')
+        .eq('month', month)
+        .eq('year', year)
+        .range(0, 1000) // Pega os primeiros 1000 registros do mês
+
+      if (e2) throw new Error(`Erro ao buscar registros da escala: ${e2.message}`)
+
+      const rosterList = rostersData || []
+      
+      // 3. Busca APENAS os enfermeiros que estão na escala do mês para ganhar performance
+      const nurseIds = Array.from(new Set(rosterList.map(r => r.nurse_id)))
+      let nursesData: any[] = []
+      
+      if (nurseIds.length > 0) {
+          // Busca em blocos se houver muitos enfermeiros (supabase IN filter tem limites)
+          const { data, error: e1 } = await supabase
+            .from('nurses')
+            .select('id, name, vinculo, role')
+            .in('id', nurseIds)
+            .range(0, 1000)
+          
+          if (e1) throw new Error(`Erro ao buscar profissionais: ${e1.message}`)
+          nursesData = data || []
+      }
+
+      nurses = nursesData
+      rosters = rosterList
+      units = unitsData || []
+      releases = releasesData || []
+    }
+
+    // Otimização: Criar um mapa de enfermeiros para busca O(1)
+    const nurseMap = new Map()
+    nurses.forEach(n => nurseMap.set(String(n.id), n))
+
+    // Processamento do relatório
+    const activeUnitIds = new Set(rosters.map(r => String(r.unit_id)))
+    const sectorsWithSchedules = units.filter(u => activeUnitIds.has(String(u.id)))
+    
+    const stats = {
+      totalSchedules: activeUnitIds.size,
+      releasedSchedules: releases.length,
+      concursados: 0,
+      seletivados: 0,
+      escalaDupla: 0,
+      descoberta: 0,
+      totalEntries: rosters.length,
+      professions: {
+        enfermeiros: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 },
+        tecnicos: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 },
+        auxiliares: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 },
+        medicos: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 },
+        outros: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 }
+      },
+      sectors: sectorsWithSchedules.map(s => {
+        const sectorRosters = rosters.filter(r => String(r.unit_id) === String(s.id))
+        const sectorNurseIds = sectorRosters.map(r => String(r.nurse_id))
+        const sectorNurses = nurses.filter(n => sectorNurseIds.includes(String(n.id)))
+        const sectorRoles = Array.from(new Set(sectorNurses.map(n => (n.role || '').toUpperCase())))
+        
+        // Detailed stats per sector and profession
+        const sectorStats: any = {
+          total: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: sectorRosters.length },
+          ENFERMEIRO: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
+          TECNICO: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
+          AUXILIAR: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
+          MEDICO: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
+          OUTROS: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 }
+        }
+
+        sectorRosters.forEach(r => {
+          const nurse = nurseMap.get(String(r.nurse_id))
+          if (nurse) {
+            const role = (nurse.role || '').toUpperCase()
+            const vin = (nurse.vinculo || '').toUpperCase()
+            const obs = (r.observation || '').toUpperCase()
+            const name = (nurse.name || '').toUpperCase()
+
+            let pKey = 'OUTROS'
+            if (role.includes('ENFERMEIRO')) pKey = 'ENFERMEIRO'
+            else if (role.includes('TECNICO') || role.includes('TÉCNICO')) pKey = 'TECNICO'
+            else if (role.includes('AUXILIAR')) pKey = 'AUXILIAR'
+            else if (role.includes('MEDICO') || role.includes('MÉDICO')) pKey = 'MEDICO'
+
+            sectorStats[pKey].total++
+
+            if (name.includes('DESCOBE') || obs.includes('DESCOBE') || vin.includes('DESCOBE') || vin === 'ESCALA') {
+              sectorStats.total.descoberta++
+              sectorStats[pKey].descoberta++
+            } else if (vin.includes('DUPLA') || obs.includes('DUPLA') || obs.includes('1ED') || name.includes('1ED')) {
+              sectorStats.total.escalaDupla++
+              sectorStats[pKey].escalaDupla++
+            } else if (vin.includes('CONCURSO') || vin.includes('EFETIVO')) {
+              sectorStats.total.concursados++
+              sectorStats[pKey].concursados++
+            } else if (vin.includes('SELETIVO')) {
+              sectorStats.total.seletivados++
+              sectorStats[pKey].seletivados++
+            }
+          }
+        })
+
+        return {
+          id: String(s.id),
+          title: s.title,
+          isReleased: releases.some(r => String(r.unit_id) === String(s.id)),
+          professions: sectorRoles,
+          stats: sectorStats
+        }
+      })
+    }
+
+    rosters.forEach(r => {
+      const nurse = nurseMap.get(String(r.nurse_id))
+      if (nurse) {
+        const vinculo = (nurse.vinculo || '').toUpperCase()
+        const role = (nurse.role || '').toUpperCase()
+        const obs = (r.observation || '').toUpperCase()
+        const nurseName = (nurse.name || '').toUpperCase()
+
+        // 1. Identificar a Profissão (chave para os stats internos)
+        let profKey: keyof typeof stats.professions = 'outros'
+        if (role.includes('ENFERMEIRO')) profKey = 'enfermeiros'
+        else if (role.includes('TECNICO') || role.includes('TÉCNICO')) profKey = 'tecnicos'
+        else if (role.includes('AUXILIAR')) profKey = 'auxiliares'
+        else if (role.includes('MEDICO') || role.includes('MÉDICO')) profKey = 'medicos'
+
+        stats.professions[profKey].total++
+
+        // 2. Classificação de Vínculo/Situação
+        let isDescoberta = false
+        let isEscalaDupla = false
+        let isConcursado = false
+        let isSeletivado = false
+
+        // Prioridade 1: Escala Descoberta (Identifica por nome parcial "DESCOBE" ou vínculo)
+        if (
+          nurseName.includes('DESCOBERTA') || 
+          nurseName.includes('DESCOBE') || 
+          obs.includes('DESCOBERTA') || 
+          obs.includes('DESCOBE') ||
+          vinculo.includes('DESCOBERTA') ||
+          vinculo.includes('DESCOBE') ||
+          vinculo === 'ESCALA'
+        ) {
+          isDescoberta = true
+          stats.descoberta++
+          stats.professions[profKey].descoberta++
+        } 
+        // Prioridade 2: Escala Dupla (Apenas se não for descoberta)
+        else if (vinculo.includes('DUPLA') || obs.includes('DUPLA') || obs.includes('1ED') || nurseName.includes('1ED')) {
+          isEscalaDupla = true
+          stats.escalaDupla++
+          stats.professions[profKey].escalaDupla++
+        }
+        else if (vinculo.includes('CONCURSO') || vinculo.includes('EFETIVO')) {
+          isConcursado = true
+          stats.concursados++
+          stats.professions[profKey].concursados++
+        }
+        else if (vinculo.includes('SELETIVO')) {
+          isSeletivado = true
+          stats.seletivados++
+          stats.professions[profKey].seletivados++
+        }
+      }
+    })
+
+    return { success: true, data: stats }
+  } catch (e: any) {
+    console.error('Error generating management report:', e)
+    return { success: false, message: 'Erro ao gerar relatório: ' + e.message }
+  }
+}
+
 export async function getMonthlyNote(month: number, year: number, unitId?: string | null) {
   try {
     if (isLocalMode()) {
@@ -1974,7 +2181,7 @@ export async function getDailyShifts(date: string) {
   }
 }
 
-export async function getMonthlyScheduleData(month: number, year: number, unitId?: string) {
+export async function getMonthlyScheduleData(month: number, year: number, unitId?: string, isPublic: boolean = false) {
   try {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDay = new Date(year, month, 0).getDate()
@@ -1997,6 +2204,11 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
       const absences = (db.absences || []).filter(a => a.date >= startDate && a.date <= endDate)
 
+      // Se for acesso público, verificar se a escala está liberada
+      if (isPublic && !releases.some(r => r.is_released)) {
+        throw new Error('Acesso não autorizado: escala não liberada')
+      }
+
       return {
         nurses: nurses || [],
         roster: roster || [],
@@ -2011,6 +2223,21 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
 
     const supabase = createClient()
     
+    // Se for acesso público, validar se a escala está liberada antes de mais nada
+    if (isPublic) {
+      const { data: releaseCheck } = await supabase
+        .from('monthly_schedule_metadata')
+        .select('is_released')
+        .eq('month', month)
+        .eq('year', year)
+        .eq('unit_id', unitId || '')
+        .single()
+      
+      if (!releaseCheck || !releaseCheck.is_released) {
+        throw new Error('Acesso não autorizado: escala não liberada')
+      }
+    }
+
     // FETCH EVERYTHING IN PARALLEL WITHOUT SEQUENTIAL PRE-FETCH
     const rosterQuery = supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year)
     if (unitId) {
@@ -2031,17 +2258,17 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     ] = await Promise.all([
         supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
-        rosterQuery.range(0, 999999), // Aumentado para "sem limite" prático
-        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 999999),
+        rosterQuery.range(0, 1000), 
+        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 2000),
         supabase.from('time_off_requests')
             .select('id, nurse_id, start_date, end_date, type, status, unit_id')
             .in('status', ['approved', 'pending'])
             .lte('start_date', endDate)
             .gte('end_date', startDate)
-            .range(0, 999999),
+            .range(0, 1000),
         supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
-        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate).range(0, 999999),
-        supabase.from('nurses').select('*').range(0, 999999).order('name')
+        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate).range(0, 1000),
+        supabase.from('nurses').select('*').range(0, 1000).order('name')
     ])
 
     if (nursesError) console.error('Error fetching nurses:', nursesError)

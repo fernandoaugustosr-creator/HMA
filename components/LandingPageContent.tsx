@@ -53,11 +53,11 @@ export default function LandingPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] flex flex-col items-center justify-center p-4 md:p-8 font-sans overflow-y-auto">
-      <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+    <div className="min-h-screen bg-[#f1f5f9] flex flex-col items-center justify-center p-4 md:p-8 font-sans overflow-y-auto print:bg-white print:p-0 print:block print:min-h-0">
+      <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch print:block print:max-w-none print:w-full">
         
         {/* Left Side: Login Form */}
-        <div className="lg:col-span-5 bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white flex flex-col justify-center">
+        <div className="lg:col-span-5 bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white flex flex-col justify-center print:hidden">
           <div className="relative z-10">
             <div className="flex justify-center items-center gap-8 mb-10">
               <Image
@@ -135,9 +135,9 @@ export default function LandingPageContent() {
         </div>
 
         {/* Right Side: Public Schedule List */}
-        <div className="lg:col-span-7 flex flex-col">
-          <div className="bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white h-full">
-            <div className="flex items-center justify-between mb-8">
+        <div className="lg:col-span-7 flex flex-col print:block">
+          <div className="bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white h-full print:p-0 print:shadow-none print:border-none">
+            <div className="flex items-center justify-between mb-8 print:hidden">
                 <div>
                     <h2 className="text-3xl font-black text-[#1e293b] tracking-tight">Escalas Publicadas</h2>
                     <p className="text-gray-500 font-medium text-lg mt-1">Consulte e baixe as escalas sem necessidade de login</p>

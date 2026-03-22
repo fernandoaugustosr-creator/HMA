@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { getReleasedSchedules } from '@/app/actions'
+import { getReleasedSchedules, getMonthlyScheduleData } from '@/app/actions'
 import Schedule from '@/components/Schedule'
 import { FileText, Download, Calendar } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
@@ -19,6 +19,7 @@ export default function PublicScheduleList() {
   const [selectedRelease, setSelectedRelease] = useState<any | null>(null)
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('')
   const [isPrinting, setIsPrinting] = useState(false)
+  const [professionCount, setProfessionCount] = useState<number>(0)
   const printTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -45,7 +46,10 @@ export default function PublicScheduleList() {
                 )
                 
                 if (targetRelease) {
-                    // Automatically trigger print/view
+                    // Fetch data to determine scale
+                    const scheduleData = await getMonthlyScheduleData(monthNum, yearNum, qUnitId, true)
+                    setProfessionCount(scheduleData.roster.length)
+                    
                     setSelectedRelease(targetRelease)
                     setIsPrinting(true)
                     return // Stop here
@@ -130,29 +134,43 @@ export default function PublicScheduleList() {
     }, 1200)
   }, [selectedRelease])
 
-  const handlePrint = (release: any) => {
+  const handlePrint = async (release: any) => {
     if (isPrinting) return
 
-    const fileName = `Escala_${release.unit_name}_${MONTHS[release.month - 1]}_${release.year}`.replace(/\s+/g, '_')
-    const oldTitle = document.title
+    setIsPrinting(true)
+    
+    try {
+      // Fetch data to determine scale before showing print view
+      const scheduleData = await getMonthlyScheduleData(release.month, release.year, release.unit_id, true)
+      setProfessionCount(scheduleData.roster.length)
+      
+      const fileName = `Escala_${release.unit_name}_${MONTHS[release.month - 1]}_${release.year}`.replace(/\s+/g, '_')
+      const oldTitle = document.title
 
-    if (selectedRelease?.id === release.id) {
-        setIsPrinting(true)
-        document.title = fileName
-        setTimeout(() => {
-            window.print()
-            setTimeout(() => {
-                document.title = oldTitle
-                setIsPrinting(false)
-            }, 1000)
-        }, 100)
-    } else {
-        setIsPrinting(true)
-        setSelectedRelease(release)
+      if (selectedRelease?.id === release.id) {
+          document.title = fileName
+          setTimeout(() => {
+              window.print()
+              setTimeout(() => {
+                  document.title = oldTitle
+                  setIsPrinting(false)
+              }, 1000)
+          }, 100)
+      } else {
+          setSelectedRelease(release)
+      }
+    } catch (e) {
+      console.error(e)
+      alert('Erro ao carregar dados da escala para impressão.')
+      setIsPrinting(false)
     }
   }
 
   const [currentYear, currentMonth] = selectedMonthYear ? selectedMonthYear.split('-').map(Number) : [0, 0]
+
+  // Determine print scale based on number of professionals
+  // Large scales (> 15 professionals) get 80% scale, others 100%
+  const printScale = professionCount > 15 ? 0.8 : 1.0;
 
   return (
     <div className="w-full">
@@ -267,7 +285,7 @@ export default function PublicScheduleList() {
         @media print {
           @page {
             size: landscape;
-            margin: 5mm 15mm;
+            margin: 2mm 5mm 5mm 5mm; /* Very small top margin to stay at the top */
           }
           body {
             overflow: visible !important;
@@ -278,12 +296,14 @@ export default function PublicScheduleList() {
             width: 100% !important;
             background-color: #ffffff !important;
             display: block !important;
-            zoom: 0.85;
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+            zoom: ${printScale};
           }
           @supports not (zoom: 1) {
             .print-schedule-root {
-              width: 117.65% !important;
-              transform: scale(0.85) !important;
+              width: ${100 / printScale}% !important;
+              transform: scale(${printScale}) !important;
               transform-origin: top left !important;
             }
           }

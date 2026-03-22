@@ -95,8 +95,12 @@ export async function deleteUnit(id: string) {
              db.monthly_schedule_metadata = db.monthly_schedule_metadata.filter((m: any) => m.unit_id !== id)
         }
 
-        if (db.time_offs) {
-             db.time_offs = db.time_offs.filter((t: any) => t.unit_id !== id)
+        if (db.time_off_requests) {
+             db.time_off_requests = db.time_off_requests.filter((t: any) => t.unit_id !== id)
+        }
+
+        if (db.monthly_notes) {
+             db.monthly_notes = db.monthly_notes.filter((n: any) => n.unit_id !== id)
         }
 
         db.units = db.units.filter(u => u.id !== id)
@@ -120,8 +124,10 @@ export async function deleteUnit(id: string) {
          await supabase.from('monthly_rosters').delete().in('id', rosterIds)
     }
     
-    await supabase.from('time_offs').delete().eq('unit_id', id)
+    // Cleanup other related tables
+    await supabase.from('time_off_requests').delete().eq('unit_id', id)
     await supabase.from('monthly_schedule_metadata').delete().eq('unit_id', id)
+    await supabase.from('monthly_notes').delete().eq('unit_id', id)
 
     // Reset nurses unit_id before deleting the unit to avoid FK constraints
     await supabase.from('nurses').update({ unit_id: null }).eq('unit_id', id)

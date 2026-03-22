@@ -263,6 +263,7 @@ export default function Schedule({
   const [newUnitNumber, setNewUnitNumber] = useState('')
   const [isEditingUnit, setIsEditingUnit] = useState(false)
   const [editingUnitTitle, setEditingUnitTitle] = useState('')
+  const [isUnitManagerOpen, setIsUnitManagerOpen] = useState(false)
 
   // Footer Text State
   const [footerText, setFooterText] = useState<string>('')
@@ -2568,19 +2569,28 @@ export default function Schedule({
                     <option key={y} value={y}>{y}</option>
                     ))}
                 </select>
-                {isAdmin && isSetorHidden && (
-                    <button 
-                        onClick={() => handleToggleSetorVisibility(false)}
-                        className="px-2 py-2 bg-gray-600 text-white rounded text-[10px] hover:bg-gray-700 flex items-center gap-1 no-print h-[38px] whitespace-nowrap"
-                        title="Reexibir coluna SETOR"
-                    >
-                        <Plus size={14} /> EXIBIR SETOR
-                    </button>
-                )}
             </div>
             </div>
         </div>
         <div className="flex flex-wrap gap-2 w-full justify-start items-center">
+           {isAdmin && isSetorHidden && (
+                <button 
+                    onClick={() => handleToggleSetorVisibility(false)}
+                    className="px-2 py-2 bg-gray-600 text-white rounded text-[10px] hover:bg-gray-700 flex items-center gap-1 no-print h-[38px] whitespace-nowrap"
+                    title="Reexibir coluna SETOR"
+                >
+                    <Plus size={14} /> EXIBIR SETOR
+                </button>
+            )}
+            {isAdmin && (
+                <button 
+                    onClick={() => setIsUnitManagerOpen(true)}
+                    className="px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded text-[10px] hover:bg-gray-50 flex items-center gap-1 no-print h-[38px] whitespace-nowrap font-bold uppercase"
+                    title="Gerenciar todos os setores (editar/excluir)"
+                >
+                    <Pencil size={14} /> Gerenciar Lista
+                </button>
+            )}
            {isSaving && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded animate-pulse no-print h-[38px]">
                     <span className="animate-spin h-3 w-3 border-2 border-indigo-700 border-t-transparent rounded-full"></span>
@@ -3651,6 +3661,102 @@ ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
               selectedYear={selectedYear}
               sections={data.sections}
           />
+      )}
+
+      {/* Unit Management Modal */}
+      {isUnitManagerOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10000] p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden">
+                <div className="bg-gray-800 p-4 text-white flex items-center justify-between">
+                    <h3 className="font-bold flex items-center gap-2">
+                        <Pencil size={18} />
+                        Gerenciar Lista de Setores
+                    </h3>
+                    <button onClick={() => setIsUnitManagerOpen(false)} className="hover:bg-white/20 p-1 rounded-full transition-colors">
+                        <X size={24} />
+                    </button>
+                </div>
+                <div className="p-6 overflow-y-auto max-h-[70vh]">
+                    <div className="space-y-3">
+                        {[...data.units].sort((a, b) => {
+                            const na = parseInt(unitNumbersMap[a.id] || '9999', 10)
+                            const nb = parseInt(unitNumbersMap[b.id] || '9999', 10)
+                            return na - nb || a.title.localeCompare(b.title)
+                        }).map(unit => (
+                            <div key={unit.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 group hover:border-indigo-300 transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <span className="bg-gray-200 text-gray-700 font-bold px-2 py-1 rounded text-xs min-w-[30px] text-center">
+                                        {unitNumbersMap[unit.id] || '-'}
+                                    </span>
+                                    <span className="font-bold text-gray-800 uppercase text-sm">{unit.title}</span>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={async () => {
+                                            const newTitle = prompt('Novo nome para o setor:', unit.title)
+                                            if (newTitle && newTitle !== unit.title) {
+                                                const res = await updateUnit(unit.id, newTitle)
+                                                if (res.success) fetchData(true)
+                                                else alert(res.message)
+                                            }
+                                        }}
+                                        className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                                        title="Editar nome"
+                                    >
+                                        <Pencil size={16} />
+                                    </button>
+                                    <button 
+                                        onClick={async () => {
+                                            const newNum = prompt('Novo número para o setor:', unitNumbersMap[unit.id] || '')
+                                            if (newNum !== null) {
+                                                const res = await saveUnitNumber(unit.id, newNum)
+                                                if (res.success) {
+                                                    const map = await getAllUnitNumbers()
+                                                    setUnitNumbersMap(map || {})
+                                                } else alert(res.message)
+                                            }
+                                        }}
+                                        className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                                        title="Editar número"
+                                    >
+                                        <ArrowDownCircle size={16} />
+                                    </button>
+                                    <button 
+                                        onClick={async () => {
+                                            if (confirm(`DESEJA EXCLUIR O SETOR "${unit.title}"?\n\nIsso apagará o setor E TODO O SEU HISTÓRICO de escalas e plantões.\n\nEsta ação é IRREVERSÍVEL.`)) {
+                                                const confirmName = prompt(`Para confirmar a exclusão, digite o nome do setor: ${unit.title}`)
+                                                if (confirmName === unit.title) {
+                                                    const res = await deleteUnit(unit.id)
+                                                    if (res.success) {
+                                                        if (selectedUnitId === unit.id) setSelectedUnitId('')
+                                                        fetchData(true)
+                                                    } else alert(res.message)
+                                                } else {
+                                                    alert('Nome incorreto.')
+                                                }
+                                            }
+                                        }}
+                                        className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                                        title="EXCLUIR DEFINITIVAMENTE"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="p-4 bg-gray-50 border-t flex justify-between items-center">
+                    <p className="text-xs text-gray-500 italic">Cuidado: a exclusão de um setor apaga todos os plantões salvos nele.</p>
+                    <button 
+                        onClick={() => setIsUnitManagerOpen(false)}
+                        className="px-6 py-2 bg-gray-800 text-white font-bold rounded-xl hover:bg-black transition-colors uppercase text-xs tracking-widest"
+                    >
+                        Fechar
+                    </button>
+                </div>
+            </div>
+        </div>
       )}
 
       {/* QR Code in the bottom right corner of the print layout */}

@@ -274,6 +274,16 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                     />
                     <span>CESSÃO</span>
                   </label>
+                  <label className="inline-flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      name="vinculo"
+                      value="ESCALA DESCOBERTA"
+                      defaultChecked={nurseToEdit?.vinculo?.includes('ESCALA DESCOBERTA')}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span>ESCALA DESCOBERTA</span>
+                  </label>
                 </div>
             </div>
           </div>

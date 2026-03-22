@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { getReleasedSchedules } from '@/app/actions'
+import { getReleasedSchedules, getMonthlyScheduleData } from '@/app/actions'
 import Schedule from '@/components/Schedule'
 import { FileText, ArrowLeft, Download, Calendar } from 'lucide-react'
 import Image from 'next/image'
@@ -17,6 +17,7 @@ export default function DownloadsPage() {
   const [selectedRelease, setSelectedRelease] = useState<any | null>(null)
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('')
   const [isPrinting, setIsPrinting] = useState(false)
+  const [professionCount, setProfessionCount] = useState<number>(0)
   const printTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -123,32 +124,46 @@ export default function DownloadsPage() {
     }, 1200)
   }, [selectedRelease])
 
-  const handlePrint = (release: any) => {
+  const handlePrint = async (release: any) => {
     if (isPrinting) return
 
-    const fileName = `Escala_${release.unit_name}_${MONTHS[release.month - 1]}_${release.year}`.replace(/\s+/g, '_')
-    const oldTitle = document.title
+    setIsPrinting(true)
+    
+    try {
+      // Fetch data to determine scale before showing print view
+      const scheduleData = await getMonthlyScheduleData(release.month, release.year, release.unit_id, true)
+      setProfessionCount(scheduleData.roster.length)
+      
+      const fileName = `Escala_${release.unit_name}_${MONTHS[release.month - 1]}_${release.year}`.replace(/\s+/g, '_')
+      const oldTitle = document.title
 
-    if (selectedRelease?.id === release.id) {
-        // If already loaded, just print
-        setIsPrinting(true)
-        document.title = fileName
-        setTimeout(() => {
-            window.print()
-            // Reset after a delay to prevent double-clicks immediately after dialog closes
-            setTimeout(() => {
-                document.title = oldTitle
-                setIsPrinting(false)
-            }, 1000)
-        }, 100)
-    } else {
-        // Triggers render of Schedule -> onLoaded -> print
-        setIsPrinting(true)
-        setSelectedRelease(release)
+      if (selectedRelease?.id === release.id) {
+          // If already loaded, just print
+          document.title = fileName
+          setTimeout(() => {
+              window.print()
+              // Reset after a delay to prevent double-clicks immediately after dialog closes
+              setTimeout(() => {
+                  document.title = oldTitle
+                  setIsPrinting(false)
+              }, 1000)
+          }, 100)
+      } else {
+          // Triggers render of Schedule -> onLoaded -> print
+          setSelectedRelease(release)
+      }
+    } catch (e) {
+      console.error(e)
+      alert('Erro ao carregar dados da escala para impressão.')
+      setIsPrinting(false)
     }
   }
 
   const [currentYear, currentMonth] = selectedMonthYear ? selectedMonthYear.split('-').map(Number) : [0, 0]
+
+  // Determine print scale based on number of professionals
+  // Large scales (> 15 professionals) get 80% scale, others 100%
+  const printScale = professionCount > 15 ? 0.8 : 1.0;
 
   return (
     <>
@@ -282,7 +297,7 @@ export default function DownloadsPage() {
         @media print {
           @page {
             size: landscape;
-            margin: 5mm 15mm;
+            margin: 2mm 5mm 5mm 5mm; /* Very small top margin to stay at the top */
           }
           body {
             overflow: visible !important;
@@ -293,13 +308,15 @@ export default function DownloadsPage() {
             width: 100% !important;
             background-color: #ffffff !important;
             display: block !important;
-            zoom: 0.85; /* Use 85% scale */
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+            zoom: ${printScale};
           }
           
           @supports not (zoom: 1) {
             .print-schedule-root {
-              width: 117.65% !important;
-              transform: scale(0.85) !important;
+              width: ${100 / printScale}% !important;
+              transform: scale(${printScale}) !important;
               transform-origin: top left !important;
             }
           }

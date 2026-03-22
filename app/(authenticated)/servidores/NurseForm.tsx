@@ -75,9 +75,16 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
             type="text"
             name="vinculo"
             id="vinculo"
+            list="vinculo-options"
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
             placeholder="Ex: Concurso, Seletivo"
           />
+          <datalist id="vinculo-options">
+            <option value="CONCURSO" />
+            <option value="SELETIVO" />
+            <option value="ESCALA DUPLA" />
+            <option value="ESCALA DESCOBERTA" />
+          </datalist>
         </div>
         <div>
           <label htmlFor="sectionId" className="block text-sm font-medium text-gray-700">Setor (Opcional)</label>
