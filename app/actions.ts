@@ -1994,7 +1994,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         ['approved', 'pending'].includes(t.status) && 
         ((t.start_date <= endDate && t.end_date >= startDate))
       )
-      const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year)
+      const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
       const absences = (db.absences || []).filter(a => a.date >= startDate && a.date <= endDate)
 
       return {
@@ -2025,7 +2025,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         { data: rosterData },
         { data: rawShifts },
         { data: timeOffsData },
-        { data: releases },
+        { data: releasesData },
         { data: absencesData },
         { data: nurses, error: nursesError }
     ] = await Promise.all([
@@ -2054,6 +2054,9 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         shift_type: s.type
     })) || []
 
+    // Filter releases by unit_id to match the current context
+    const releases = (releasesData || []).filter((r: any) => unitId ? r.unit_id === unitId : !r.unit_id)
+
     return {
         nurses: nurses || [],
         roster: roster,
@@ -2062,7 +2065,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         absences: absencesData || [],
         sections: sections || [],
         units: units || [],
-        releases: releases || []
+        releases: releases
     }
   } catch (error) {
     console.error('Critical error in getMonthlyScheduleData:', error)

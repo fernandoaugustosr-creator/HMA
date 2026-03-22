@@ -22,8 +22,8 @@ export default function AuthenticatedLayout({
       <div className="no-print md:h-screen md:sticky md:top-0">
         <Sidebar user={user} />
       </div>
-      <main className="flex-1 flex flex-col">
-        <div className="flex-1 p-2 bg-gray-50/30">
+      <main className="flex-1 flex flex-col w-full overflow-x-hidden">
+        <div className="flex-1 bg-gray-50/30 w-full">
             {children}
         </div>
       </main>

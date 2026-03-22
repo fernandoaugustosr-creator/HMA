@@ -1389,17 +1389,18 @@ export default function Schedule({
     const targetType = overrideType || shiftType
     const targetRecurrence = overrideRecurrence || recurrence
 
+    console.log(`[handleSaveShifts] Início: tipo=${targetType}, recorrência=${targetRecurrence}, profissional=${shiftModalData.nurseName}`)
+
     if (typeof window !== 'undefined' && !overrideType) {
         localStorage.setItem('enf_hma_last_recurrence', targetRecurrence)
         localStorage.setItem('enf_hma_last_custom_days', customRecurrenceDays)
     }
 
+    setIsSaving(true)
     try {
-        const rosterKey = shiftModalData.rosterId || shiftModalData.nurseId
         const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
         
         // 1. Get ALL current shifts for this professional in the current month
-        // This is CRITICAL because the backend uses Atomic Replacement (Deletes specific days -> Inserts new)
         const currentProfessionalShifts = data.shifts.filter(s => {
             const dateParts = s.shift_date.split('-')
             if (dateParts.length !== 3) return false
@@ -1412,6 +1413,8 @@ export default function Schedule({
                    year === selectedYear
         })
 
+        console.log(`[handleSaveShifts] Plantões atuais encontrados para limpeza: ${currentProfessionalShifts.length}`)
+
         // 2. Prepare a map of the month's state
         const shiftsMap = new Map<string, string>()
         
@@ -1421,14 +1424,13 @@ export default function Schedule({
         })
 
         if (targetType === 'delete') {
+            console.log(`[handleSaveShifts] LIMPANDO MÊS INTEIRO para ${shiftModalData.nurseName}`)
             if (targetRecurrence !== 'none') {
-                // CLEAR ENTIRE MONTH
                 for (let d = 1; d <= lastDayOfMonth; d++) {
                     const dStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
                     shiftsMap.set(dStr, 'DELETE')
                 }
             } else {
-                // DELETE SINGLE DAY
                 shiftsMap.set(shiftModalData.date, 'DELETE')
             }
         } else {
@@ -1436,11 +1438,8 @@ export default function Schedule({
             const clickedDay = clickedDate.getDate()
 
             if (targetRecurrence === 'none') {
-                // MANUAL SINGLE DAY ONLY
-                // Label says "Apenas este dia", so let's respect that.
                 shiftsMap.set(shiftModalData.date, targetType)
             } else {
-                // AUTOMATION: OVERWRITE ENTIRE MONTH ACCORDING TO PATTERN
                 const getPatternInfo = (rec: string) => {
                     if (rec === 'daily') return { period: 1, work: [0] }
                     if (rec === 'mon_fri') return { period: 1, work: [0], skipWeekends: true }
@@ -1452,7 +1451,7 @@ export default function Schedule({
                     if (rec === 'off6') return { period: 7, work: [0] }
                     if (rec === 'dn_off3') return { period: 5, work: [0, 1], types: ['day', 'night'] }
                     if (rec === 'dn_off4') return { period: 6, work: [0, 1], types: ['day', 'night'] }
-                    if (rec === 'nd_off4') return { period: 6, work: [0, 1], types: ['night', 'day'] }
+                    if (rec === 'nd_off4') return { period: 6, work: [0, 5], types: ['night', 'day'] } // Night on Day 0, Day on Day 5 (which is Day before next Night)
                     if (rec === 'dn_off5') return { period: 7, work: [0, 1], types: ['day', 'night'] }
                     if (rec === 'dn_off6') return { period: 8, work: [0, 1], types: ['day', 'night'] }
                     if (rec === 'dn_off7') return { period: 9, work: [0, 1], types: ['day', 'night'] }
@@ -1463,13 +1462,15 @@ export default function Schedule({
 
                 const pattern = getPatternInfo(targetRecurrence)
                 if (pattern) {
-                    // Start by clearing if it's an automation to avoid "ghost" shifts
+                    console.log(`[handleSaveShifts] Aplicando padrão: period=${pattern.period}, work=${JSON.stringify(pattern.work)}`)
+                    
+                    // CLEAR ENTIRE MONTH BEFORE APPLYING PATTERN
                     for (let d = 1; d <= lastDayOfMonth; d++) {
                         const dStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
                         shiftsMap.set(dStr, 'DELETE')
                     }
 
-                    // Then apply pattern from Day 1 to End
+                    // Apply pattern from Day 1 to End
                     for (let d = 1; d <= lastDayOfMonth; d++) {
                         const diff = d - clickedDay
                         const mod = ((diff % pattern.period) + pattern.period) % pattern.period
@@ -1484,98 +1485,79 @@ export default function Schedule({
                             shiftsMap.set(dStr, finalType)
                         }
                     }
+                } else {
+                    console.warn(`[handleSaveShifts] Padrão não encontrado para recorrência: ${targetRecurrence}`)
                 }
             }
         }
 
         const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
-        
-        if (targetRecurrence === 'none') {
-            // ONLY send the single clicked day to the server.
-            // This is faster and prevents re-saving stale month data.
+        shiftsMap.forEach((type, date) => {
             shiftsToSave.push({
                 nurseId: shiftModalData.nurseId,
                 rosterId: shiftModalData.rosterId,
-                date: shiftModalData.date,
-                type: targetType === 'delete' ? 'DELETE' : targetType
+                date: date,
+                type: type
             })
-        } else {
-            // For automations, send the whole month's state
-            shiftsMap.forEach((type, date) => {
-                shiftsToSave.push({
-                    nurseId: shiftModalData.nurseId,
-                    rosterId: shiftModalData.rosterId,
-                    date: date,
-                    type: type
-                })
-            })
-        }
+        })
+
+        console.log(`[handleSaveShifts] Total de plantões para atualizar localmente: ${shiftsToSave.length}`)
 
         // 1. OPTIMISTIC LOCAL UPDATE
         setData(prev => {
             const newShifts = [...prev.shifts]
             
-            if (targetRecurrence === 'none') {
-                // Update only one day locally
-                const existingIdx = newShifts.findIndex(s => 
-                    s.nurse_id === shiftModalData.nurseId && 
-                    s.shift_date === shiftModalData.date &&
-                    (shiftModalData.rosterId ? s.roster_id === shiftModalData.rosterId : !s.roster_id)
-                )
+            // Filter out existing shifts for this context to avoid duplicates
+            const filteredShifts = newShifts.filter(s => {
+                const dateParts = s.shift_date.split('-')
+                if (dateParts.length !== 3) return true
+                const year = parseInt(dateParts[0])
+                const month = parseInt(dateParts[1])
+                
+                const isTargetProfessional = s.nurse_id === shiftModalData.nurseId &&
+                                           (shiftModalData.rosterId ? s.roster_id === shiftModalData.rosterId : !s.roster_id)
+                const isTargetMonth = month === (selectedMonth + 1) && year === selectedYear
+                
+                return !(isTargetProfessional && isTargetMonth)
+            })
 
-                if (targetType === 'delete') {
-                    if (existingIdx !== -1) newShifts.splice(existingIdx, 1)
-                } else {
-                    const newItem = {
-                        id: existingIdx !== -1 ? newShifts[existingIdx].id : `temp-${Math.random()}`,
-                        nurse_id: shiftModalData.nurseId,
-                        roster_id: shiftModalData.rosterId,
-                        shift_date: shiftModalData.date,
-                        shift_type: targetType as any,
+            // Add new shifts from shiftsToSave
+            shiftsToSave.forEach(sToSave => {
+                if (sToSave.type !== 'DELETE') {
+                    filteredShifts.push({
+                        id: `temp-${Math.random()}`,
+                        nurse_id: sToSave.nurseId,
+                        roster_id: sToSave.rosterId,
+                        shift_date: sToSave.date,
+                        shift_type: sToSave.type as any,
                         created_at: new Date().toISOString()
-                    }
-                    if (existingIdx !== -1) newShifts[existingIdx] = newItem
-                    else newShifts.push(newItem)
+                    })
                 }
-            } else {
-                // Update whole month locally for automations
-                const filteredShifts = newShifts.filter(s => {
-                    // FIX: Robust month/year extraction from string
-                    const dateParts = s.shift_date.split('-')
-                    if (dateParts.length !== 3) return true
-                    const year = parseInt(dateParts[0])
-                    const month = parseInt(dateParts[1])
-                    
-                    const isTargetProfessional = s.nurse_id === shiftModalData.nurseId &&
-                                               (shiftModalData.rosterId ? s.roster_id === shiftModalData.rosterId : !s.roster_id)
-                    const isTargetMonth = month === (selectedMonth + 1) && year === selectedYear
-                    
-                    return !(isTargetProfessional && isTargetMonth)
-                })
-
-                shiftsToSave.forEach(sToSave => {
-                    if (sToSave.type !== 'DELETE') {
-                        filteredShifts.push({
-                            id: `temp-${Math.random()}`,
-                            nurse_id: sToSave.nurseId,
-                            roster_id: sToSave.rosterId,
-                            shift_date: sToSave.date,
-                            shift_type: sToSave.type as any,
-                            created_at: new Date().toISOString()
-                        })
-                    }
-                })
-                return { ...prev, shifts: filteredShifts }
-            }
-            return { ...prev, shifts: newShifts }
+            })
+            
+            console.log(`[handleSaveShifts] Estado local atualizado. Total de plantões agora: ${filteredShifts.length}`)
+            return { ...prev, shifts: filteredShifts }
         })
 
+        // 2. IMMEDIATE SERVER SAVE (Optional but requested for automation)
+        // If it's an automation, we save immediately to prevent data loss on such a large operation
+        if (targetRecurrence !== 'none') {
+            console.log(`[handleSaveShifts] Salvando automação no servidor...`)
+            const res = await saveShifts(shiftsToSave as any)
+            if (res.success) {
+                console.log(`[handleSaveShifts] Salvamento concluído. Atualizando dados...`)
+                await fetchData(true)
+            } else {
+                alert(res.message || 'Erro ao salvar automação no servidor.')
+            }
+        }
+
         setIsShiftModalOpen(false)
-        console.log(`[handleSaveShifts] Local state updated. No server call yet. Changes will be saved when clicking 'SALVAR TUDO'.`)
+        console.log(`[handleSaveShifts] Sucesso. Modal fechado.`)
 
     } catch (error) {
-        console.error("Error updating local shifts:", error)
-        alert('Erro ao atualizar escala na tela.')
+        console.error("[handleSaveShifts] Erro:", error)
+        alert('Erro ao atualizar escala.')
     } finally {
         setIsSaving(false)
     }
@@ -2415,7 +2397,7 @@ export default function Schedule({
 
   return (
     <div 
-      className={`w-full bg-white ${printOnly ? 'p-0' : 'p-1'} schedule-root`}
+      className={`w-full bg-white ${printOnly ? 'p-0' : 'p-0'} schedule-root max-w-fit`}
     >
       <div className="w-full flex items-center justify-between mb-2 px-2 print:mb-4 print:px-0">
         <div className="flex items-center gap-4">
@@ -2480,16 +2462,16 @@ export default function Schedule({
       </div>
 
       {/* Header Filters */}
-      <div className="flex flex-col items-center gap-4 mb-6 no-print">
-        <div className="flex flex-col md:flex-row gap-4 items-end justify-center">
-            <div className="w-full md:w-auto">
+      <div className="flex flex-col items-stretch gap-4 mb-6 no-print w-full px-4">
+        <div className="flex flex-wrap gap-4 items-end justify-between w-full">
+            <div className="flex-1 min-w-[300px]">
             <label className="block text-sm font-medium text-black mb-1">Setor</label>
             {isEditingUnit ? (
                 <div className="flex items-center gap-2">
                     <input 
                         value={editingUnitTitle}
                         onChange={e => setEditingUnitTitle(e.target.value)}
-                        className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
+                        className="border border-gray-300 rounded px-3 py-2 text-sm w-full bg-white text-black"
                         autoFocus
                     />
                     <button onClick={saveUnitTitle} className="text-green-600 p-2 hover:bg-gray-100 rounded" title="Salvar">
@@ -2500,11 +2482,11 @@ export default function Schedule({
                     </button>
                 </div>
             ) : (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full">
                     <select 
                         value={selectedUnitId} 
                         onChange={handleUnitChange}
-                        className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-48 bg-white text-black"
+                        className="border border-gray-300 rounded px-3 py-2 text-sm flex-1 bg-white text-black"
                     >
                         <option value="">Selecione um setor...</option>
                         {[...data.units].sort((a, b) => {
@@ -2562,25 +2544,25 @@ export default function Schedule({
                 </div>
             )}
             </div>
-            <div className="w-full md:w-auto">
+            <div className="w-[200px]">
             <label className="block text-sm font-medium text-black mb-1">Mês</label>
             <select 
                 value={selectedMonth} 
                 onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-40 bg-white text-black"
+                className="border border-gray-300 rounded px-3 py-2 text-sm w-full bg-white text-black"
             >
                 {MONTHS.map((m, i) => (
                 <option key={i} value={i}>{m}</option>
                 ))}
             </select>
             </div>
-            <div className="w-full md:w-auto">
+            <div className="w-[180px]">
             <label className="block text-sm font-medium text-black mb-1">Ano</label>
             <div className="flex gap-1 items-center">
                 <select 
                     value={selectedYear} 
                     onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                    className="border border-gray-300 rounded px-3 py-2 text-sm w-full md:w-32 bg-white text-black"
+                    className="border border-gray-300 rounded px-3 py-2 text-sm w-full bg-white text-black"
                 >
                     {YEARS.map((y) => (
                     <option key={y} value={y}>{y}</option>
@@ -2598,7 +2580,7 @@ export default function Schedule({
             </div>
             </div>
         </div>
-        <div className="flex gap-2 w-full md:w-auto justify-center mt-2">
+        <div className="flex flex-wrap gap-2 w-full justify-start items-center">
            {isSaving && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded animate-pulse no-print h-[38px]">
                     <span className="animate-spin h-3 w-3 border-2 border-indigo-700 border-t-transparent rounded-full"></span>
@@ -2606,7 +2588,7 @@ export default function Schedule({
                 </div>
            )}
            {loading ? (
-               <button disabled className="bg-gray-300 text-gray-500 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm h-[38px] w-full md:w-48 cursor-not-allowed">
+               <button disabled className="bg-gray-300 text-gray-500 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm h-[38px] min-w-[180px] cursor-not-allowed">
                   <span className="animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></span>
                   Carregando...
                </button>
@@ -2639,24 +2621,23 @@ export default function Schedule({
                         title="Copiar modelo desta escala"
                     >
                         <Copy size={16} />
-                        <span className="hidden md:inline">Copiar Modelo</span>
+                        <span>Copiar Modelo</span>
                     </button>
                 )}
                 {isAdmin && selectedUnitId && (
                     <button 
                         onClick={handleClearSchedule}
-                        className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-red-100 transition-colors h-[38px] w-full md:w-56"
+                        className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-red-100 transition-colors h-[38px]"
                         title="Excluir toda a escala deste mês para o setor selecionado"
                     >
                         <Trash2 size={16} />
-                        <span className="hidden md:inline">Excluir Escala do Mês</span>
-                        <span className="md:hidden">Excluir Escala</span>
+                        <span>Excluir Escala do Mês</span>
                     </button>
                 )}
                 {isScheduleReleased ? (
                     <button 
                         onClick={handleUnrelease}
-                        className="group flex items-center justify-center gap-2 text-green-600 font-bold h-[38px] px-4 bg-green-50 border border-green-200 rounded w-full md:w-48 whitespace-nowrap hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                        className="group flex items-center justify-center gap-2 text-green-600 font-bold h-[38px] px-4 bg-green-50 border border-green-200 rounded min-w-[180px] whitespace-nowrap hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
                         title="Clique para cancelar a liberação"
                     >
                         <Check size={18} className="group-hover:hidden" />
@@ -2667,7 +2648,7 @@ export default function Schedule({
                 ) : (
                     <button 
                         onClick={handleRelease}
-                        className="bg-blue-600 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-700 transition-colors h-[38px] w-full md:w-48"
+                        className="bg-blue-600 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-blue-700 transition-colors h-[38px] min-w-[180px]"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                         Liberar Escala
@@ -2698,10 +2679,10 @@ export default function Schedule({
         />
       </div>
 
-      <div className="print:bg-white bg-white">
-      <div className={`overflow-x-visible w-full border-none shadow-none relative schedule-root ${printOnly ? 'print:overflow-visible' : ''}`}>
+      <div className="print:bg-white bg-white w-full">
+      <div className={`overflow-x-auto w-full border-none shadow-none relative schedule-root ${printOnly ? 'print:overflow-visible' : ''}`}>
         {loading ? (
-             <div className="text-center py-4">Carregando...</div>
+             <div className="text-center py-4 text-black">Carregando...</div>
         ) : (
              (() => {
                const rosterForContext = (data.roster || []).filter(r => r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
@@ -2711,20 +2692,18 @@ export default function Schedule({
                  return <div className="text-center py-6 text-sm text-gray-600">Escala em construção</div>
                }
                return (
-                 <>
-                
-
+                 <div className="w-full">
                  {visibleSections.map((section, index) => (
-                    <div key={section.id}>
-                       <table className="w-full table-fixed border-collapse border border-black text-black text-[9px] print:text-[7px]">
+                    <div key={section.id} className="mb-8 last:mb-0 w-full">
+                       <table className="table-fixed border-collapse border border-black text-black text-[10px] print:text-[7px]">
                              <colgroup>
                                 <col className="w-8 print:w-6" />
                                 <col className="w-[180px] print:w-[224px]" />
-                                <col className="w-20 print:w-24" />
-                                <col className="w-20 print:w-24" />
-                                <col className="w-16 print:w-20" />
-                                {!isSetorHidden && <col className="w-20 print:w-24" />}
-                                {daysArray.map(d => <col key={d.day} className="w-4 print:w-5" />)}
+                                <col className="w-24 print:w-24" />
+                                <col className="w-24 print:w-24" />
+                                <col className="w-20 print:w-20" />
+                                {!isSetorHidden && <col className="w-24 print:w-24" />}
+                                {daysArray.map(d => <col key={d.day} className="w-6 print:w-5" />)}
                                 <col className="w-12 print:w-16" />
                              </colgroup>
                              <thead>
@@ -2956,7 +2935,7 @@ export default function Schedule({
                  )}
              </div>
              )}
-             </>
+             </div>
                )
             })()
         )}
@@ -2991,8 +2970,12 @@ export default function Schedule({
                     placeholder="Nome do novo bloco..."
                     autoFocus
                 />
-                <button onClick={saveNewSection} className="text-green-600 hover:text-green-800"><Check /></button>
-                <button onClick={() => setIsAddingSection(false)} className="text-red-600 hover:text-red-800"><X /></button>
+                <button onClick={saveNewSection} className="text-green-600 hover:text-green-800">
+                    <Check size={18} />
+                </button>
+                <button onClick={() => setIsAddingSection(false)} className="text-red-600 hover:text-red-800">
+                    <X size={18} />
+                </button>
             </div>
          ) : (
             <button 
