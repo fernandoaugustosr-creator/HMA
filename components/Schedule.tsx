@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
+import { QRCodeSVG } from 'qrcode.react'
 import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle } from 'lucide-react'
@@ -3119,6 +3120,12 @@ export default function Schedule({
             </div>
         )}
 
+        {/* Electronic Release Signature */}
+        {isScheduleReleased && (
+            <div className="mt-16 text-[11px] font-bold uppercase hidden print:block text-center border-t border-black pt-2 max-w-[400px] mx-auto">
+                LIBERADO ELETRONICAMENTE POR FERNANDO AUGUSTO SILVA RODRIGUES COREN 769194
+            </div>
+        )}
 
       </div>
 
@@ -3662,6 +3669,17 @@ ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
               sections={data.sections}
           />
       )}
+
+      {/* QR Code in the bottom right corner of the print layout */}
+      <div className="hidden print:flex fixed bottom-2 right-2 flex-col items-center gap-0.5 z-[9999] opacity-80">
+          <QRCodeSVG 
+              value={typeof window !== 'undefined' ? `${window.location.origin}/?unit=${selectedUnitId}&month=${selectedMonth + 1}&year=${selectedYear}` : ''} 
+              size={55}
+              level="M"
+              includeMargin={false}
+          />
+          <span className="text-[6px] font-bold text-black uppercase tracking-tighter">Autenticidade</span>
+      </div>
     </div>
   )
 }

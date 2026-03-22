@@ -6,6 +6,7 @@ import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import PublicScheduleList from './PublicScheduleList'
+import { Suspense } from 'react'
 
 const initialState = {
   message: '',
@@ -52,48 +53,45 @@ export default function LandingPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-start sm:justify-center p-4 md:p-8 font-sans print:block print:bg-white print:p-0 overflow-y-auto py-12 sm:py-8">
-      <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-start print:block mb-8">
+    <div className="min-h-screen bg-[#f1f5f9] flex flex-col items-center justify-center p-4 md:p-8 font-sans overflow-y-auto">
+      <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
         
         {/* Left Side: Login Form */}
-        <div className="lg:col-span-5 bg-white p-8 md:p-10 rounded-3xl shadow-2xl shadow-indigo-100 border border-white relative overflow-hidden print:hidden">
-          {/* Decorative background element */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 z-0 opacity-50" />
-          
+        <div className="lg:col-span-5 bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white flex flex-col justify-center">
           <div className="relative z-10">
-            <div className="flex justify-center items-center gap-8 mb-8">
+            <div className="flex justify-center items-center gap-8 mb-10">
               <Image
                 src={logoPrefeitura}
                 alt="Prefeitura de Açailândia"
                 width={160}
                 height={54}
-                className="h-12 w-auto object-contain drop-shadow-sm"
+                className="h-14 w-auto object-contain"
                 priority
               />
-              <div className="h-8 w-px bg-gray-200" />
+              <div className="h-10 w-px bg-gray-200" />
               <Image
                 src={logoHma}
                 alt="HMA"
                 width={160}
                 height={54}
-                className="h-12 w-auto object-contain drop-shadow-sm"
+                className="h-14 w-auto object-contain"
                 priority
               />
             </div>
             
             <div className="text-center mb-10">
-              <h1 className="text-4xl font-black text-gray-900 tracking-tight mb-2">
+              <h1 className="text-5xl font-black text-[#1e293b] tracking-tight mb-4">
                 Acessar Sistema
               </h1>
-              <p className="text-gray-500 font-medium">
+              <p className="text-gray-500 font-medium text-lg">
                 Entre com seu CPF e senha para gerenciar suas escalas
               </p>
             </div>
 
-            <form className="space-y-5" action={formAction}>
-              <div className="space-y-4">
+            <form className="space-y-6" action={formAction}>
+              <div className="space-y-6">
                 <div>
-                  <label htmlFor="cpf" className="block text-sm font-bold text-gray-700 mb-1 ml-1">
+                  <label htmlFor="cpf" className="block text-lg font-bold text-[#1e293b] mb-2 ml-1">
                     CPF
                   </label>
                   <input
@@ -101,12 +99,12 @@ export default function LandingPageContent() {
                     name="cpf"
                     type="text"
                     required
-                    className="appearance-none block w-full px-4 py-3 border border-gray-200 rounded-xl placeholder-gray-400 text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white transition-all duration-200 text-base"
-                    placeholder="000.000.000-00"
+                    className="appearance-none block w-full px-5 py-4 border-none rounded-2xl text-[#1e293b] bg-[#eef2ff] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200 text-lg font-medium"
+                    placeholder="02170025367"
                   />
                 </div>
                 <div>
-                  <label htmlFor="password" title="password" className="block text-sm font-bold text-gray-700 mb-1 ml-1">
+                  <label htmlFor="password" title="password" className="block text-lg font-bold text-[#1e293b] mb-2 ml-1">
                     Senha
                   </label>
                   <input
@@ -114,21 +112,21 @@ export default function LandingPageContent() {
                     name="password"
                     type="password"
                     required
-                    className="appearance-none block w-full px-4 py-3 border border-gray-200 rounded-xl placeholder-gray-400 text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white transition-all duration-200 text-base"
+                    className="appearance-none block w-full px-5 py-4 border-none rounded-2xl text-[#1e293b] bg-[#eef2ff] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200 text-lg"
                     placeholder="••••••"
                   />
                 </div>
               </div>
 
               {state?.message && (
-                <div className="bg-red-50 text-red-600 text-sm font-bold p-3 rounded-xl text-center border border-red-100 animate-pulse">
+                <div className="bg-red-50 text-red-600 text-sm font-bold p-4 rounded-2xl text-center border border-red-100 animate-pulse">
                   {state.message}
                 </div>
               )}
 
               <button
                 type="submit"
-                className="w-full flex justify-center py-4 px-4 border border-transparent text-lg font-black rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform active:scale-[0.98]"
+                className="w-full flex justify-center py-5 px-4 border border-transparent text-xl font-black rounded-2xl text-white bg-[#4f46e5] hover:bg-[#4338ca] shadow-lg shadow-indigo-200 transition-all duration-200 transform active:scale-[0.98] mt-4"
               >
                 Entrar
               </button>
@@ -137,22 +135,24 @@ export default function LandingPageContent() {
         </div>
 
         {/* Right Side: Public Schedule List */}
-        <div className="lg:col-span-7 space-y-6 print:block print:w-full print:m-0 print:p-0">
-          <div className="bg-white/60 backdrop-blur-sm p-6 md:p-8 rounded-3xl border border-white shadow-sm h-auto min-h-[400px] print:bg-white print:p-0 print:border-none print:shadow-none print:m-0">
-            <div className="flex items-center justify-between mb-6 print:hidden">
+        <div className="lg:col-span-7 flex flex-col">
+          <div className="bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white h-full">
+            <div className="flex items-center justify-between mb-8">
                 <div>
-                    <h2 className="text-2xl font-black text-gray-900 tracking-tight">Escalas Publicadas</h2>
-                    <p className="text-gray-500 font-medium text-sm">Consulte e baixe as escalas sem necessidade de login</p>
+                    <h2 className="text-3xl font-black text-[#1e293b] tracking-tight">Escalas Publicadas</h2>
+                    <p className="text-gray-500 font-medium text-lg mt-1">Consulte e baixe as escalas sem necessidade de login</p>
                 </div>
             </div>
             
-            <PublicScheduleList />
+            <Suspense fallback={<div className="text-center py-12">Carregando escalas...</div>}>
+              <PublicScheduleList />
+            </Suspense>
           </div>
         </div>
 
       </div>
       
-      <div className="mt-12 text-center text-gray-400 text-xs font-bold uppercase tracking-widest print:hidden">
+      <div className="mt-12 text-center text-gray-400 text-sm font-bold uppercase tracking-widest print:hidden">
         © {new Date().getFullYear()} Hospital Municipal de Açailândia • Gestão de Enfermagem
       </div>
     </div>

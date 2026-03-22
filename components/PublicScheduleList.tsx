@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { getReleasedSchedules } from '@/app/actions'
 import Schedule from '@/components/Schedule'
 import { FileText, Download, Calendar } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 
 const MONTHS = [
@@ -12,6 +13,7 @@ const MONTHS = [
 ]
 
 export default function PublicScheduleList() {
+  const searchParams = useSearchParams()
   const [releases, setReleases] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedRelease, setSelectedRelease] = useState<any | null>(null)
@@ -26,6 +28,30 @@ export default function PublicScheduleList() {
         setReleases(data)
 
         if (data.length > 0) {
+            // Check for query params first
+            const qUnitId = searchParams.get('unit')
+            const qMonth = searchParams.get('month')
+            const qYear = searchParams.get('year')
+
+            if (qUnitId && qMonth && qYear) {
+                const monthNum = parseInt(qMonth)
+                const yearNum = parseInt(qYear)
+                setSelectedMonthYear(`${yearNum}-${monthNum}`)
+                
+                const targetRelease = data.find(r => 
+                    r.unit_id === qUnitId && 
+                    r.month === monthNum && 
+                    r.year === yearNum
+                )
+                
+                if (targetRelease) {
+                    // Automatically trigger print/view
+                    setSelectedRelease(targetRelease)
+                    setIsPrinting(true)
+                    return // Stop here
+                }
+            }
+
             const now = new Date()
             let targetYear = now.getFullYear()
             let targetMonth = now.getMonth() + 1
@@ -61,7 +87,7 @@ export default function PublicScheduleList() {
       }
     }
     load()
-  }, [])
+  }, [searchParams])
 
   const monthYearOptions = React.useMemo(() => {
       const options = new Set<string>()
@@ -131,22 +157,22 @@ export default function PublicScheduleList() {
   return (
     <div className="w-full">
       <div className="print:hidden">
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
                 {selectedMonthYear && (
-                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wide">
+                  <span className="bg-[#e0e7ff] text-[#4338ca] px-5 py-2 rounded-full text-sm font-black uppercase tracking-widest shadow-sm">
                     {MONTHS[currentMonth - 1]} {currentYear}
                   </span>
                 )}
             </div>
             
             {!loading && releases.length > 0 && (
-                <div className="bg-white p-1.5 rounded-lg border border-gray-200 shadow-sm flex items-center gap-2">
-                    <Calendar className="text-blue-600" size={16} />
+                <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-3 px-4">
+                    <Calendar className="text-blue-600" size={20} />
                     <select 
                         value={selectedMonthYear}
                         onChange={(e) => setSelectedMonthYear(e.target.value)}
-                        className="bg-transparent font-bold text-xs text-gray-700 outline-none cursor-pointer min-w-[150px]"
+                        className="bg-transparent font-bold text-base text-gray-700 outline-none cursor-pointer min-w-[160px] py-1"
                     >
                         {monthYearOptions.map(opt => {
                             const [y, m] = opt.split('-').map(Number)
@@ -163,28 +189,28 @@ export default function PublicScheduleList() {
         
         {loading ? (
             <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-500 text-sm">Carregando escalas...</p>
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p className="text-gray-500 text-base font-medium">Carregando escalas...</p>
             </div>
         ) : releases.length === 0 ? (
-            <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                <FileText size={32} className="mx-auto mb-4 text-gray-300" />
-                <p className="text-sm">Nenhuma escala liberada encontrada.</p>
+            <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-[2rem] border border-dashed border-gray-200">
+                <FileText size={48} className="mx-auto mb-4 text-gray-200" />
+                <p className="text-lg font-medium">Nenhuma escala liberada encontrada.</p>
             </div>
         ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
                 {filteredReleases.map(release => (
                   <div 
                     key={release.id}
-                    className={`bg-white p-3 rounded-xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 group border-l-4 relative overflow-hidden ${selectedRelease?.id === release.id ? 'border-blue-300 border-l-blue-600 ring-2 ring-blue-100' : 'border-gray-200 border-l-blue-500'}`}
+                    className={`bg-white p-5 rounded-2xl border-2 shadow-sm hover:shadow-lg hover:shadow-indigo-50 transition-all flex items-center justify-between gap-4 group ${selectedRelease?.id === release.id ? 'border-indigo-300 ring-4 ring-indigo-50' : 'border-gray-100 hover:border-indigo-100'}`}
                   >
-                    <div className="flex items-center gap-3 relative z-10">
-                      <div className="p-2 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors text-blue-600">
-                        <FileText size={20} />
+                    <div className="flex items-center gap-5">
+                      <div className="p-4 bg-[#eff6ff] rounded-2xl group-hover:bg-[#dbeafe] transition-colors text-[#3b82f6] shadow-inner">
+                        <FileText size={28} />
                       </div>
                       <div>
-                        <h3 className="font-bold text-sm text-gray-900">{release.unit_name}</h3>
-                        <p className="text-gray-500 text-[10px]">
+                        <h3 className="font-black text-xl text-[#1e293b] group-hover:text-indigo-900 transition-colors uppercase tracking-tight">{release.unit_name}</h3>
+                        <p className="text-gray-400 text-sm font-medium mt-1">
                           Liberado em: {release.released_at ? new Date(release.released_at).toLocaleDateString('pt-BR') : '-'}
                         </p>
                       </div>
@@ -193,23 +219,25 @@ export default function PublicScheduleList() {
                       type="button"
                       onClick={() => handlePrint(release)}
                       disabled={isPrinting}
-                      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-white text-[10px] font-semibold transition-colors ${
-                        isPrinting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                      className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm font-black transition-all transform active:scale-95 shadow-md ${
+                        isPrinting && selectedRelease?.id === release.id 
+                        ? 'bg-gray-400 cursor-not-allowed' 
+                        : 'bg-[#3b82f6] hover:bg-[#2563eb] shadow-blue-100'
                       }`}
                     >
                       {isPrinting && selectedRelease?.id === release.id ? (
-                          <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></span>
+                          <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
                       ) : (
-                          <Download size={12} />
+                          <Download size={18} />
                       )}
-                      <span>{isPrinting && selectedRelease?.id === release.id ? 'Gerando...' : 'Baixar'}</span>
+                      <span>{isPrinting && selectedRelease?.id === release.id ? 'GERANDO...' : 'BAIXAR'}</span>
                     </button>
                   </div>
                 ))}
                 
                 {filteredReleases.length === 0 && (
-                    <div className="text-center py-8 text-gray-400">
-                        <p className="text-sm">Nenhuma escala para este mês.</p>
+                    <div className="text-center py-12 text-gray-400">
+                        <p className="text-lg font-medium">Nenhuma escala para este mês.</p>
                     </div>
                 )}
             </div>
