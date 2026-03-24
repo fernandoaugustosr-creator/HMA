@@ -1377,7 +1377,7 @@ export default function Schedule({
     }
   }
 
-  const handleCellClick = (nurse: Nurse, dateStr: string, explicitRosterId?: string) => {
+  const handleCellClick = (nurse: Nurse, dateStr: string, explicitRosterId?: string, initialType?: 'day' | 'night' | 'morning' | 'afternoon' | 'DELETE') => {
     if (isScheduleReleased) return
     // Robust rosterId resolution
     // Priority: Explicit ID (from clicked row) > Nurse Property > Fallback Search
@@ -1400,11 +1400,10 @@ export default function Schedule({
         nurseName: nurse.name,
         date: dateStr
     })
-    setShiftType('day')
-    // AUTOMATION: Default to 'daily' for better UX (as requested by user)
-    // Restore last recurrence preference if exists, otherwise use 'daily'
-    const savedRecurrence = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_recurrence') as any || 'daily') : 'daily'
-    setRecurrence(savedRecurrence)
+    setShiftType(initialType || 'day')
+    // VOLTAR PARA 'none' (Manual) POR PADRÃO PARA EVITAR APAGAR O MÊS ACIDENTALMENTE
+    // O usuário relatou inconstância e perda de dados, provavelmente por aplicar padrões sem querer
+    setRecurrence('none')
     const savedCustomDays = typeof window !== 'undefined' ? (localStorage.getItem('enf_hma_last_custom_days') || '') : ''
     setCustomRecurrenceDays(savedCustomDays)
     setDeleteWholeMonth(false)
@@ -1536,18 +1535,15 @@ export default function Schedule({
         setData(prev => {
             const newShifts = [...prev.shifts]
             
-            // Filter out existing shifts for this context to avoid duplicates
+            // Filter out ONLY the dates that are being updated in this batch
+            const datesToUpdate = new Set(shiftsToSave.map(s => s.date))
+            
             const filteredShifts = newShifts.filter(s => {
-                const dateParts = s.shift_date.split('-')
-                if (dateParts.length !== 3) return true
-                const year = parseInt(dateParts[0])
-                const month = parseInt(dateParts[1])
-                
                 const isTargetProfessional = s.nurse_id === shiftModalData.nurseId &&
                                            (shiftModalData.rosterId ? s.roster_id === shiftModalData.rosterId : !s.roster_id)
-                const isTargetMonth = month === (selectedMonth + 1) && year === selectedYear
+                const isTargetDate = datesToUpdate.has(s.shift_date)
                 
-                return !(isTargetProfessional && isTargetMonth)
+                return !(isTargetProfessional && isTargetDate)
             })
 
             // Add new shifts from shiftsToSave
@@ -2322,34 +2318,33 @@ export default function Schedule({
                     onKeyDown={isAdmin && !isScheduleReleased ? async (e) => {
                       const k = e.key.toLowerCase()
                       if (isSpecialLeave) return
-                      if (['d','n','m','t','delete','backspace','arrowright','arrowleft'].includes(k)) {
-                        e.preventDefault()
-                      }
+                      
+                      // MANTER NAVEGAÇÃO POR SETAS
                       if (k === 'arrowright' || k === 'arrowleft') {
+                        e.preventDefault()
                         const delta = k === 'arrowright' ? 1 : -1
                         const targetDay = day + delta
-                        if (targetDay >= 1) {
+                        const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+                        if (targetDay >= 1 && targetDay <= lastDayOfMonth) {
                           const targetDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`
                           const el = document.getElementById(`cell-${nurse.unique_key}-${targetDate}`)
                           el?.focus()
                         }
                         return
                       }
-                      let type: 'day' | 'night' | 'morning' | 'afternoon' | 'DELETE' | null = null
-                      if (k === 'd') type = 'day'
-                      else if (k === 'n') type = 'night'
-                      else if (k === 'm') type = 'morning'
-                      else if (k === 't') type = 'afternoon'
-                      else if (k === 'delete' || k === 'backspace') type = 'DELETE'
-                      if (!type) return
-                      
-                      // USE OPTIMISTIC SAVE FOR INSTANT FEEDBACK
-                      optimisticSaveShifts([{
-                        nurseId: nurse.id,
-                        rosterId: nurse.unique_key,
-                        date: dateStr,
-                        type
-                      } as any])
+
+                      // PARA QUALQUER OUTRA TECLA DE ATALHO (D, N, M, T, DELETE), ABRIR O MODAL
+                      // O usuário quer que o preenchimento automático/modal seja a única forma
+                      if (['d','n','m','t','delete','backspace'].includes(k)) {
+                        e.preventDefault()
+                        let type: 'day' | 'night' | 'morning' | 'afternoon' | 'DELETE' | undefined = undefined
+                        if (k === 'd') type = 'day'
+                        else if (k === 'n') type = 'night'
+                        else if (k === 'm') type = 'morning'
+                        else if (k === 't') type = 'afternoon'
+                        else if (k === 'delete' || k === 'backspace') type = 'DELETE'
+                        handleCellClick(nurse, dateStr, nurse.unique_key, type)
+                      }
                     } : undefined}
                     title={isAdmin ? "Clique para gerenciar plantão" : undefined}
                   >
