@@ -372,6 +372,7 @@ export default function Schedule({
   }
 
   const handleDynamicFieldChange = async (field: 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+      if (isScheduleReleased) return
       setDynamicField(field)
       setLoading(true)
       const res = await updateScheduleDynamicField(selectedMonth + 1, selectedYear, selectedUnitId, field)
@@ -389,6 +390,7 @@ export default function Schedule({
   }
 
   const handleToggleSetorVisibility = async (isHidden: boolean) => {
+      if (isScheduleReleased) return
       setIsSetorHidden(isHidden)
       setLoading(true)
       const res = await updateScheduleSetorVisibility(selectedMonth + 1, selectedYear, selectedUnitId, isHidden)
@@ -406,6 +408,7 @@ export default function Schedule({
   }
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isScheduleReleased) return
     if (e.target.files && e.target.files[0]) {
       const formData = new FormData()
       formData.append('file', e.target.files[0])
@@ -419,6 +422,7 @@ export default function Schedule({
   }
 
   const handleCityLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isScheduleReleased) return
     if (e.target.files && e.target.files[0]) {
       const formData = new FormData()
       formData.append('file', e.target.files[0])
@@ -609,6 +613,7 @@ export default function Schedule({
   }, [data.units])
   
   const handleSaveHeader = () => {
+    if (isScheduleReleased) return
     if (typeof window !== 'undefined') {
       localStorage.setItem('enf_hma_header_line_1', headerLine1)
       localStorage.setItem('enf_hma_header_line_2', headerLine2)
@@ -619,6 +624,7 @@ export default function Schedule({
   }
   
   const handleSaveUnitNumber = async () => {
+    if (isScheduleReleased) return
     if (!selectedUnitId) return
     const res = await saveUnitNumber(selectedUnitId, unitNumber || '')
     if (!res.success) {
@@ -692,6 +698,7 @@ export default function Schedule({
   }
 
   const saveNewUnit = async () => {
+    if (isScheduleReleased) return
     if (!newUnitTitle.trim()) return
     setLoading(true)
     try {
@@ -725,6 +732,7 @@ export default function Schedule({
   }
 
   const saveUnitTitle = async () => {
+      if (isScheduleReleased) return
       if (!selectedUnitId || !editingUnitTitle.trim()) return
       setLoading(true)
       try {
@@ -745,6 +753,7 @@ export default function Schedule({
   }
 
   const handleClearAllUnitRosters = async () => {
+    if (isScheduleReleased) return
     if (!selectedUnitId) return
     const unitName = data.units.find(u => u.id === selectedUnitId)?.title
     if (!confirm(`ATENÇÃO: Deseja EXCLUIR TODO O HISTÓRICO DE ESCALAS do setor "${unitName}"?\n\nIsso apagará TODAS as escalas (passadas, presentes e futuras) deste setor.\n\nO setor em si NÃO será excluído.`)) return
@@ -769,13 +778,14 @@ export default function Schedule({
   }
 
   const handleDeleteUnit = async () => {
+      if (isScheduleReleased) return
       if (!selectedUnitId) return
       const unitName = data.units.find(u => u.id === selectedUnitId)?.title
       if (!confirm(`ATENÇÃO CRÍTICA: Deseja EXCLUIR O SETOR "${unitName}"?\n\nIsso apagará o setor E TODO O SEU HISTÓRICO de escalas e plantões.\n\nEsta ação é IRREVERSÍVEL.`)) return
       
-      const confirmName = prompt(`Para confirmar a exclusão do setor, digite o nome do setor: ${unitName}`)
-      if (confirmName !== unitName) {
-          alert('Nome incorreto. Ação cancelada.')
+      const confirmName = prompt(`Para confirmar a exclusão do setor, digite EXCLUIR ou o nome do setor (${unitName}):`)
+      if (!confirmName || (confirmName.toUpperCase().trim() !== 'EXCLUIR' && confirmName.toUpperCase().trim() !== (unitName || '').toUpperCase().trim())) {
+          alert('Confirmação incorreta. Ação cancelada.')
           return
       }
 
@@ -889,6 +899,7 @@ export default function Schedule({
   }
 
   const handleClearSchedule = async () => {
+    if (isScheduleReleased) return
     if (!selectedUnitId) return alert('Selecione um setor para excluir a escala')
     if (!confirm('Tem certeza que deseja EXCLUIR TODA a escala deste mês para este setor? Esta ação removerá todos os profissionais e plantões deste mês e não poderá ser desfeita.')) return
     
@@ -905,6 +916,7 @@ export default function Schedule({
   }
 
   const handleClearAllDatabase = async () => {
+    if (isScheduleReleased) return
     if (!confirm('ATENÇÃO: Você está prestes a EXCLUIR TODOS OS DADOS de todas as escalas (todos os meses e setores) do banco de dados.')) return
     if (!confirm('TEM CERTEZA ABSOLUTA? Esta ação é irreversível e apagará tudo.')) return
     const code = prompt('Para confirmar a exclusão TOTAL, digite "DELETAR TUDO":')
@@ -926,6 +938,7 @@ export default function Schedule({
   }
 
   async function handleRemoveFromRoster(rosterId: string) {
+    if (isScheduleReleased) return
     if (!confirm('Tem certeza que deseja remover este servidor desta escala mensal?')) return
     setLoading(true)
     const res = await removeRosterEntry(rosterId)
@@ -935,6 +948,7 @@ export default function Schedule({
   }
 
   const handleReassign = (rosterId: string, newId: string) => {
+    if (isScheduleReleased) return
     const rosterItem = data.roster.find(r => r.id === rosterId)
     if (!rosterItem) {
         alert('Erro: Servidor não encontrado na escala.')
@@ -953,6 +967,7 @@ export default function Schedule({
   }
 
   const handleUpdateObservation = async (rosterId: string, observation: string) => {
+    if (isScheduleReleased) return
     // Optimistic update locally
     setData(prev => ({
         ...prev,
@@ -974,6 +989,7 @@ export default function Schedule({
   }
 
   const handleUpdateSector = async (rosterId: string, sector: string) => {
+    if (isScheduleReleased) return
     // Optimistic update locally
     setData(prev => ({
         ...prev,
@@ -995,6 +1011,7 @@ export default function Schedule({
   }
 
   const handleUpdateOrder = async (rosterId: string, listOrder: number | null) => {
+    if (isScheduleReleased) return
     setData(prev => ({
       ...prev,
       roster: prev.roster.map(r =>
@@ -1050,6 +1067,7 @@ export default function Schedule({
   }
 
   const saveSectionTitle = async () => {
+    if (isScheduleReleased) return
     if (!editingSectionId) return
     setLoading(true)
     await updateSection(editingSectionId, editingSectionTitle)
@@ -1064,6 +1082,7 @@ export default function Schedule({
   }
 
   const saveSectorTitle = async () => {
+    if (isScheduleReleased) return
     if (!editingSectorTitleId) return
     
     // Optimistic local update for instant UI feedback
@@ -1099,6 +1118,7 @@ export default function Schedule({
   }
 
   const saveFooterText = async () => {
+      if (isScheduleReleased) return
       // Optimistic Update
       const newText = tempFooterText
       setFooterText(newText)
@@ -1119,6 +1139,7 @@ export default function Schedule({
   }
 
   const handleAddHiddenSectionToRoster = () => {
+    if (isScheduleReleased) return
     if (!selectedHiddenSectionId) return
     setManuallyAddedSections(prev => prev.includes(selectedHiddenSectionId) ? prev : [...prev, selectedHiddenSectionId])
   }
@@ -1132,6 +1153,7 @@ export default function Schedule({
   }
 
   const saveRenameHiddenSection = async () => {
+    if (isScheduleReleased) return
     if (!selectedHiddenSectionId || !renameHiddenSectionTitle.trim()) {
       setIsRenamingHiddenSection(false)
       return
@@ -1153,23 +1175,27 @@ export default function Schedule({
   }
 
   const handleAssignNurse = async (nurseId: string, sectionId: string) => {
+    if (isScheduleReleased) return
     if (!nurseId) return
     setDoubleShiftModal({ isOpen: true, nurseId, sectionId })
   }
 
   const handleInsertProfessional = (sectionId: string, index: number, direction: 'above' | 'below', currentOrderedIds: string[]) => {
+    if (isScheduleReleased) return
     const position = direction === 'above' ? index : index + 1
     setInsertionData({ sectionId, position, orderedIds: currentOrderedIds })
     setIsNurseModalOpen(true)
   }
 
   const handleCreateNewAndInsert = (sectionId: string, index: number, direction: 'above' | 'below', currentOrderedIds: string[]) => {
+    if (isScheduleReleased) return
     const position = direction === 'above' ? index : index + 1
     setInsertionData({ sectionId, position, orderedIds: currentOrderedIds })
     setIsCreationModalOpen(true)
   }
 
   const onNurseCreated = async (rosterId?: string) => {
+    if (isScheduleReleased) return
     if (!insertionData) return
     setIsCreationModalOpen(false)
     
@@ -1352,6 +1378,7 @@ export default function Schedule({
   }
 
   const handleCellClick = (nurse: Nurse, dateStr: string, explicitRosterId?: string) => {
+    if (isScheduleReleased) return
     // Robust rosterId resolution
     // Priority: Explicit ID (from clicked row) > Nurse Property > Fallback Search
     let rosterId = explicitRosterId || (nurse.is_rostered ? nurse.unique_key : undefined)
@@ -1385,6 +1412,7 @@ export default function Schedule({
   }
 
   const handleSaveShifts = async (overrideType?: string, overrideRecurrence?: string) => {
+    if (isScheduleReleased) return
     if (!shiftModalData) return
     
     const targetType = overrideType || shiftType
@@ -1565,6 +1593,7 @@ export default function Schedule({
   }
 
   const handleSaveAll = async () => {
+    if (isScheduleReleased) return
     // 1. First, check if there's anything to save
     const currentMonthShifts = data.shifts.filter(s => {
         const dateParts = s.shift_date.split('-')
@@ -1973,9 +2002,9 @@ export default function Schedule({
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
                 className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-6 ${isAdmin ? '' : ''}`}
-                title={isAdmin ? 'Edite para reiniciar numeração a partir daqui' : undefined}
+                title={isAdmin && !isScheduleReleased ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
-                {isAdmin ? (
+                {isAdmin && !isScheduleReleased ? (
                   <input
                     type="number"
                     defaultValue={rowNumber}
@@ -2027,7 +2056,7 @@ export default function Schedule({
               </td>
               <td className="border border-black px-1 py-0.5 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[120px] border-r-2 border-r-black text-center">
                 <div className="flex items-center justify-center gap-1">
-                  {isAdmin && (
+                  {isAdmin && !isScheduleReleased && (
                     <div className="flex flex-col gap-1 mr-2 no-print opacity-0 group-hover:opacity-100 transition-opacity">
                        <button 
                            onClick={() => handleInsertProfessional(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
@@ -2045,7 +2074,7 @@ export default function Schedule({
                        </button>
                     </div>
                   )}
-                  {isAdmin && (
+                  {isAdmin && !isScheduleReleased && (
                   <button 
                     onClick={() => handleRemoveFromRoster(nurse.unique_key || '')} 
                     className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors no-print"
@@ -2054,7 +2083,7 @@ export default function Schedule({
                     <Trash2 size={12} />
                   </button>
                   )}
-                  {isAdmin ? (
+                  {isAdmin && !isScheduleReleased ? (
                     <select 
                       value={nurse.id} 
                       onChange={(e) => handleReassign(nurse.unique_key || '', e.target.value)}
@@ -2115,7 +2144,7 @@ export default function Schedule({
                       })}
                     </select>
                   ) : null}
-                  <div className={`${isAdmin ? 'hidden print:block' : 'block'} text-center w-full`}>
+                  <div className={`${isAdmin && !isScheduleReleased ? 'hidden print:block' : 'block'} text-center w-full`}>
                   {(() => {
                      const obs = (nurse.observation || '').toUpperCase().trim()
                      const vinculo = (nurse.vinculo || '').toUpperCase().trim()
@@ -2154,7 +2183,7 @@ export default function Schedule({
                 {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
               <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">
-                {isAdmin && dynamicField === 'coren' ? (
+                {isAdmin && !isScheduleReleased && dynamicField === 'coren' ? (
                   <select
                     value={nurse.coren || ''}
                     onChange={async (e) => {
@@ -2208,7 +2237,7 @@ export default function Schedule({
                       initialValue={nurse.sector}
                       onSave={(val) => handleUpdateSector(nurse.unique_key || nurse.id, val)}
                       onCopyDown={(val) => handleCopySectorDown(index, val)}
-                      isAdmin={isAdmin}
+                      isAdmin={isAdmin && !isScheduleReleased}
                   />
               </td>
               )}
@@ -2286,11 +2315,11 @@ export default function Schedule({
                 return (
                   <td 
                     key={day} 
-                    className={`${cellClass} ${isAdmin ? 'cursor-pointer hover:bg-yellow-100 hover:scale-110 hover:shadow-lg hover:z-50 transition-all duration-200' : ''}`}
-                    onClick={isAdmin ? () => handleCellClick(nurse, dateStr, nurse.unique_key) : undefined}
+                    className={`${cellClass} ${isAdmin && !isScheduleReleased ? 'cursor-pointer hover:bg-yellow-100 hover:scale-110 hover:shadow-lg hover:z-50 transition-all duration-200' : ''}`}
+                    onClick={isAdmin && !isScheduleReleased ? () => handleCellClick(nurse, dateStr, nurse.unique_key) : undefined}
                     id={`cell-${nurse.unique_key}-${dateStr}`}
-                    tabIndex={isAdmin ? 0 : -1}
-                    onKeyDown={isAdmin ? async (e) => {
+                    tabIndex={isAdmin && !isScheduleReleased ? 0 : -1}
+                    onKeyDown={isAdmin && !isScheduleReleased ? async (e) => {
                       const k = e.key.toLowerCase()
                       if (isSpecialLeave) return
                       if (['d','n','m','t','delete','backspace','arrowright','arrowleft'].includes(k)) {
@@ -2333,7 +2362,7 @@ export default function Schedule({
           )
         })}
         {/* Add Professional Row Placeholder */}
-        {isAdmin && (
+        {isAdmin && !isScheduleReleased && (
         <tr className="no-print bg-white">
           <td className="border border-black px-1 py-1 sticky left-0 bg-yellow-400 z-10"></td>
           <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black w-[180px]">
@@ -2362,16 +2391,17 @@ export default function Schedule({
   
   const isScheduleReleased = useMemo(() => {
       if (!data.releases) return false
-      return data.releases.some(r => r.month === selectedMonth + 1 && r.year === selectedYear && r.unit_id === selectedUnitId && r.is_released)
+      return data.releases.some(r => r.month === selectedMonth + 1 && r.year === selectedYear && String(r.unit_id) === String(selectedUnitId) && r.is_released)
   }, [data.releases, selectedMonth, selectedYear, selectedUnitId])
 
   // Sync Footer Text
   useEffect(() => {
-      const metadata = data.releases?.find(r => r.month === selectedMonth + 1 && r.year === selectedYear && (selectedUnitId ? r.unit_id === selectedUnitId : !r.unit_id))
+      const metadata = data.releases?.find(r => r.month === selectedMonth + 1 && r.year === selectedYear && (selectedUnitId ? String(r.unit_id) === String(selectedUnitId) : !r.unit_id))
       setFooterText(metadata?.footer_text || '')
   }, [data.releases, selectedMonth, selectedYear, selectedUnitId])
 
   const handleCopySchedule = async () => {
+    if (isScheduleReleased) return
     if (loading) return
     if (!confirm(`Deseja copiar a escala atual (${MONTHS[selectedMonth]}/${selectedYear}) para ${MONTHS[copyTargetMonth]}/${copyTargetYear}?`)) return
     
@@ -2438,7 +2468,7 @@ export default function Schedule({
           <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded print:w-24 print:h-24 print:text-[48px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-0">
             {(unitNumber || headerPage) || '1'}
           </div>
-          {isAdmin && !printOnly && (
+          {isAdmin && !printOnly && !isScheduleReleased && (
             !isEditingHeader ? (
               <button onClick={() => setIsEditingHeader(true)} className="px-3 py-2 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
                 Editar cabeçalho
@@ -2496,11 +2526,17 @@ export default function Schedule({
                           if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb
                           return a.title.localeCompare(b.title)
                         }).map(unit => {
-                          const isReleased = data.releases?.some(r => r.unit_id === unit.id && r.month === selectedMonth + 1 && r.year === selectedYear && r.is_released)
+                          const isReleased = data.releases?.some(r => String(r.unit_id) === String(unit.id) && r.month === selectedMonth + 1 && r.year === selectedYear && r.is_released)
+                          const isLaunched = data.roster?.some(r => String(r.unit_id) === String(unit.id) && r.month === selectedMonth + 1 && r.year === selectedYear)
                           const num = unitNumbersMap[unit.id]
+                          
+                          let status = ''
+                          if (isReleased) status = ' ✅ (LIBERADA)'
+                          else if (isLaunched) status = ' ✅ (LANÇADA)'
+
                           return (
                             <option key={unit.id} value={unit.id}>
-                                {num ? `${num} - ${unit.title}` : unit.title} {isReleased ? '(Laçada)' : ''}
+                                {num ? `${num} - ${unit.title}` : unit.title}{status}
                             </option>
                           )
                         })}
@@ -2511,7 +2547,7 @@ export default function Schedule({
                         </>
                         )}
                     </select>
-                    {selectedUnitId && selectedUnitId !== 'new_unit_action' && isAdmin && (
+                    {selectedUnitId && selectedUnitId !== 'new_unit_action' && isAdmin && !isScheduleReleased && (
                         <div className="flex items-center">
                             <button 
                                 onClick={startEditingUnit}
@@ -2573,7 +2609,7 @@ export default function Schedule({
             </div>
         </div>
         <div className="flex flex-wrap gap-2 w-full justify-start items-center">
-           {isAdmin && isSetorHidden && (
+           {isAdmin && isSetorHidden && !isScheduleReleased && (
                 <button 
                     onClick={() => handleToggleSetorVisibility(false)}
                     className="px-2 py-2 bg-gray-600 text-white rounded text-[10px] hover:bg-gray-700 flex items-center gap-1 no-print h-[38px] whitespace-nowrap"
@@ -2582,7 +2618,7 @@ export default function Schedule({
                     <Plus size={14} /> EXIBIR SETOR
                 </button>
             )}
-            {isAdmin && (
+            {isAdmin && !isScheduleReleased && (
                 <button 
                     onClick={() => setIsUnitManagerOpen(true)}
                     className="px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded text-[10px] hover:bg-gray-50 flex items-center gap-1 no-print h-[38px] whitespace-nowrap font-bold uppercase"
@@ -2609,7 +2645,7 @@ export default function Schedule({
                 </div>
              ) : (
                 <>
-                {isAdmin && (
+                {isAdmin && !isScheduleReleased && (
                     <button 
                         onClick={handleSaveAll}
                         className="bg-indigo-600 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-indigo-700 transition-colors h-[38px] font-bold"
@@ -2620,7 +2656,7 @@ export default function Schedule({
                         SALVAR TUDO
                     </button>
                 )}
-                {isAdmin && (
+                {isAdmin && !isScheduleReleased && (
                     <button 
                         onClick={() => {
                             setCopyTargetMonth(selectedMonth === 11 ? 0 : selectedMonth + 1)
@@ -2634,7 +2670,7 @@ export default function Schedule({
                         <span>Copiar Modelo</span>
                     </button>
                 )}
-                {isAdmin && selectedUnitId && (
+                {isAdmin && selectedUnitId && !isScheduleReleased && (
                     <button 
                         onClick={handleClearSchedule}
                         className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-red-100 transition-colors h-[38px]"
@@ -2695,7 +2731,7 @@ export default function Schedule({
              <div className="text-center py-4 text-black">Carregando...</div>
         ) : (
              (() => {
-               const rosterForContext = (data.roster || []).filter(r => r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
+               const rosterForContext = (data.roster || []).filter(r => r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || String(r.unit_id) === String(selectedUnitId)))
                const baseLaunched = rosterForContext.length > 0
                const isLaunched = baseLaunched
                if (!isLaunched && !isAdmin && !printOnly) {
@@ -2733,6 +2769,7 @@ export default function Schedule({
                                             <button 
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
+                                                    if (isScheduleReleased) return;
                                                     const ok = confirm(`AVISO: Isso irá remover TODOS os profissionais e plantões do grupo "${section.title}" desta escala de ${MONTHS[selectedMonth]}/${selectedYear}. Deseja continuar?`);
                                                     if (!ok) return;
                                                     setLoading(true);
@@ -2759,7 +2796,7 @@ export default function Schedule({
                                       className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#85b1e2] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] print:w-6"
                                       rowSpan={2}
                                   onClick={async () => {
-                                    if (!isAdmin) return
+                                    if (!isAdmin || isScheduleReleased) return
                                     const ok = confirm('Deseja reiniciar toda a numeração deste grupo começando em 1? A ordem visual de TODOS os profissionais deste grupo (mesmo os ocultos por filtro) será preservada.')
                                     if (!ok) return
                                     setLoading(true)
@@ -2880,7 +2917,7 @@ export default function Schedule({
                  </div>
              ))}
              
-             {isAdmin && (
+             {isAdmin && !isScheduleReleased && (
              <div className="mb-8 p-4 border border-dashed border-gray-400 rounded bg-gray-50 text-center no-print">
                 <p className="text-sm text-gray-600 mb-2">Adicionar grupo à escala deste setor:</p>
                 <select 
@@ -2969,7 +3006,7 @@ export default function Schedule({
       />
 
       {/* Footer / Actions */}
-      {isAdmin && (
+      {isAdmin && !isScheduleReleased && (
       <div className="mt-4 flex justify-end gap-2 no-print">
          {isAddingSection ? (
             <div className="flex items-center gap-2">
@@ -3001,7 +3038,7 @@ export default function Schedule({
 
       {/* Footer Legends */}
       <div className="mt-0 space-y-2 print:mt-0 bg-white print-footer-legend">
-        {isAdmin && (
+        {isAdmin && !isScheduleReleased && (
         <div className="flex flex-col items-end gap-2 mb-2 no-print">
             <div className="flex flex-wrap gap-2 justify-end">
                 <button 
@@ -3724,15 +3761,15 @@ ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
                                     <button 
                                         onClick={async () => {
                                             if (confirm(`DESEJA EXCLUIR O SETOR "${unit.title}"?\n\nIsso apagará o setor E TODO O SEU HISTÓRICO de escalas e plantões.\n\nEsta ação é IRREVERSÍVEL.`)) {
-                                                const confirmName = prompt(`Para confirmar a exclusão, digite o nome do setor: ${unit.title}`)
-                                                if (confirmName === unit.title) {
+                                                const confirmName = prompt(`Para confirmar a exclusão, digite EXCLUIR ou o nome do setor (${unit.title}):`)
+                                                if (confirmName && (confirmName.toUpperCase().trim() === 'EXCLUIR' || confirmName.toUpperCase().trim() === unit.title.toUpperCase().trim())) {
                                                     const res = await deleteUnit(unit.id)
                                                     if (res.success) {
                                                         if (selectedUnitId === unit.id) setSelectedUnitId('')
                                                         fetchData(true)
                                                     } else alert(res.message)
-                                                } else {
-                                                    alert('Nome incorreto.')
+                                                } else if (confirmName !== null) {
+                                                    alert('Confirmação incorreta. A exclusão foi cancelada.')
                                                 }
                                             }
                                         }}

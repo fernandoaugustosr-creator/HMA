@@ -2193,7 +2193,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       // Initialize monthly_rosters if missing
       if (!db.monthly_rosters) db.monthly_rosters = []
 
-      const roster = db.monthly_rosters.filter(r => r.month === month && r.year === year && (!unitId || r.unit_id === unitId))
+      const roster = db.monthly_rosters.filter(r => r.month === month && r.year === year)
       
       const nurses = db.nurses // RETURN ALL NURSES
       const shifts = db.shifts.filter(s => s.shift_date >= startDate && s.shift_date <= endDate)
@@ -2201,7 +2201,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         ['approved', 'pending'].includes(t.status) && 
         ((t.start_date <= endDate && t.end_date >= startDate))
       )
-      const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
+      const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year)
       const absences = (db.absences || []).filter(a => a.date >= startDate && a.date <= endDate)
 
       // Se for acesso público, verificar se a escala está liberada
@@ -2239,12 +2239,10 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     }
 
     // FETCH EVERYTHING IN PARALLEL WITHOUT SEQUENTIAL PRE-FETCH
-    const rosterQuery = supabase.from('monthly_rosters').select('*').eq('month', month).eq('year', year)
-    if (unitId) {
-        rosterQuery.eq('unit_id', unitId)
-    } else {
-        rosterQuery.is('unit_id', null)
-    }
+    const rosterQuery = supabase.from('monthly_rosters')
+        .select('id, nurse_id, unit_id, section_id, month, year, observation, sector, created_at, list_order')
+        .eq('month', month)
+        .eq('year', year)
 
     const [
         { data: sections },
@@ -2258,8 +2256,8 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     ] = await Promise.all([
         supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
-        rosterQuery.range(0, 1000), 
-        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 2000),
+        rosterQuery.range(0, 5000), // Increased range for larger hospitals
+        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 15000), // Significantly increased to avoid missing data
         supabase.from('time_off_requests')
             .select('id, nurse_id, start_date, end_date, type, status, unit_id')
             .in('status', ['approved', 'pending'])
@@ -2281,9 +2279,6 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         shift_type: s.type
     })) || []
 
-    // Filter releases by unit_id to match the current context
-    const releases = (releasesData || []).filter((r: any) => unitId ? r.unit_id === unitId : !r.unit_id)
-
     return {
         nurses: nurses || [],
         roster: roster,
@@ -2292,7 +2287,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         absences: absencesData || [],
         sections: sections || [],
         units: units || [],
-        releases: releases
+        releases: releasesData || []
     }
   } catch (error) {
     console.error('Critical error in getMonthlyScheduleData:', error)
