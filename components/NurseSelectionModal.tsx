@@ -73,12 +73,14 @@ export default function NurseSelectionModal({ isOpen, onClose, onSelect, nurses,
                             {filteredNurses.map(nurse => {
                                 const vinculo = (nurse.vinculo || '').toUpperCase().trim()
                                 const isSeletivo = vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')
+                                const isTerceirizado = vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')
                                 return (
                                 <li key={nurse.id} className="p-3 hover:bg-blue-50 flex justify-between items-center transition-colors cursor-pointer" onClick={() => onSelect(nurse.id)}>
                                     <div>
                                         <p className="font-medium text-gray-800 text-sm">
                                             {nurse.name}
                                             {isSeletivo && <span className="text-xs font-normal text-gray-500 ml-1">(SEL)</span>}
+                                            {isTerceirizado && <span className="text-xs font-normal text-gray-500 ml-1">(TER)</span>}
                                         </p>
                                         <p className="text-xs text-gray-500">
                                             {nurse.role ? `${formatRole(nurse.role)} • ` : ''}COREN: {nurse.coren || '-'}

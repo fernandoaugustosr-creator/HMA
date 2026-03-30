@@ -2134,7 +2134,8 @@ export default function Schedule({
                       value={nurse.id} 
                       onChange={(e) => handleReassign(nurse.unique_key || '', e.target.value)}
                       className={`w-full bg-transparent border-none focus:ring-0 p-0 text-lg font-bold cursor-pointer outline-none uppercase no-print appearance-none text-center ${
-                        ((nurse.vinculo || '').toUpperCase().includes('SELETIVO') || (nurse.vinculo || '').toUpperCase().includes('CELETISTA')) ? 'text-green-600' :
+                        (((nurse.vinculo || '').toUpperCase().includes('SELETIVO') || (nurse.vinculo || '').toUpperCase().includes('CELETISTA'))) ? 'text-green-600' :
+                        (((nurse.vinculo || '').toUpperCase().includes('TERCEIRIZADO') || (nurse.vinculo || '').toUpperCase().includes('TERCERIZADO'))) ? 'text-purple-700' :
                         (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
                         'text-gray-800'
@@ -2145,6 +2146,7 @@ export default function Schedule({
                           const vinculo = (nurse.vinculo || '').toUpperCase().trim()
                           let suffix = ''
                           if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
+                          if (vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) suffix += ' (TER)'
                           if ((nurse.observation || '').toUpperCase().includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
                           return (
                             <option value={nurse.id} className="text-black font-bold">
@@ -2167,6 +2169,7 @@ export default function Schedule({
                         const vinculo = (n.vinculo || '').toUpperCase().trim()
                         let suffix = ''
                         if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
+                        if (vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) suffix += ' (TER)'
                         if (rosterEntries.some(r => r.observation?.includes('AB')) || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
 
                         let label = `${n.name}${suffix}`
@@ -2195,10 +2198,13 @@ export default function Schedule({
                      const obs = (nurse.observation || '').toUpperCase().trim()
                      const vinculo = (nurse.vinculo || '').toUpperCase().trim()
                      const isSeletivo = vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')
+                     const isTerceirizado = vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')
                      
                      let nameColorClass = "text-black"
                      if (isSeletivo) {
                          nameColorClass = "text-green-600"
+                     } else if (isTerceirizado) {
+                         nameColorClass = "text-purple-700"
                      } else if (obs === '1ED') {
                          nameColorClass = "text-red-600"
                      } else if (obs === '1 ED AB') {
@@ -2218,6 +2224,7 @@ export default function Schedule({
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
+                         {(vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) && <span className="ml-1">(TER)</span>}
                          {/* {obs.includes('1ED') && !isSeletivo && <span className="ml-1">(1ED)</span>} */}
                         {(obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) && <span className="ml-1">(AB)</span>}
                         {displayObs ? displayObs : ''}

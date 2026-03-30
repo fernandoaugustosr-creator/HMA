@@ -278,6 +278,16 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                     <input
                       type="checkbox"
                       name="vinculo"
+                      value="TERCEIRIZADO"
+                      defaultChecked={nurseToEdit?.vinculo?.includes('TERCEIRIZADO') || nurseToEdit?.vinculo?.includes('TERCERIZADO')}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span>TERCEIRIZADO</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      name="vinculo"
                       value="ESCALA DESCOBERTA"
                       defaultChecked={nurseToEdit?.vinculo?.includes('ESCALA DESCOBERTA')}
                       className="h-3.5 w-3.5"
