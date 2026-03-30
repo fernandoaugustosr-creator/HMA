@@ -10,6 +10,8 @@ export function formatRole(role: string | null | undefined): string {
       return 'Motorista'
     case 'RECEPCAO':
       return 'Recepção'
+    case 'AGENTE_DE_PORTARIA':
+      return 'Agente de Portaria'
     case 'COORDENADOR':
       return 'Coordenador(a)'
     case 'ADMIN':

@@ -68,6 +68,7 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
             <option value="MEDICO">Médico(a)</option>
             <option value="MOTORISTA">Motorista</option>
             <option value="RECEPCAO">Recepção</option>
+            <option value="AGENTE_DE_PORTARIA">Agente de Portaria</option>
             <option value="COORDENADOR">Coordenador(a)</option>
           </select>
         </div>
