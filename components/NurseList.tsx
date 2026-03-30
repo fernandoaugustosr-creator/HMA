@@ -251,6 +251,8 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                     <option value="ENFERMEIRO">Enfermeiro(a)</option>
                     <option value="TECNICO">Técnico</option>
                     <option value="MEDICO">Médico(a)</option>
+                    <option value="MOTORISTA">Motorista</option>
+                    <option value="RECEPCAO">Recepção</option>
                     <option value="COORDENADOR">Coordenador(a)</option>
                     <option value="COORDENACAO_GERAL">Coordenação Geral</option>
                   </select>

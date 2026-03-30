@@ -546,16 +546,21 @@ export default function SwapSection({ swaps, nurses, userShifts, currentUserId, 
                                 const currentUser = nurses.find(u => u.id === currentUserId)
                                 if (!currentUser) return true // Fallback if user not found in list (shouldn't happen)
                                 
-                                const isUserNurse = currentUser.role === 'ENFERMEIRO' || currentUser.role === 'COORDENADOR' || currentUser.role === 'COORDENACAO_GERAL'
-                                const isTargetNurse = n.role === 'ENFERMEIRO' || n.role === 'COORDENADOR' || n.role === 'COORDENACAO_GERAL'
-                                
-                                const isUserTech = currentUser.role === 'TECNICO'
-                                const isTargetTech = n.role === 'TECNICO'
+                                const userRole = (currentUser.role || '').toUpperCase()
+                                const targetRole = (n.role || '').toUpperCase()
+
+                                const nurseLike = new Set(['ENFERMEIRO', 'COORDENADOR', 'COORDENACAO_GERAL'])
+
+                                const isUserNurse = nurseLike.has(userRole)
+                                const isTargetNurse = nurseLike.has(targetRole)
+
+                                const isUserTech = userRole === 'TECNICO'
+                                const isTargetTech = targetRole === 'TECNICO'
 
                                 if (isUserNurse && isTargetNurse) return true
                                 if (isUserTech && isTargetTech) return true
-                                
-                                return false
+
+                                return userRole !== '' && userRole === targetRole
                             }).map(n => ({ value: n.id, label: n.name }))}
                             value={selectedNurseId}
                             onChange={setSelectedNurseId}

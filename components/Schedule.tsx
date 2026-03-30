@@ -319,7 +319,7 @@ export default function Schedule({
   const [isEditingHeader, setIsEditingHeader] = useState(false)
   const [unitNumber, setUnitNumber] = useState<string>('')
   const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO'>('ALL')
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO' | 'MOTORISTA' | 'RECEPCAO'>('ALL')
   
   // Permission Management State
   const [isPermissionManagerOpen, setIsPermissionManagerOpen] = useState(false)

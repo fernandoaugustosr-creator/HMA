@@ -6,6 +6,10 @@ export function formatRole(role: string | null | undefined): string {
       return 'Téc. de Enfermagem'
     case 'ENFERMEIRO':
       return 'Enfermeiro(a)'
+    case 'MOTORISTA':
+      return 'Motorista'
+    case 'RECEPCAO':
+      return 'Recepção'
     case 'COORDENADOR':
       return 'Coordenador(a)'
     case 'ADMIN':
