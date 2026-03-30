@@ -1,65 +1,73 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import { usePathname } from 'next/navigation'
-import { logout } from '@/app/actions'
+import { getEditableUnits, logout } from '@/app/actions'
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
 
 export default function Sidebar({ user }: { user: any }) {
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [editableUnits, setEditableUnits] = useState<{ id: string, title: string }[]>([])
 
   // Força a re-renderização para garantir que o botão de logout apareça
   const role = user?.role || ''
   const isAdmin = role === 'ADMIN' || role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
+  const canSeeScaleMenu = isAdmin || editableUnits.length > 0
+
+  useEffect(() => {
+    getEditableUnits()
+      .then((units: any[]) => setEditableUnits((units || []).map(u => ({ id: String(u.id), title: String(u.title || '') }))))
+      .catch(() => setEditableUnits([]))
+  }, [])
 
   const allNavItems = [
     { name: 'Dashboard', href: '/', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
       </svg>
     )},
     { name: 'Escala', href: '/escala', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     )},
     { name: 'Servidores', href: '/servidores', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
       </svg>
     )},
     { name: 'Permultas', href: '/trocas', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
       </svg>
     )},
     { name: 'Folgas', href: '/folgas', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     )},
     { name: 'Faltas', href: '/coordenacao', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zm4-8h6m-6 4h3" />
       </svg>
     )},
     { name: 'Baixar Escala', href: '/downloads', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
       </svg>
     )},
     { name: 'Coordenação', href: '/coordenacao', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
       </svg>
     )},
     { name: 'Logs de Login', href: '/logs?label=Logs%20de%20Login', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     )},
@@ -70,6 +78,13 @@ export default function Sidebar({ user }: { user: any }) {
   const trocasIcon = allNavItems.find(item => item.name === 'Permultas')?.icon
   const downloadsIcon = allNavItems.find(item => item.name === 'Baixar Escala')?.icon
   const faltasIcon = allNavItems.find(item => item.name === 'Faltas')?.icon
+  const escalaIcon = allNavItems.find(item => item.name === 'Escala')?.icon
+
+  const escalaHref = useMemo(() => {
+    if (isAdmin) return '/escala'
+    if (editableUnits.length === 0) return '/escala'
+    return `/escala?unit=${encodeURIComponent(editableUnits[0].id)}`
+  }, [editableUnits, isAdmin])
 
   let navItems: { name: string; href: string; icon: JSX.Element }[] = []
 
@@ -78,6 +93,7 @@ export default function Sidebar({ user }: { user: any }) {
   } else if (role === 'COORDENADOR') {
     navItems = [
       dashboardIcon && { name: 'Dashboard', href: '/', icon: dashboardIcon },
+      canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
       faltasIcon && { name: 'Lançar Falta', href: '/coordenacao?tab=falta', icon: faltasIcon },
       faltasIcon && { name: 'Solicitar Pagamentos', href: '/coordenacao?tab=pagamento', icon: faltasIcon },
       faltasIcon && { name: 'Outras Solicitações', href: '/coordenacao?tab=outros', icon: faltasIcon },
@@ -86,7 +102,14 @@ export default function Sidebar({ user }: { user: any }) {
       downloadsIcon && { name: 'Baixar Escala', href: '/downloads', icon: downloadsIcon },
     ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
   } else {
-    navItems = allNavItems.filter(item => item.name === 'Dashboard' || item.name === 'Baixar Escala' || item.name === 'Folgas' || item.name === 'Permultas' || item.name === 'Faltas')
+    navItems = [
+      dashboardIcon && { name: 'Dashboard', href: '/', icon: dashboardIcon },
+      canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
+      folgasIcon && { name: 'Folgas', href: '/folgas', icon: folgasIcon },
+      trocasIcon && { name: 'Permultas', href: '/trocas', icon: trocasIcon },
+      faltasIcon && { name: 'Faltas', href: '/coordenacao', icon: faltasIcon },
+      downloadsIcon && { name: 'Baixar Escala', href: '/downloads', icon: downloadsIcon },
+    ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
   }
 
   return (
@@ -101,7 +124,7 @@ export default function Sidebar({ user }: { user: any }) {
           onClick={() => setIsMobileMenuOpen(true)}
           className="text-gray-600 focus:outline-none p-2"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
@@ -127,7 +150,7 @@ export default function Sidebar({ user }: { user: any }) {
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="text-gray-500 hover:text-gray-700"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -197,7 +220,20 @@ export default function Sidebar({ user }: { user: any }) {
                         <span className="truncate">Gestão de Coordenações</span>
                       </Link>
                     )}
-                    {itemPath === '/escala' && isAdmin && null}
+                    {itemPath === '/escala' && !isCollapsed && editableUnits.length > 0 && (
+                      <>
+                        {editableUnits.map((u) => (
+                          <Link
+                            key={u.id}
+                            href={`/escala?unit=${encodeURIComponent(u.id)}`}
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                          >
+                            <span className="truncate">{u.title}</span>
+                          </Link>
+                        ))}
+                      </>
+                    )}
                   </div>
                 )
               })}
@@ -302,7 +338,23 @@ export default function Sidebar({ user }: { user: any }) {
                     </Link>
                   </>
                 )}
-                {itemPath === '/escala' && isAdmin && !isCollapsed && null}
+                {itemPath === '/escala' && !isCollapsed && editableUnits.length > 0 && (
+                  <>
+                    {editableUnits.map((u) => (
+                      <Link
+                        key={u.id}
+                        href={`/escala?unit=${encodeURIComponent(u.id)}`}
+                        className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
+                          pathname === '/escala'
+                            ? 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                        }`}
+                      >
+                        <span className="truncate">{u.title}</span>
+                      </Link>
+                    ))}
+                  </>
+                )}
               </div>
             )
           })}

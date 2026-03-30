@@ -5,9 +5,9 @@ import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { QRCodeSVG } from 'qrcode.react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
-import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle } from 'lucide-react'
+import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle, EyeOff } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
 import NurseCreationModal from './NurseCreationModal'
 import LeaveManagerModal, { LeaveType } from './LeaveManagerModal'
@@ -269,12 +269,13 @@ export default function Schedule({
   const [footerText, setFooterText] = useState<string>('')
   const [isEditingFooter, setIsEditingFooter] = useState(false)
   const [tempFooterText, setTempFooterText] = useState('')
+  const footerEditorRef = useRef<HTMLDivElement>(null)
 
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [shiftModalData, setShiftModalData] = useState<{nurseId: string, rosterId?: string, nurseName: string, date: string} | null>(null)
   const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn' | 'dn4' | 'nd4' | 'delete'>('day')
-  const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'off4' | 'off5' | 'off6' | 'dn_off3' | 'dn_off4' | 'nd_off4' | 'dn_off5' | 'dn_off6' | 'dn_off7' | 'dn_off8' | 'custom'>('off4')
+  const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'd_off2' | 'off4' | 'off5' | 'off6' | 'dn_off3' | 'dn_off4' | 'nd_off4' | 'dn_off5' | 'dn_off6' | 'dn_off7' | 'dn_off8' | 'custom'>('none')
   const [customRecurrenceDays, setCustomRecurrenceDays] = useState<string>('')
   const [deleteWholeMonth, setDeleteWholeMonth] = useState(false)
   
@@ -310,7 +311,7 @@ export default function Schedule({
 
   // SQL Instruction Modal
   const [showSqlModal, setShowSqlModal] = useState(false)
-  const [sqlModalType, setSqlModalType] = useState<'V11' | 'V14' | 'V15' | 'V16'>('V11')
+  const [sqlModalType, setSqlModalType] = useState<'V11' | 'V14' | 'V15' | 'V16' | 'V17'>('V11')
   const [headerLine1, setHeaderLine1] = useState('Prefeitura Municipal de Açailândia')
   const [headerLine2, setHeaderLine2] = useState('Secretaria Municipal de Saúde / SEMUS')
   const [headerLine3, setHeaderLine3] = useState('Hospital Municipal de Açailândia - HMA')
@@ -319,6 +320,15 @@ export default function Schedule({
   const [unitNumber, setUnitNumber] = useState<string>('')
   const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO'>('ALL')
+  
+  // Permission Management State
+  const [isPermissionManagerOpen, setIsPermissionManagerOpen] = useState(false)
+  const [permissions, setPermissions] = useState<any[]>([])
+  const [permissionNurseId, setPermissionNurseId] = useState('')
+  const [permissionUnitIds, setPermissionUnitIds] = useState<string[]>([])
+  const [permissionSelectAllUnits, setPermissionSelectAllUnits] = useState(false)
+  const [permissionUnitSearch, setPermissionUnitSearch] = useState('')
+  const [myScalePermissionUnitIds, setMyScalePermissionUnitIds] = useState<string[]>([])
 
   const applyReplicationToTargets = async (targetsToUpdate: { id: string }[]) => {
       if (!replicationData) return
@@ -395,10 +405,14 @@ export default function Schedule({
       setLoading(true)
       const res = await updateScheduleSetorVisibility(selectedMonth + 1, selectedYear, selectedUnitId, isHidden)
       if (!res.success) {
-          alert(res.message || 'Erro ao salvar visibilidade do setor')
+          // Manter a visibilidade alterada localmente mesmo com erro no banco
+          setIsSetorHidden(isHidden)
+          
           if (res.message?.includes('V16')) {
               setSqlModalType('V16')
               setShowSqlModal(true)
+          } else {
+              alert(res.message || 'Erro ao salvar visibilidade do setor')
           }
       } else {
           clearCache()
@@ -574,12 +588,41 @@ export default function Schedule({
     fetchData()
   }, [fetchData])
 
+  useEffect(() => {
+    getMyScalePermissionUnitIds()
+      .then(setMyScalePermissionUnitIds)
+      .catch(() => setMyScalePermissionUnitIds([]))
+  }, [])
+
+  // Fetch permissions if admin
+  useEffect(() => {
+    if (isAdmin) {
+      getScalePermissions().then(setPermissions).catch(err => {
+          if (err.message === 'DATABASE_V17_REQUIRED') {
+              setSqlModalType('V17')
+              setShowSqlModal(true)
+          }
+      })
+    }
+  }, [isAdmin])
+
   // Auto-select first unit if none selected and units are available
   useEffect(() => {
-    if (!selectedUnitId && data.units.length > 0) {
-      setSelectedUnitId(data.units[0].id)
+    const allUnits = data.units || []
+    const availableUnits = (isAdmin || myScalePermissionUnitIds.includes('*'))
+      ? allUnits
+      : allUnits.filter(u => myScalePermissionUnitIds.some(id => String(id) === String(u.id)))
+
+    if (!selectedUnitId && availableUnits.length > 0) {
+      setSelectedUnitId(availableUnits[0].id)
+      return
     }
-  }, [data.units, selectedUnitId])
+
+    if (selectedUnitId && availableUnits.length > 0) {
+      const stillAllowed = availableUnits.some(u => String(u.id) === String(selectedUnitId))
+      if (!stillAllowed) setSelectedUnitId(availableUnits[0].id)
+    }
+  }, [data.units, selectedUnitId, isAdmin, myScalePermissionUnitIds])
   
   useEffect(() => {
     const l1 = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_line_1') : null
@@ -983,8 +1026,8 @@ export default function Schedule({
         alert('Erro ao salvar observação')
         await fetchData(true)
     } else {
-        // Clear cache but no need for immediate full refresh if UI is correct
-        clearCache()
+        // NÃO LIMPAR CACHE NEM FAZER FETCH DATA PARA NÃO PERDER ESTADO DA TELA
+        // clearCache()
     }
   }
 
@@ -1005,8 +1048,8 @@ export default function Schedule({
         alert('Erro ao salvar setor')
         await fetchData(true)
     } else {
-        // Clear cache but no need for immediate full refresh if UI is correct
-        clearCache()
+        // NÃO LIMPAR CACHE NEM FAZER FETCH DATA PARA NÃO PERDER ESTADO DA TELA
+        // clearCache()
     }
   }
 
@@ -1115,6 +1158,12 @@ export default function Schedule({
   const handleEditFooter = () => {
       setTempFooterText(footerText || '')
       setIsEditingFooter(true)
+      // Usar setTimeout para garantir que o ref esteja disponível
+      setTimeout(() => {
+          if (footerEditorRef.current) {
+              footerEditorRef.current.innerHTML = footerText || ''
+          }
+      }, 0)
   }
 
   const saveFooterText = async () => {
@@ -1472,6 +1521,7 @@ export default function Schedule({
                     if (rec === 'daily') return { period: 1, work: [0] }
                     if (rec === 'mon_fri') return { period: 1, work: [0], skipWeekends: true }
                     if (rec === '12x36') return { period: 2, work: [0] }
+                    if (rec === 'd_off2') return { period: 3, work: [0] } // New: D + 2 Folgas
                     if (rec === 'every3') return { period: 3, work: [0] }
                     if (rec === '24x72') return { period: 4, work: [0] }
                     if (rec === 'off4') return { period: 5, work: [0] }
@@ -1998,9 +2048,9 @@ export default function Schedule({
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
                 className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-6 ${isAdmin ? '' : ''}`}
-                title={isAdmin && !isScheduleReleased ? 'Edite para reiniciar numeração a partir daqui' : undefined}
+                title={canEditSelectedUnit && !isScheduleReleased ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
-                {isAdmin && !isScheduleReleased ? (
+                {canEditSelectedUnit && !isScheduleReleased ? (
                   <input
                     type="number"
                     defaultValue={rowNumber}
@@ -2047,47 +2097,47 @@ export default function Schedule({
                     }}
                   />
                 ) : (
-                  <span className="text-black font-bold print:text-[12px]">{rowNumber}</span>
+                  <span className="text-black font-bold print:text-[14px]">{rowNumber}</span>
                 )}
               </td>
-              <td className="border border-black px-1 py-0.5 text-xs font-medium text-black sticky left-8 bg-white z-10 w-[180px] print:w-[120px] border-r-2 border-r-black text-center">
+              <td className="border border-black px-1 py-0 text-[9px] font-medium text-black sticky left-6 bg-white z-10 w-[200px] print:w-[120px] border-r-2 border-r-black text-center">
                 <div className="flex items-center justify-center gap-1">
-                  {isAdmin && !isScheduleReleased && (
-                    <div className="flex flex-col gap-1 mr-2 no-print opacity-0 group-hover:opacity-100 transition-opacity">
+                  {canEditSelectedUnit && !isScheduleReleased && (
+                    <div className="flex flex-col gap-0.5 mr-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
                        <button 
                            onClick={() => handleInsertProfessional(section.id, index, 'above', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                           className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0.5 bg-blue-50 rounded"
+                           className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0 bg-blue-50 rounded"
                            title="Inserir profissional JÁ CADASTRADO acima desta linha"
                        >
-                           <ArrowUpCircle size={16} />
+                           <ArrowUpCircle size={14} />
                        </button>
                        <button 
                            onClick={() => handleInsertProfessional(section.id, index, 'below', orderedProfessionals.map(p => p.nurse.unique_key || ''))}
-                           className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0.5 bg-blue-50 rounded"
+                           className="text-blue-600 hover:text-blue-800 hover:scale-125 transition-all p-0 bg-blue-50 rounded"
                            title="Inserir profissional JÁ CADASTRADO abaixo desta linha"
                        >
-                           <ArrowDownCircle size={16} />
+                           <ArrowDownCircle size={14} />
                        </button>
                     </div>
                   )}
-                  {isAdmin && !isScheduleReleased && (
+                  {canEditSelectedUnit && !isScheduleReleased && (
                   <button 
                     onClick={() => handleRemoveFromRoster(nurse.unique_key || '')} 
-                    className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors no-print"
+                    className="text-red-500 hover:text-red-700 p-0 rounded hover:bg-red-50 transition-colors no-print"
                     title="Remover desta escala mensal"
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={10} />
                   </button>
                   )}
-                  {isAdmin && !isScheduleReleased ? (
+                  {canEditSelectedUnit && !isScheduleReleased ? (
                     <select 
                       value={nurse.id} 
                       onChange={(e) => handleReassign(nurse.unique_key || '', e.target.value)}
-                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold cursor-pointer outline-none uppercase no-print appearance-none text-center ${
+                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-lg font-bold cursor-pointer outline-none uppercase no-print appearance-none text-center ${
                         ((nurse.vinculo || '').toUpperCase().includes('SELETIVO') || (nurse.vinculo || '').toUpperCase().includes('CELETISTA')) ? 'text-green-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
                         (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
-                        'text-black'
+                        'text-gray-800'
                       }`}
                     >
                       {/* Option for current nurse to ensure header displays correctly */}
@@ -2140,7 +2190,7 @@ export default function Schedule({
                       })}
                     </select>
                   ) : null}
-                  <div className={`${isAdmin && !isScheduleReleased ? 'hidden print:block' : 'block'} text-center w-full`}>
+                  <div className={`${canEditSelectedUnit && !isScheduleReleased ? 'hidden print:block' : 'block'} text-center w-full`}>
                   {(() => {
                      const obs = (nurse.observation || '').toUpperCase().trim()
                      const vinculo = (nurse.vinculo || '').toUpperCase().trim()
@@ -2162,7 +2212,9 @@ export default function Schedule({
                      if (displayObs === '1 ED AB') displayObs = ''
                      if (displayObs === 'AB') displayObs = ''
                      
-                     return <span className={`text-xs font-bold ${nameColorClass} uppercase print:text-[12px]`}>
+                     const baseColorClass = nameColorClass || "text-gray-800"
+                     
+                     return <span className={`text-lg font-bold ${baseColorClass} uppercase print:text-[14px]`}>
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
@@ -2174,12 +2226,12 @@ export default function Schedule({
                    </div>
                 </div>
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">{formatRole(nurse.role)}</td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">{formatRole(nurse.role)}</td>
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">
                 {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">
-                {isAdmin && !isScheduleReleased && dynamicField === 'coren' ? (
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">
+                {canEditSelectedUnit && !isScheduleReleased && dynamicField === 'coren' ? (
                   <select
                     value={nurse.coren || ''}
                     onChange={async (e) => {
@@ -2194,7 +2246,7 @@ export default function Schedule({
                       }
                       setLoading(false)
                     }}
-                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-[10px] print:text-[7.5px] cursor-pointer outline-none text-center appearance-none"
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-[10px] print:text-[11px] cursor-pointer outline-none text-center appearance-none"
                   >
                     <option value="">-</option>
                     {(() => {
@@ -2214,26 +2266,17 @@ export default function Schedule({
                     
                     if (dynamicField === 'role') return formatRole(val as string)
                     
-                    const displayVal = val || '-'
-                    if (dynamicField === 'phone' && displayVal !== '-') {
-                        const digits = String(displayVal).replace(/\D/g, '')
-                        if (digits.length === 11) {
-                            return `(${digits.slice(0, 2)})${digits.slice(2, 7)}-${digits.slice(7)}`
-                        } else if (digits.length === 10) {
-                            return `(${digits.slice(0, 2)})${digits.slice(2, 6)}-${digits.slice(6)}`
-                        }
-                    }
-                    return String(val)
+                    return <span className="print:text-[11px]">{String(val || '-')}</span>
                   })()
                 )}
               </td>
               {!isSetorHidden && (
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[7.5px] uppercase">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">
                   <SectorCell 
                       initialValue={nurse.sector}
                       onSave={(val) => handleUpdateSector(nurse.unique_key || nurse.id, val)}
                       onCopyDown={(val) => handleCopySectorDown(index, val)}
-                      isAdmin={isAdmin && !isScheduleReleased}
+                      isAdmin={canEditSelectedUnit && !isScheduleReleased}
                   />
               </td>
               )}
@@ -2311,11 +2354,11 @@ export default function Schedule({
                 return (
                   <td 
                     key={day} 
-                    className={`${cellClass} ${isAdmin && !isScheduleReleased ? 'cursor-pointer hover:bg-yellow-100 hover:scale-110 hover:shadow-lg hover:z-50 transition-all duration-200' : ''}`}
-                    onClick={isAdmin && !isScheduleReleased ? () => handleCellClick(nurse, dateStr, nurse.unique_key) : undefined}
+                    className={`${cellClass} ${canEditSelectedUnit && !isScheduleReleased ? 'cursor-pointer hover:bg-yellow-100 hover:scale-110 hover:shadow-lg hover:z-50 transition-all duration-200' : ''}`}
+                    onClick={canEditSelectedUnit && !isScheduleReleased ? () => handleCellClick(nurse, dateStr, nurse.unique_key) : undefined}
                     id={`cell-${nurse.unique_key}-${dateStr}`}
-                    tabIndex={isAdmin && !isScheduleReleased ? 0 : -1}
-                    onKeyDown={isAdmin && !isScheduleReleased ? async (e) => {
+                    tabIndex={canEditSelectedUnit && !isScheduleReleased ? 0 : -1}
+                    onKeyDown={canEditSelectedUnit && !isScheduleReleased ? async (e) => {
                       const k = e.key.toLowerCase()
                       if (isSpecialLeave) return
                       
@@ -2346,7 +2389,7 @@ export default function Schedule({
                         handleCellClick(nurse, dateStr, nurse.unique_key, type)
                       }
                     } : undefined}
-                    title={isAdmin ? "Clique para gerenciar plantão" : undefined}
+                    title={canEditSelectedUnit ? "Clique para gerenciar plantão" : undefined}
                   >
                     {content}
                   </td>
@@ -2357,10 +2400,10 @@ export default function Schedule({
           )
         })}
         {/* Add Professional Row Placeholder */}
-        {isAdmin && !isScheduleReleased && (
+        {canEditSelectedUnit && !isScheduleReleased && (
         <tr className="no-print bg-white">
           <td className="border border-black px-1 py-1 sticky left-0 bg-yellow-400 z-10"></td>
-          <td className="border border-black px-2 py-1 sticky left-8 bg-white z-10 border-r-2 border-r-black w-[180px]">
+          <td className="border border-black px-1 py-0 sticky left-6 bg-white z-10 border-r-2 border-r-black w-[200px] text-center">
              <button 
                 onClick={() => {
                     const currentRosterIds = (nursesBySection[section.id] || [])
@@ -2369,10 +2412,10 @@ export default function Schedule({
                     
                     handleInsertProfessional(section.id, currentRosterIds.length, 'below', currentRosterIds)
                 }}
-                className="flex items-center gap-2 text-xs text-blue-600 font-bold w-full hover:text-blue-800 transition-colors py-1 px-2"
+                className="flex items-center justify-center gap-2 text-lg text-blue-600 font-bold w-full hover:text-blue-800 transition-colors py-0 uppercase"
              >
-                <PlusCircle size={14} />
-                <span>Adicionar Profissional ao final</span>
+                <PlusCircle size={18} />
+                <span>Adicionar Profissional</span>
              </button>
           </td>
           <td className="border border-black px-1 py-1" colSpan={(isSetorHidden ? 3 : 4) + daysInMonth + 1}></td>
@@ -2388,6 +2431,19 @@ export default function Schedule({
       if (!data.releases) return false
       return data.releases.some(r => r.month === selectedMonth + 1 && r.year === selectedYear && String(r.unit_id) === String(selectedUnitId) && r.is_released)
   }, [data.releases, selectedMonth, selectedYear, selectedUnitId])
+
+  const canEditSelectedUnit = useMemo(() => {
+      if (isAdmin) return true
+      if (myScalePermissionUnitIds.includes('*')) return true
+      if (!selectedUnitId) return false
+      return myScalePermissionUnitIds.some(id => String(id) === String(selectedUnitId))
+  }, [isAdmin, myScalePermissionUnitIds, selectedUnitId])
+
+  const visibleUnits = useMemo(() => {
+      const allUnits = data.units || []
+      if (isAdmin || myScalePermissionUnitIds.includes('*')) return allUnits
+      return allUnits.filter(u => myScalePermissionUnitIds.some(id => String(id) === String(u.id)))
+  }, [data.units, isAdmin, myScalePermissionUnitIds])
 
   // Sync Footer Text
   useEffect(() => {
@@ -2422,9 +2478,7 @@ export default function Schedule({
   }
 
   return (
-    <div 
-      className={`w-full bg-white ${printOnly ? 'p-0' : 'p-0'} schedule-root max-w-fit`}
-    >
+    <div className="min-h-screen bg-white">
       <div className="w-full flex items-center justify-between mb-2 px-2 print:mb-4 print:px-0">
         <div className="flex items-center gap-4">
           <Image 
@@ -2514,8 +2568,12 @@ export default function Schedule({
                         onChange={handleUnitChange}
                         className="border border-gray-300 rounded px-3 py-2 text-sm flex-1 bg-white text-black"
                     >
-                        <option value="">Selecione um setor...</option>
-                        {[...data.units].sort((a, b) => {
+                        {visibleUnits.length === 0 ? (
+                          <option value="">Sem permissões de escala</option>
+                        ) : (
+                          <option value="">Selecione um setor...</option>
+                        )}
+                        {[...visibleUnits].sort((a, b) => {
                           const na = parseInt(unitNumbersMap[a.id] || '9999', 10)
                           const nb = parseInt(unitNumbersMap[b.id] || '9999', 10)
                           if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb
@@ -2622,6 +2680,15 @@ export default function Schedule({
                     <Pencil size={14} /> Gerenciar Lista
                 </button>
             )}
+            {isAdmin && (
+                <button 
+                    onClick={() => setIsPermissionManagerOpen(true)}
+                    className="px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded text-[10px] hover:bg-gray-50 flex items-center gap-1 no-print h-[38px] whitespace-nowrap font-bold uppercase"
+                    title="Gerenciar quem pode cadastrar cada escala"
+                >
+                    <UserPlus size={14} /> Permissões
+                </button>
+            )}
            {isSaving && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded animate-pulse no-print h-[38px]">
                     <span className="animate-spin h-3 w-3 border-2 border-indigo-700 border-t-transparent rounded-full"></span>
@@ -2634,13 +2701,13 @@ export default function Schedule({
                   Carregando...
                </button>
            ) : (
-             (!isLaunched && !isAdmin) ? (
+             (!isLaunched && !canEditSelectedUnit) ? (
                 <div className="flex items-center justify-center h-[38px] px-4 text-red-600 font-bold bg-red-50 border border-red-200 rounded whitespace-nowrap">
                     Escala ainda não liberada
                 </div>
              ) : (
                 <>
-                {isAdmin && !isScheduleReleased && (
+                {canEditSelectedUnit && !isScheduleReleased && (
                     <button 
                         onClick={handleSaveAll}
                         className="bg-indigo-600 text-white px-4 py-2 rounded flex items-center justify-center gap-2 text-sm hover:bg-indigo-700 transition-colors h-[38px] font-bold"
@@ -2736,29 +2803,29 @@ export default function Schedule({
                  <div className="w-full">
                  {visibleSections.map((section, index) => (
                     <div key={section.id} className="mb-8 last:mb-0 w-full">
-                       <table className="table-fixed border-collapse border border-black text-black text-[10px] print:text-[7px]">
+                       <table className="table-fixed border-collapse border border-black text-black text-[9px] print:text-[11px] w-full">
                              <colgroup>
-                                <col className="w-8 print:w-6" />
-                                <col className="w-[180px] print:w-[224px]" />
-                                <col className="w-24 print:w-24" />
-                                <col className="w-24 print:w-24" />
-                                <col className="w-20 print:w-20" />
-                                {!isSetorHidden && <col className="w-24 print:w-24" />}
-                                {daysArray.map(d => <col key={d.day} className="w-6 print:w-5" />)}
-                                <col className="w-12 print:w-16" />
+                                <col className="w-6 print:w-10" />
+                                <col className="w-[200px] print:w-[240px]" />
+                                <col className="w-20 print:w-28" />
+                                <col className="w-20 print:w-28" />
+                                <col className="w-16 print:w-24" />
+                                {!isSetorHidden && <col className="w-20 print:w-28" />}
+                                {daysArray.map(d => <col key={d.day} className="w-5 print:w-8" />)}
+                                <col className="w-10 print:w-16" />
                              </colgroup>
                              <thead>
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px]">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-base print:text-[16px]">
                                         {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
                                     </th>
                                 </tr>
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-lg print:text-[12px] relative group">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-base print:text-[16px] relative group">
                                         ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
                                         {isAdmin && (
                                             <button 
@@ -2840,18 +2907,6 @@ export default function Schedule({
                                 </th>
                                 {!isSetorHidden && (
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2] group relative" rowSpan={2}>
-                                    {isAdmin && (
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleToggleSetorVisibility(true);
-                                            }}
-                                            className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity z-10 no-print"
-                                            title="Ocultar coluna SETOR nesta escala"
-                                        >
-                                            <X size={10} />
-                                        </button>
-                                    )}
                                     {editingSectorTitleId === section.id ? (
                                         <div className="flex items-center gap-1 w-full h-full text-black">
                                             <input 
@@ -2907,6 +2962,82 @@ export default function Schedule({
                             )}
                         </tbody>
                         <tfoot>
+                            {(() => {
+                                if (index !== visibleSections.length - 1) return null;
+
+                                const activeLegendData = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].map(type => {
+                                    const pad = (n: number) => n.toString().padStart(2, '0')
+                                    const monthStart = `${selectedYear}-${pad(selectedMonth + 1)}-01`
+                                    const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+                                    const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
+
+                                    const activeLeaves = data.timeOffs
+                                        .filter(t => {
+                                            if (t.type !== type) return false
+                                            if (!t.start_date || !t.end_date) return false
+                                            if (t.end_date < monthStart) return false
+                                            if (t.start_date > monthEnd) return false
+
+                                            if (selectedUnitId) {
+                                                if (t.unit_id && String(t.unit_id) === String(selectedUnitId)) return true;
+                                                const nurse = data.nurses.find(n => n.id === t.nurse_id)
+                                                if (nurse && nurse.unit_id && String(nurse.unit_id) === String(selectedUnitId)) return true;
+                                                const isInUnit = data.roster.some(r => 
+                                                    r.nurse_id === t.nurse_id && 
+                                                    r.month === selectedMonth + 1 && 
+                                                    r.year === selectedYear && 
+                                                    String(r.unit_id) === String(selectedUnitId)
+                                                )
+                                                if (isInUnit) return true;
+                                                return false;
+                                            }
+                                            return true
+                                        })
+                                        .map(t => {
+                                            const nurse = data.nurses.find(n => n.id === t.nurse_id)
+                                            return nurse ? `${nurse.name}${t.status === 'pending' ? '*' : ''}` : ''
+                                        })
+                                        .filter(Boolean)
+                                        .join(', ')
+                                    
+                                    if (!activeLeaves) return null;
+
+                                    return {
+                                        type,
+                                        label: type === 'ferias' ? 'FÉRIAS' : 
+                                               type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
+                                               type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' : 
+                                               type === 'folga' ? 'FOLGA' : 'CESSÃO',
+                                        names: activeLeaves
+                                    };
+                                }).filter(Boolean);
+
+                                if (activeLegendData.length === 0 && !footerText) return null;
+
+                                return (
+                                    <tr className="bg-white text-black no-print-background">
+                                        <td 
+                                            colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} 
+                                            className="border-x border-black px-1 py-1"
+                                        >
+                                            <div className="flex flex-col gap-0.5 min-h-[1px]">
+                                                {activeLegendData.map((legend: any) => (
+                                                    <div key={legend.type} className="text-xs print:text-[11px] font-bold uppercase flex items-start">
+                                                        <span className="mr-2 whitespace-nowrap">{legend.label}:</span>
+                                                        <span className="font-normal">{legend.names}</span>
+                                                    </div>
+                                                ))}
+                                                {footerText && footerText !== '<br>' && footerText !== '' && (
+                                                    <div 
+                                                        className={`text-xs print:text-[11px] ${activeLegendData.length > 0 ? 'mt-1' : ''}`}
+                                                        dangerouslySetInnerHTML={{ __html: footerText }}
+                                                    />
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })()}
                         </tfoot>
                     </table>
                  </div>
@@ -3000,7 +3131,6 @@ export default function Schedule({
         unitId={selectedUnitId}
       />
 
-      {/* Footer / Actions */}
       {isAdmin && !isScheduleReleased && (
       <div className="mt-4 flex justify-end gap-2 no-print">
          {isAddingSection ? (
@@ -3033,15 +3163,17 @@ export default function Schedule({
 
       {/* Footer Legends */}
       <div className="mt-0 space-y-2 print:mt-0 bg-white print-footer-legend">
-        {isAdmin && !isScheduleReleased && (
+        {isAdmin && (
         <div className="flex flex-col items-end gap-2 mb-2 no-print">
             <div className="flex flex-wrap gap-2 justify-end">
-                <button 
-                    onClick={handleEditFooter}
-                    className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50"
-                >
-                    Editar texto do rodapé
-                </button>
+                {!isScheduleReleased && (
+                    <button 
+                        onClick={handleEditFooter}
+                        className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50"
+                    >
+                        Editar texto do rodapé
+                    </button>
+                )}
                 <button 
                   onClick={() => setLeaveModalType('ferias')}
                   className="px-2 py-1 text-xs border rounded text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100"
@@ -3069,86 +3201,72 @@ export default function Schedule({
             </div>
 
             {isEditingFooter && (
-                <div className="bg-white p-4 border rounded shadow-lg w-full max-w-2xl">
-                    <h3 className="font-bold mb-2 text-black">Editar Texto do Rodapé</h3>
-                    <textarea
-                        className="w-full h-32 border p-2 mb-2 text-sm text-black"
-                        value={tempFooterText}
-                        onChange={e => setTempFooterText(e.target.value)}
-                        placeholder="Digite o texto do rodapé aqui... (Deixe em branco para usar o padrão)"
+                <div className="bg-white p-6 border rounded shadow-2xl w-[98%] max-w-[1500px] mx-auto">
+                    <h3 className="font-bold mb-4 text-xl text-black">Editar Texto do Rodapé</h3>
+                    
+                    {/* Toolbar */}
+                    <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-100 rounded border border-gray-200">
+                        <button 
+                            onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold', false); }}
+                            className="p-2 px-4 bg-white border border-gray-300 rounded hover:bg-gray-200 font-bold text-black text-lg"
+                            title="Negrito"
+                        >B</button>
+                        <button 
+                            onMouseDown={(e) => { e.preventDefault(); document.execCommand('italic', false); }}
+                            className="p-2 px-4 bg-white border border-gray-300 rounded hover:bg-gray-200 italic text-black text-lg"
+                            title="Itálico"
+                        >I</button>
+                        <button 
+                            onMouseDown={(e) => { e.preventDefault(); document.execCommand('underline', false); }}
+                            className="p-2 px-4 bg-white border border-gray-300 rounded hover:bg-gray-200 underline text-black text-lg"
+                            title="Sublinhado"
+                        >U</button>
+                        <div className="w-px h-8 bg-gray-300 mx-2"></div>
+                        <input 
+                            type="color" 
+                            onChange={(e) => { document.execCommand('foreColor', false, e.target.value); }}
+                            className="w-10 h-10 p-0 border rounded cursor-pointer bg-white"
+                            title="Cor do Texto"
+                        />
+                        <button 
+                            onMouseDown={(e) => { e.preventDefault(); document.execCommand('foreColor', false, '#ef4444'); }}
+                            className="w-10 h-10 rounded bg-red-500 border border-gray-300 hover:scale-110 transition-transform"
+                            title="Vermelho"
+                        ></button>
+                        <button 
+                            onMouseDown={(e) => { e.preventDefault(); document.execCommand('foreColor', false, '#3b82f6'); }}
+                            className="w-10 h-10 rounded bg-blue-500 border border-gray-300 hover:scale-110 transition-transform"
+                            title="Azul"
+                        ></button>
+                        <button 
+                            onMouseDown={(e) => { e.preventDefault(); document.execCommand('foreColor', false, '#000000'); }}
+                            className="w-10 h-10 rounded bg-black border border-gray-300 hover:scale-110 transition-transform"
+                            title="Preto"
+                        ></button>
+                    </div>
+
+                    <div
+                        contentEditable
+                        ref={footerEditorRef}
+                        className="w-full min-h-[300px] border-2 border-blue-100 p-4 mb-4 text-base text-black bg-white rounded shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-y-auto"
+                        onInput={(e) => setTempFooterText(e.currentTarget.innerHTML)}
                     />
-                    <div className="flex justify-end gap-2">
-                        <button onClick={() => setIsEditingFooter(false)} className="px-3 py-1 border rounded hover:bg-gray-100 text-black">Cancelar</button>
-                        <button onClick={saveFooterText} className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+                    
+                    <p className="text-xs text-gray-500 mb-4 font-medium italic">Dica: Use as ferramentas acima para formatar o texto (Negrito, Cor, etc). A área de edição foi aumentada para facilitar o trabalho.</p>
+
+                    <div className="flex justify-end gap-3 mt-4">
+                        <button onClick={() => setIsEditingFooter(false)} className="px-6 py-2 border-2 rounded-lg hover:bg-gray-100 text-black font-semibold transition-colors">Cancelar</button>
+                        <button onClick={saveFooterText} className="px-8 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md transition-colors">Salvar Alterações</button>
                     </div>
                 </div>
             )}
         </div>
         )}
 
-        {/* Dynamic Legend List - Shows who is on leave */}
-        {['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].map(type => {
-            const label = type === 'ferias' ? 'FÉRIAS' : 
-                         type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
-                         type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' : 
-                         type === 'folga' ? 'FOLGA' : 'CESSÃO'
-            
-            // Find nurses with this leave type in this month
-            const pad = (n: number) => n.toString().padStart(2, '0')
-            const monthStart = `${selectedYear}-${pad(selectedMonth + 1)}-01`
-            const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
-            const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
-
-            const activeLeaves = data.timeOffs
-                .filter(t => {
-                    if (t.type !== type) return false
-                    if (!t.start_date || !t.end_date) return false
-                    if (t.end_date < monthStart) return false
-                    if (t.start_date > monthEnd) return false
-
-                    // Filter by selected unit if applicable
-                    if (selectedUnitId) {
-                        if (t.unit_id && t.unit_id !== selectedUnitId) return false
-                        
-                        const isInUnit = data.roster.some(r => 
-                            r.nurse_id === t.nurse_id && 
-                            r.month === selectedMonth + 1 && 
-                            r.year === selectedYear && 
-                            r.unit_id === selectedUnitId
-                        )
-                        if (!isInUnit) return false
-                    }
-
-                    return true
-                })
-                .map(t => {
-                    const nurse = data.nurses.find(n => n.id === t.nurse_id)
-                    return nurse ? `${nurse.name}${t.status === 'pending' ? '*' : ''}` : ''
-                })
-                .filter(Boolean)
-                .join(', ')
-            
-            if (!activeLeaves) return null
-
-            return (
-                <div key={type} className="bg-white text-black border border-black px-1 py-0.5 text-xs print:text-[10px] font-bold uppercase flex items-center">
-                    <span className="mr-2 whitespace-nowrap">{label}:</span>
-                    <span className="font-normal truncate">{activeLeaves}</span>
-                </div>
-            )
-        })}
-
-        {/* Footer Text Display */}
-        {footerText && (
-            <div className="mt-1 text-xs print:text-[8px] text-black whitespace-pre-wrap border p-2 rounded bg-gray-50 border-gray-200 print:border-none print:bg-white print:p-0">
-                {footerText}
-            </div>
-        )}
-
         {/* Electronic Release Signature */}
         {isScheduleReleased && (
-            <div className="mt-16 text-[11px] font-bold uppercase hidden print:block text-center border-t border-black pt-2 max-w-[400px] mx-auto">
-                LIBERADO ELETRONICAMENTE POR FERNANDO AUGUSTO SILVA RODRIGUES COREN 769194
+            <div className="mt-16 text-[11px] font-bold uppercase hidden print:block text-center max-w-[600px] mx-auto">
+                {data.releases?.find(r => r.month === selectedMonth + 1 && r.year === selectedYear && (selectedUnitId ? String(r.unit_id) === String(selectedUnitId) : !r.unit_id))?.release_signature || 'LIBERADO ELETRONICAMENTE'}
             </div>
         )}
 
@@ -3275,7 +3393,7 @@ export default function Schedule({
             padding-left: 5mm !important; /* Safety margin for paper edges */
             background-color: #ffffff !important;
             width: 100% !important;
-            zoom: 0.85; /* Better for print, doesn't leave gaps */
+            zoom: 0.95; /* Increased for better legibility */
             text-rendering: optimizeLegibility !important;
             -webkit-print-color-adjust: exact !important;
           }
@@ -3289,7 +3407,7 @@ export default function Schedule({
             }
           }
           .schedule-root * {
-            font-size: 12px !important;
+            font-size: 13px !important;
             color: inherit;
             border-color: black !important;
           }
@@ -3307,7 +3425,7 @@ export default function Schedule({
             font-size: 16px !important;
           }
           .schedule-root th {
-            font-size: 14px !important;
+            font-size: 16px !important;
           }
           .schedule-root td, .schedule-root th {
             color: black;
@@ -3365,7 +3483,7 @@ export default function Schedule({
       {/* Shift Management Modal */}
       {isShiftModalOpen && shiftModalData && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded shadow-lg w-full max-w-md">
+            <div className="bg-white p-6 rounded shadow-lg w-full max-w-xl">
                 <h3 className="font-bold text-lg mb-4 text-black border-b pb-2">
                     Gerenciar Plantão
                 </h3>
@@ -3413,6 +3531,20 @@ export default function Schedule({
                             MT
                         </button>
                         <button 
+                            onClick={() => handleSaveShifts('morning', 'mon_fri')}
+                            className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="Preencher Segunda a Sexta - Manhã (M)"
+                        >
+                            Seg a Sexta M
+                        </button>
+                        <button 
+                            onClick={() => handleSaveShifts('afternoon', 'mon_fri')}
+                            className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="Preencher Segunda a Sexta - Tarde (T)"
+                        >
+                            Seg a Sexta T
+                        </button>
+                        <button 
                             onClick={() => handleSaveShifts('dn', 'daily')}
                             className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher todo o mês com DN"
@@ -3425,6 +3557,13 @@ export default function Schedule({
                             title="DN Folga 4 (Repetir até o fim do mês)"
                         >
                             DN Folga 4
+                        </button>
+                        <button 
+                            onClick={() => handleSaveShifts('day', 'd_off2')}
+                            className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="D Folga 2 (Repetir até o fim do mês)"
+                        >
+                            D Folga 2
                         </button>
                         <button 
                             onClick={() => handleSaveShifts('nd', 'nd_off4')}
@@ -3598,7 +3737,9 @@ export default function Schedule({
                             ? 'Para permitir a troca de campos dinâmicos no cabeçalho, é necessário adicionar uma nova coluna ao banco de dados.'
                             : sqlModalType === 'V15'
                                 ? 'Para permitir o cadastro de CRM e Telefone, é necessário adicionar novas colunas à tabela de profissionais.'
-                                : 'Para permitir ocultar a coluna SETOR, é necessário adicionar uma nova coluna à tabela de metadados.'}
+                                : sqlModalType === 'V16'
+                                    ? 'Para permitir ocultar a coluna SETOR, é necessário adicionar uma nova coluna à tabela de metadados.'
+                                    : 'Para permitir gerenciar permissões por setor, é necessário criar uma tabela no banco de dados.'}
                     Como esta é uma operação de segurança, você precisa rodar manualmente no Supabase.
                 </p>
                 
@@ -3639,12 +3780,29 @@ ADD COLUMN IF NOT EXISTS dynamic_field TEXT DEFAULT 'coren';
 ALTER TABLE nurses 
 ADD COLUMN IF NOT EXISTS crm TEXT DEFAULT '',
 ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
-` : `-- Execute este código no SQL Editor do Supabase (V16):
+` : sqlModalType === 'V16' ? `-- Execute este código no SQL Editor do Supabase (V16):
 -- Este script adiciona a coluna is_setor_hidden na tabela de metadados.
 
 ALTER TABLE monthly_schedule_metadata 
 ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
-`}
+` : sqlModalType === 'V17' ? `-- Execute este código no SQL Editor do Supabase (V17):
+-- Este script cria a tabela de permissões de escala.
+
+CREATE TABLE IF NOT EXISTS scale_permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nurse_id UUID REFERENCES nurses(id) ON DELETE CASCADE,
+    unit_id UUID REFERENCES units(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(nurse_id, unit_id)
+);
+
+-- Habilitar RLS (Opcional, mas recomendado)
+ALTER TABLE scale_permissions ENABLE ROW LEVEL SECURITY;
+
+-- Política simples: apenas admins podem ver/editar
+CREATE POLICY "Admins can manage scale permissions" ON scale_permissions
+    FOR ALL USING (auth.jwt() ->> 'role' = 'ADMIN' OR auth.jwt() ->> 'role' = 'COORDENACAO_GERAL');
+` : ''}
                     </pre>
                 </div>
 
@@ -3791,15 +3949,214 @@ ADD COLUMN IF NOT EXISTS is_setor_hidden BOOLEAN DEFAULT FALSE;
         </div>
       )}
 
+      {/* Permission Manager Modal */}
+      {isPermissionManagerOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden">
+                <div className="bg-indigo-800 p-4 text-white flex items-center justify-between">
+                    <h3 className="font-bold flex items-center gap-2">
+                        <UserPlus size={18} />
+                        Gerenciar Permissões de Escala
+                    </h3>
+                    <button onClick={() => setIsPermissionManagerOpen(false)} className="hover:bg-white/20 p-1 rounded-full transition-colors">
+                        <X size={24} />
+                    </button>
+                </div>
+                
+                <div className="p-6 border-b bg-gray-50">
+                    <div className="flex flex-col gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Servidor</label>
+                                <select 
+                                    value={permissionNurseId}
+                                    onChange={e => {
+                                      setPermissionNurseId(e.target.value)
+                                      setPermissionUnitIds([])
+                                      setPermissionSelectAllUnits(false)
+                                      setPermissionUnitSearch('')
+                                    }}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-black focus:ring-2 focus:ring-indigo-500"
+                                >
+                                    <option value="">Selecione um servidor...</option>
+                                    {[...data.nurses].sort((a,b) => a.name.localeCompare(b.name)).map(n => (
+                                        <option key={n.id} value={n.id}>
+                                          {n.name}{n.vinculo ? ` (${n.vinculo})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Setores / Escalas</label>
+                                <div className="flex items-center justify-between gap-3 mb-2">
+                                  <label className="flex items-center gap-2 text-xs font-bold text-gray-700 uppercase">
+                                    <input
+                                      type="checkbox"
+                                      checked={permissionSelectAllUnits}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked
+                                        setPermissionSelectAllUnits(checked)
+                                        if (checked) {
+                                          setPermissionUnitIds([...data.units].map(u => u.id))
+                                        } else {
+                                          setPermissionUnitIds([])
+                                        }
+                                      }}
+                                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    Todas as escalas
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setPermissionUnitIds([])
+                                      setPermissionSelectAllUnits(false)
+                                      setPermissionUnitSearch('')
+                                    }}
+                                    className="text-xs font-bold text-gray-600 hover:text-gray-900 uppercase"
+                                  >
+                                    Limpar
+                                  </button>
+                                </div>
+
+                                <input
+                                  value={permissionUnitSearch}
+                                  onChange={(e) => setPermissionUnitSearch(e.target.value)}
+                                  placeholder="Pesquisar setor..."
+                                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-black focus:ring-2 focus:ring-indigo-500 mb-2"
+                                />
+
+                                <div className="bg-white border border-gray-200 rounded-lg p-2 max-h-[160px] overflow-y-auto">
+                                  {[...data.units]
+                                    .sort((a, b) => a.title.localeCompare(b.title))
+                                    .filter(u => u.title.toLowerCase().includes(permissionUnitSearch.toLowerCase().trim()))
+                                    .map(u => {
+                                      const checked = permissionUnitIds.includes(u.id)
+                                      return (
+                                        <label key={u.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            disabled={permissionSelectAllUnits}
+                                            onChange={(e) => {
+                                              const isChecked = e.target.checked
+                                              setPermissionUnitIds(prev => {
+                                                const next = isChecked ? Array.from(new Set([...prev, u.id])) : prev.filter(id => id !== u.id)
+                                                setPermissionSelectAllUnits(next.length > 0 && next.length === data.units.length)
+                                                return next
+                                              })
+                                            }}
+                                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                                          />
+                                          <span className="text-sm text-gray-800">{u.title}</span>
+                                        </label>
+                                      )
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={async () => {
+                                if (!permissionNurseId) {
+                                  alert('Selecione o servidor.')
+                                  return
+                                }
+
+                                const targetUnitIds = permissionSelectAllUnits ? [...data.units].map(u => u.id) : permissionUnitIds
+                                if (targetUnitIds.length === 0) {
+                                  alert('Selecione pelo menos um setor, ou marque "Todas as escalas".')
+                                  return
+                                }
+
+                                const res = targetUnitIds.length === 1
+                                  ? await addScalePermission(permissionNurseId, targetUnitIds[0])
+                                  : await addScalePermissions(permissionNurseId, targetUnitIds)
+                                if (res.success) {
+                                    const p = await getScalePermissions()
+                                    setPermissions(p)
+                                    setPermissionNurseId('')
+                                    setPermissionUnitIds([])
+                                    setPermissionSelectAllUnits(false)
+                                    setPermissionUnitSearch('')
+                                } else {
+                                    if (res.message === 'DATABASE_V17_REQUIRED') {
+                                        setSqlModalType('V17')
+                                        setShowSqlModal(true)
+                                    } else {
+                                        alert(res.message)
+                                    }
+                                }
+                            }}
+                            className="bg-indigo-600 text-white font-bold py-2 rounded-lg hover:bg-indigo-700 transition-colors uppercase text-xs tracking-widest shadow-md"
+                        >
+                            Vincular Servidor à Escala
+                        </button>
+                    </div>
+                </div>
+
+                <div className="p-6 overflow-y-auto max-h-[40vh]">
+                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-4 tracking-widest">Permissões Ativas</h4>
+                    <div className="space-y-2">
+                        {permissions.length === 0 ? (
+                            <p className="text-sm text-gray-400 italic text-center py-4">Nenhuma permissão específica cadastrada.</p>
+                        ) : (
+                            permissions.map(p => (
+                                <div key={p.id} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-gray-800 text-sm uppercase">
+                                            {p.nurses?.name || data.nurses.find(n => n.id === p.nurse_id)?.name || 'Servidor'}
+                                        </span>
+                                        {(p.nurses?.vinculo || data.nurses.find(n => n.id === p.nurse_id)?.vinculo) && (
+                                          <span className="text-[11px] text-gray-500 font-medium">
+                                            Perfil: {p.nurses?.vinculo || data.nurses.find(n => n.id === p.nurse_id)?.vinculo}
+                                          </span>
+                                        )}
+                                        <span className="text-xs text-indigo-600 font-medium">
+                                            Acesso ao Setor: {p.units?.title || data.units.find(u => u.id === p.unit_id)?.title || 'Setor'}
+                                        </span>
+                                    </div>
+                                    <button 
+                                        onClick={async () => {
+                                            if (confirm('Remover esta permissão de edição?')) {
+                                                const res = await removeScalePermission(p.id)
+                                                if (res.success) {
+                                                    const pList = await getScalePermissions()
+                                                    setPermissions(pList)
+                                                } else alert(res.message)
+                                            }
+                                        }}
+                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Remover permissão"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 border-t flex justify-end">
+                    <button 
+                        onClick={() => setIsPermissionManagerOpen(false)}
+                        className="px-6 py-2 bg-gray-800 text-white font-bold rounded-xl hover:bg-black transition-colors uppercase text-xs tracking-widest"
+                    >
+                        Concluir
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* QR Code in the bottom right corner of the print layout */}
-      <div className="hidden print:flex fixed bottom-2 right-2 flex-col items-center gap-0.5 z-[9999] opacity-80">
+      <div className="hidden print:flex fixed bottom-2 right-2 flex-col items-center gap-0.5 z-[9999] opacity-90">
           <QRCodeSVG 
               value={typeof window !== 'undefined' ? `${window.location.origin}/?unit=${selectedUnitId}&month=${selectedMonth + 1}&year=${selectedYear}` : ''} 
-              size={55}
-              level="M"
-              includeMargin={false}
+              size={85}
+              level="H"
+              includeMargin={true}
           />
-          <span className="text-[6px] font-bold text-black uppercase tracking-tighter">Autenticidade</span>
+          <span className="text-[8px] font-bold text-black uppercase tracking-tight">Autenticidade</span>
       </div>
     </div>
   )

@@ -21,6 +21,13 @@ export interface Unit {
   title: string
 }
 
+export interface ScalePermission {
+  id: string
+  nurse_id: string
+  unit_id: string
+  created_at?: string
+}
+
 export async function getSystemRoles() {
   const defaultRoles = [
     { id: 'ADMIN', label: 'Administrador' },
@@ -279,10 +286,68 @@ export async function checkAdmin() {
   const session = cookies().get('session_user')
   if (!session) throw new Error('Unauthorized')
   const user = JSON.parse(session.value)
-  // TRAVAMENTO REMOVIDO: Qualquer usuário logado pode realizar ações de salvamento.
-  const isAdmin = true 
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
   if (!isAdmin) throw new Error('Forbidden: Admin access required')
   return user
+}
+
+/**
+ * Enhanced checkAdmin that also allows users with specific scale permissions
+ * for a given unit.
+ */
+export async function checkScaleEditor(unitId?: string | null) {
+  const session = cookies().get('session_user')
+  if (!session) throw new Error('Unauthorized')
+  const user = JSON.parse(session.value)
+  
+  // ADMIN and COORDENACAO_GERAL always have access
+  if (user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367') {
+    return user
+  }
+
+  // If no unitId is provided, only global admins can pass
+  if (!unitId) {
+    throw new Error('Acesso negado: Requer privilégios de administrador global')
+  }
+
+  // Check for specific unit permission
+  if (isLocalMode()) {
+    const db = readDb()
+    const hasPerm = (db.scale_permissions || []).some(
+      (p: any) => String(p.nurse_id) === String(user.id) && String(p.unit_id) === String(unitId)
+    )
+    if (hasPerm) return user
+  } else {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('scale_permissions')
+      .select('id')
+      .eq('nurse_id', user.id)
+      .eq('unit_id', unitId)
+      .maybeSingle()
+    
+    if (data) return user
+  }
+
+  throw new Error('Acesso negado: Você não tem permissão para gerenciar as escalas deste setor.')
+}
+
+async function getUnitIdByRosterId(rosterId: string): Promise<string | null> {
+  if (!rosterId) return null
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const r = (db.monthly_rosters || []).find((x: any) => String(x.id) === String(rosterId))
+    return r ? (r.unit_id || null) : null
+  }
+
+  const supabase = createClient()
+  const { data } = await supabase
+    .from('monthly_rosters')
+    .select('unit_id')
+    .eq('id', rosterId)
+    .maybeSingle()
+  return (data as any)?.unit_id || null
 }
 
 export async function checkUser() {
@@ -321,6 +386,215 @@ export async function logLogin(userId: string, userName: string, userRole: strin
     user_role: userRole
   })
   if (error) return { success: false, message: error.message }
+  return { success: true }
+}
+
+export async function getScalePermissions() {
+  try {
+    await checkGeneralAdmin()
+  } catch (e) {
+    return []
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    return db.scale_permissions || []
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('scale_permissions')
+    .select('*, nurses(name,vinculo,role,cpf), units(title)')
+    .order('created_at', { ascending: false })
+  
+  if (error) {
+    console.error('Permission Fetch Error:', error)
+    if (error.message.includes('scale_permissions')) {
+      throw new Error('DATABASE_V17_REQUIRED')
+    }
+    return []
+  }
+  
+  return data || []
+}
+
+export async function getMyScalePermissionUnitIds() {
+  let user: any
+  try {
+    user = await checkUser()
+  } catch (e) {
+    return []
+  }
+
+  if (user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367') {
+    return ['*']
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    return (db.scale_permissions || [])
+      .filter((p: any) => String(p.nurse_id) === String(user.id))
+      .map((p: any) => p.unit_id)
+      .filter(Boolean)
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('scale_permissions')
+    .select('unit_id')
+    .eq('nurse_id', user.id)
+
+  if (error) return []
+  return (data || []).map((d: any) => d.unit_id).filter(Boolean)
+}
+
+export async function getEditableUnits() {
+  let user: any
+  try {
+    user = await checkUser()
+  } catch (e) {
+    return []
+  }
+
+  const isGlobalAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const units = db.units || []
+    if (isGlobalAdmin) return units
+    const allowedUnitIds = new Set(
+      (db.scale_permissions || [])
+        .filter((p: any) => String(p.nurse_id) === String(user.id))
+        .map((p: any) => String(p.unit_id))
+    )
+    return units.filter((u: any) => allowedUnitIds.has(String(u.id)))
+  }
+
+  const supabase = createClient()
+  if (isGlobalAdmin) {
+    const { data, error } = await supabase.from('units').select('id,title').order('title', { ascending: true })
+    if (error) return []
+    return data || []
+  }
+
+  const { data, error } = await supabase
+    .from('scale_permissions')
+    .select('units(id,title)')
+    .eq('nurse_id', user.id)
+
+  if (error) return []
+  const mapped = (data || []).map((row: any) => row.units).filter(Boolean)
+  mapped.sort((a: any, b: any) => String(a.title || '').localeCompare(String(b.title || '')))
+  return mapped
+}
+
+export async function addScalePermission(nurseId: string, unitId: string) {
+  try {
+    await checkGeneralAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.scale_permissions = db.scale_permissions || []
+    if (!db.scale_permissions.find((p: any) => p.nurse_id === nurseId && p.unit_id === unitId)) {
+      db.scale_permissions.push({
+        id: randomUUID(),
+        nurse_id: nurseId,
+        unit_id: unitId,
+        created_at: new Date().toISOString()
+      })
+      writeDb(db)
+    }
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('scale_permissions')
+    .insert({ nurse_id: nurseId, unit_id: unitId })
+
+  if (error) {
+    console.error('Permission Add Error:', error)
+    if (error.message.includes('scale_permissions')) {
+      return { success: false, message: 'DATABASE_V17_REQUIRED' }
+    }
+    return { success: false, message: error.message }
+  }
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function addScalePermissions(nurseId: string, unitIds: string[]) {
+  try {
+    await checkGeneralAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const ids = Array.from(new Set((unitIds || []).filter(Boolean).map(String)))
+  if (!nurseId || ids.length === 0) {
+    return { success: false, message: 'Selecione o servidor e pelo menos um setor.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.scale_permissions = db.scale_permissions || []
+    ids.forEach(unitId => {
+      if (!db.scale_permissions.find((p: any) => p.nurse_id === nurseId && p.unit_id === unitId)) {
+        db.scale_permissions.push({
+          id: randomUUID(),
+          nurse_id: nurseId,
+          unit_id: unitId,
+          created_at: new Date().toISOString()
+        })
+      }
+    })
+    writeDb(db)
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const rows = ids.map(unitId => ({ nurse_id: nurseId, unit_id: unitId }))
+  const { error } = await supabase
+    .from('scale_permissions')
+    .upsert(rows, { onConflict: 'nurse_id,unit_id', ignoreDuplicates: true })
+
+  if (error) {
+    console.error('Permission Bulk Add Error:', error)
+    if (error.message.includes('scale_permissions')) {
+      return { success: false, message: 'DATABASE_V17_REQUIRED' }
+    }
+    return { success: false, message: error.message }
+  }
+
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function removeScalePermission(permissionId: string) {
+  try {
+    await checkGeneralAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.scale_permissions = (db.scale_permissions || []).filter((p: any) => p.id !== permissionId)
+    writeDb(db)
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('scale_permissions')
+    .delete()
+    .eq('id', permissionId)
+
+  if (error) return { success: false, message: error.message }
+  revalidatePath('/')
   return { success: true }
 }
 
@@ -2389,6 +2663,28 @@ export async function releaseSchedule(month: number, year: number, unitId: strin
       await checkAdmin()
       const session = cookies().get('session_user')
       const user = JSON.parse(session!.value)
+      
+      // Get current nurse info for the signature
+      let nurseName = user.name
+      let nurseCoren = ''
+      
+      if (isLocalMode()) {
+          const db = readDb()
+          const n = db.nurses.find((n: any) => n.id === user.id)
+          if (n) {
+              nurseName = n.name
+              nurseCoren = n.coren || ''
+          }
+      } else {
+          const supabase = createClient()
+          const { data: n } = await supabase.from('nurses').select('name, coren').eq('id', user.id).single()
+          if (n) {
+              nurseName = n.name
+              nurseCoren = n.coren || ''
+          }
+      }
+
+      const signature = `LIBERADO ELETRONICAMENTE POR ${nurseName.toUpperCase()} ${nurseCoren ? `COREN ${nurseCoren}` : ''}`.trim()
 
       if (isLocalMode()) {
          const db = readDb()
@@ -2402,7 +2698,8 @@ export async function releaseSchedule(month: number, year: number, unitId: strin
              is_released: true,
              released_at: new Date().toISOString(),
              updated_at: new Date().toISOString(),
-             released_by: user.id
+             released_by: user.id,
+             release_signature: signature
          }
 
          if (existingIndex >= 0) {
@@ -2427,7 +2724,8 @@ export async function releaseSchedule(month: number, year: number, unitId: strin
           const { error } = await supabase.from('monthly_schedule_metadata').update({
               is_released: true,
               released_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              release_signature: signature
           }).eq('id', existing.id)
           if (error) throw error
       } else {
@@ -2435,7 +2733,8 @@ export async function releaseSchedule(month: number, year: number, unitId: strin
               month,
               year,
               is_released: true,
-              released_at: new Date().toISOString()
+              released_at: new Date().toISOString(),
+              release_signature: signature
           }
           if (unitId) payload.unit_id = unitId
 
@@ -2520,6 +2819,7 @@ export async function unreleaseSchedule(month: number, year: number, unitId: str
         if (existingIndex >= 0) {
             db.monthly_schedule_metadata[existingIndex].is_released = false
             db.monthly_schedule_metadata[existingIndex].updated_at = new Date().toISOString()
+            db.monthly_schedule_metadata[existingIndex].release_signature = null
             writeDb(db)
         }
         revalidatePath('/')
@@ -2537,7 +2837,8 @@ export async function unreleaseSchedule(month: number, year: number, unitId: str
       if (existing) {
           const { error } = await supabase.from('monthly_schedule_metadata').update({
               is_released: false,
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              release_signature: null
           }).eq('id', existing.id)
           if (error) throw error
       }
@@ -2760,10 +3061,11 @@ export async function updateScheduleSetorVisibility(month: number, year: number,
       return { success: true }
   } catch(e: any) {
        console.error('Setor Visibility Error:', e)
-       if (e.message?.includes('column "is_setor_hidden" does not exist')) {
-           return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V16). Solicite ao suporte para rodar o script de visibilidade do setor.' }
+       const errorMsg = e.message || ''
+       if (errorMsg.includes('column "is_setor_hidden" does not exist') || errorMsg.includes("'is_setor_hidden' column") || errorMsg.includes('is_setor_hidden')) {
+           return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V16). Solicite ao suporte para rodar o script de visibilidade do setor ou utilize o botão de atualização se disponível.' }
        }
-       return { success: false, message: 'Erro ao salvar visibilidade do setor: ' + (e.message || 'Erro desconhecido') }
+       return { success: false, message: 'Erro ao salvar visibilidade do setor: ' + (errorMsg || 'Erro desconhecido') }
    }
 }
 
@@ -3135,7 +3437,7 @@ export async function assignNurseToRoster(
   skipRevalidate: boolean = false
 ) {
   try {
-    await checkAdmin()
+    await checkScaleEditor(unitId)
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
@@ -3360,7 +3662,8 @@ export async function removeNurseFromRoster(nurseId: string, month: number, year
 
 export async function removeRosterEntry(rosterId: string) {
   try {
-    await checkAdmin()
+    const unitId = await getUnitIdByRosterId(rosterId)
+    await checkScaleEditor(unitId)
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
@@ -3368,6 +3671,9 @@ export async function removeRosterEntry(rosterId: string) {
   if (isLocalMode()) {
     const db = readDb()
     if (db.monthly_rosters) {
+        // DELETE SHIFTS FIRST
+        db.shifts = (db.shifts || []).filter((s: any) => s.roster_id !== rosterId)
+        // THEN DELETE ROSTER ENTRY
         db.monthly_rosters = db.monthly_rosters.filter(r => r.id !== rosterId)
         writeDb(db)
     }
@@ -3376,6 +3682,18 @@ export async function removeRosterEntry(rosterId: string) {
   }
 
   const supabase = createClient()
+  
+  // DELETE SHIFTS FIRST TO AVOID FK CONSTRAINTS
+  const { error: shiftsError } = await supabase
+    .from('shifts')
+    .delete()
+    .eq('roster_id', rosterId)
+  
+  if (shiftsError) {
+      console.error('Error deleting shifts before removing professional:', shiftsError)
+      return { success: false, message: shiftsError.message }
+  }
+
   const { error } = await supabase
     .from('monthly_rosters')
     .delete()
@@ -3703,7 +4021,8 @@ export async function getNurseSectorHistory(nurseId: string) {
 
 export async function updateRosterObservation(rosterId: string, observation: string) {
   try {
-    await checkAdmin()
+    const unitId = await getUnitIdByRosterId(rosterId)
+    await checkScaleEditor(unitId)
     
     if (isLocalMode()) {
       const db = readDb()
@@ -3734,7 +4053,8 @@ export async function updateRosterObservation(rosterId: string, observation: str
 
 export async function updateRosterSector(rosterId: string, sector: string) {
   try {
-    await checkAdmin()
+    const unitId = await getUnitIdByRosterId(rosterId)
+    await checkScaleEditor(unitId)
     
     if (isLocalMode()) {
       const db = readDb()
@@ -3802,7 +4122,8 @@ export async function updateRosterSector(rosterId: string, sector: string) {
 
 export async function updateRosterCoren(rosterId: string, coren: string) {
   try {
-    await checkAdmin()
+    const unitId = await getUnitIdByRosterId(rosterId)
+    await checkScaleEditor(unitId)
     
     if (isLocalMode()) {
       const db = readDb()
@@ -3859,7 +4180,8 @@ export async function updateRosterCoren(rosterId: string, coren: string) {
 
 export async function updateRosterOrder(rosterId: string, listOrder: number | null) {
   try {
-    await checkAdmin()
+    const unitId = await getUnitIdByRosterId(rosterId)
+    await checkScaleEditor(unitId)
 
     if (isLocalMode()) {
       const db = readDb()
@@ -3890,7 +4212,11 @@ export async function updateRosterOrder(rosterId: string, listOrder: number | nu
 
 export async function resetSectionOrder(sectionId: string, unitId: string | null, month: number, year: number, startRosterId?: string, orderedRosterIds?: string[], startNumber: number = 1) {
   try {
-    await checkAdmin()
+    if (unitId === 'ALL') {
+      await checkAdmin()
+    } else {
+      await checkScaleEditor(unitId)
+    }
 
     if (isLocalMode()) {
       const db = readDb()
@@ -4155,7 +4481,19 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
 
 export async function updateRosterListOrders(updates: { id: string, list_order: number }[]) {
   try {
-    await checkAdmin()
+    const rosterIds = Array.from(new Set((updates || []).map(u => u.id).filter(Boolean))) as string[]
+    if (rosterIds.length === 0) {
+      await checkAdmin()
+    } else {
+      const unitIds: (string | null)[] = []
+      for (const rosterId of rosterIds) {
+        unitIds.push(await getUnitIdByRosterId(rosterId))
+      }
+      const uniqueUnitIds = Array.from(new Set(unitIds.map(x => x || ''))).filter(Boolean)
+      for (const unitId of uniqueUnitIds) {
+        await checkScaleEditor(unitId)
+      }
+    }
     
     if (isLocalMode()) {
       const db = readDb()
@@ -4814,6 +5152,16 @@ export async function deleteSection(id: string) {
 
   if (isLocalMode()) {
     const db = readDb()
+    
+    // Cleanup rosters and shifts first
+    const rostersToDelete = (db.monthly_rosters || []).filter((r: any) => r.section_id === id)
+    const rosterIds = rostersToDelete.map((r: any) => r.id)
+    
+    if (rosterIds.length > 0) {
+         db.shifts = (db.shifts || []).filter((s: any) => !rosterIds.includes(s.roster_id))
+         db.monthly_rosters = db.monthly_rosters.filter((r: any) => !rosterIds.includes(r.id))
+    }
+
     db.schedule_sections = db.schedule_sections.filter(s => s.id !== id)
     // Update nurses in this section to null or default? For now null.
     db.nurses.forEach(n => {
@@ -4826,6 +5174,15 @@ export async function deleteSection(id: string) {
 
   const supabase = createClient()
   
+  // Cleanup related data first to avoid FK constraints
+  const { data: rosters } = await supabase.from('monthly_rosters').select('id').eq('section_id', id)
+  const rosterIds = rosters?.map(r => r.id) || []
+  
+  if (rosterIds.length > 0) {
+       await supabase.from('shifts').delete().in('roster_id', rosterIds)
+       await supabase.from('monthly_rosters').delete().in('id', rosterIds)
+  }
+
   // Reset nurses section_id before deleting the section to avoid FK constraints
   await supabase.from('nurses').update({ section_id: null }).eq('section_id', id)
 
@@ -4841,7 +5198,19 @@ export async function deleteSection(id: string) {
 export async function saveShifts(shifts: { nurseId: string, rosterId?: string, date: string, type: string }[]) {
   // 0. Acesso e Validação básica
   try {
-    await checkAdmin()
+    const rosterIds = Array.from(new Set((shifts || []).map(s => s.rosterId).filter(Boolean))) as string[]
+    if (rosterIds.length === 0) {
+      await checkAdmin()
+    } else {
+      const unitIds: (string | null)[] = []
+      for (const rosterId of rosterIds) {
+        unitIds.push(await getUnitIdByRosterId(rosterId))
+      }
+      const uniqueUnitIds = Array.from(new Set(unitIds.map(x => x || ''))).filter(Boolean)
+      for (const unitId of uniqueUnitIds) {
+        await checkScaleEditor(unitId)
+      }
+    }
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
@@ -4966,11 +5335,13 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
         deletePromises.push(query)
     }
 
-    // PASSO 1: Limpar APENAS as datas que serão afetadas
-    console.log(`[saveShifts] Executando ${deletePromises.length} limpezas pontuais...`)
-    const deleteResults = await Promise.all(deletePromises)
-    const deleteErrors = deleteResults.filter(r => r.error).map(r => r.error!.message)
-    if (deleteErrors.length > 0) throw new Error(`Erro na limpeza pontual: ${deleteErrors.join(', ')}`)
+    // PASSO 1: Limpar APENAS as datas que serão afetadas (Somente se houver algo para inserir ou deletar explicitamente)
+    if (deletePromises.length > 0) {
+        console.log(`[saveShifts] Executando ${deletePromises.length} limpezas pontuais...`)
+        const deleteResults = await Promise.all(deletePromises)
+        const deleteErrors = deleteResults.filter(r => r.error).map(r => r.error!.message)
+        if (deleteErrors.length > 0) throw new Error(`Erro na limpeza pontual: ${deleteErrors.join(', ')}`)
+    }
 
     // PASSO 2: Inserir o novo estado
     if (allInserts.length > 0) {

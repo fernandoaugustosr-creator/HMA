@@ -3,7 +3,7 @@ import Schedule from '@/components/Schedule'
 
 export const dynamic = 'force-dynamic'
 
-export default function SchedulePage({ searchParams }: { searchParams?: { tab?: string } }) {
+export default function SchedulePage({ searchParams }: { searchParams?: { tab?: string, unit?: string } }) {
   const session = cookies().get('session_user')
   const user = session ? JSON.parse(session.value) : null
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
@@ -18,7 +18,7 @@ export default function SchedulePage({ searchParams }: { searchParams?: { tab?: 
           </p>
         </div>
       )}
-      <Schedule isAdmin={isAdmin} />
+      <Schedule isAdmin={isAdmin} initialUnitId={searchParams?.unit} />
     </div>
   )
 }

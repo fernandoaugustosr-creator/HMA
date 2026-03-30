@@ -128,6 +128,8 @@ export async function deleteUnit(id: string) {
     await supabase.from('time_off_requests').delete().eq('unit_id', id)
     await supabase.from('monthly_schedule_metadata').delete().eq('unit_id', id)
     await supabase.from('monthly_notes').delete().eq('unit_id', id)
+    await supabase.from('app_settings').delete().eq('key', `unit_number_${id}`)
+    await supabase.from('absences').delete().eq('unit_id', id)
 
     // Reset nurses unit_id before deleting the unit to avoid FK constraints
     await supabase.from('nurses').update({ unit_id: null }).eq('unit_id', id)

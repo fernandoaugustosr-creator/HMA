@@ -7,6 +7,7 @@
 -- 1. EXTENSÕES
 -- ==============================================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ==============================================================================
 -- 2. TABELAS (Versão mais recente)
@@ -33,11 +34,13 @@ CREATE TABLE IF NOT EXISTS units (
 CREATE TABLE IF NOT EXISTS nurses (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
-  cpf TEXT UNIQUE NOT NULL,
+  cpf TEXT NOT NULL,
   password TEXT NOT NULL DEFAULT '123456',
   coren TEXT,
+  crm TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
   role TEXT DEFAULT 'ENFERMEIRO',
-  vinculo TEXT,
+  vinculo TEXT DEFAULT '',
   section_id UUID REFERENCES schedule_sections(id) ON DELETE SET NULL,
   unit_id UUID REFERENCES units(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -52,8 +55,8 @@ CREATE TABLE IF NOT EXISTS monthly_rosters (
   month INTEGER NOT NULL,
   year INTEGER NOT NULL,
   observation TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-  UNIQUE(nurse_id, month, year)
+  list_order INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Plantões (Shifts) - com roster_id
@@ -88,7 +91,10 @@ CREATE TABLE IF NOT EXISTS monthly_schedule_metadata (
   is_released BOOLEAN DEFAULT FALSE,
   released_at TIMESTAMP WITH TIME ZONE,
   released_by UUID,
+  release_signature TEXT,
   footer_text TEXT,
+  dynamic_field TEXT DEFAULT 'coren',
+  is_setor_hidden BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   UNIQUE(month, year, unit_id)
 );
@@ -164,6 +170,25 @@ CREATE TABLE IF NOT EXISTS login_logs (
     login_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
+-- Auditoria (V18)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES nurses(id) ON DELETE SET NULL,
+    user_name TEXT,
+    action TEXT NOT NULL,
+    details JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Permissões por Setor (V17 - Permissões de escala)
+CREATE TABLE IF NOT EXISTS scale_permissions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    nurse_id UUID REFERENCES nurses(id) ON DELETE CASCADE,
+    unit_id UUID REFERENCES units(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(nurse_id, unit_id)
+);
+
 -- ==============================================================================
 -- 3. AJUSTES E ÍNDICES (inclui correção V17)
 -- ==============================================================================
@@ -183,15 +208,61 @@ BEGIN
     END IF;
 END $$;
 
+-- Garantir colunas novas (V9, V15, V17)
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'monthly_rosters' AND column_name = 'list_order') THEN
+        ALTER TABLE monthly_rosters ADD COLUMN list_order INTEGER;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'nurses' AND column_name = 'crm') THEN
+        ALTER TABLE nurses ADD COLUMN crm TEXT DEFAULT '';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'nurses' AND column_name = 'phone') THEN
+        ALTER TABLE nurses ADD COLUMN phone TEXT DEFAULT '';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'monthly_schedule_metadata' AND column_name = 'dynamic_field') THEN
+        ALTER TABLE monthly_schedule_metadata ADD COLUMN dynamic_field TEXT DEFAULT 'coren';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'monthly_schedule_metadata' AND column_name = 'is_setor_hidden') THEN
+        ALTER TABLE monthly_schedule_metadata ADD COLUMN is_setor_hidden BOOLEAN DEFAULT FALSE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'monthly_schedule_metadata' AND column_name = 'release_signature') THEN
+        ALTER TABLE monthly_schedule_metadata ADD COLUMN release_signature TEXT;
+    END IF;
+END $$;
+
+-- Remover unicidade que impede Escala Dupla no roster (V11/V19)
+ALTER TABLE monthly_rosters DROP CONSTRAINT IF EXISTS monthly_rosters_nurse_id_month_year_key;
+
+-- CPF único por vínculo (V13)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nurses_cpf_key') THEN
+        ALTER TABLE nurses DROP CONSTRAINT nurses_cpf_key;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nurses_cpf_vinculo_key') THEN
+        ALTER TABLE nurses ADD CONSTRAINT nurses_cpf_vinculo_key UNIQUE (cpf, vinculo);
+    END IF;
+END $$;
+
 -- Índices de notas / metadados / performance
 CREATE UNIQUE INDEX IF NOT EXISTS monthly_notes_month_year_unit_idx ON monthly_notes (month, year, unit_id) WHERE unit_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS monthly_notes_month_year_no_unit_idx ON monthly_notes (month, year) WHERE unit_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_monthly_schedule_metadata_lookup ON monthly_schedule_metadata (month, year, unit_id);
 CREATE INDEX IF NOT EXISTS idx_shifts_date ON shifts(date);
 CREATE INDEX IF NOT EXISTS idx_shifts_nurse ON shifts(nurse_id);
+CREATE INDEX IF NOT EXISTS idx_shifts_roster_performance ON shifts(roster_id);
 CREATE INDEX IF NOT EXISTS idx_time_off_requests_status ON time_off_requests(status);
 CREATE INDEX IF NOT EXISTS idx_time_off_requests_dates ON time_off_requests(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_time_off_requests_unit_id ON time_off_requests(unit_id);
 CREATE INDEX IF NOT EXISTS idx_monthly_rosters_month_year_unit ON monthly_rosters(month, year, unit_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_rosters_nurse_id ON monthly_rosters(nurse_id);
+CREATE INDEX IF NOT EXISTS idx_nurses_cpf ON nurses(cpf);
 
 -- Corrigir índices de escala dupla (V17)
 DROP INDEX IF EXISTS idx_shifts_roster_date_unique;
@@ -221,6 +292,8 @@ ALTER TABLE payment_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE general_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shift_swaps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE login_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scale_permissions ENABLE ROW LEVEL SECURITY;
 
 DO $$ 
 BEGIN
@@ -265,15 +338,21 @@ BEGIN
 
     DROP POLICY IF EXISTS "Public access login_logs" ON login_logs;
     CREATE POLICY "Public access login_logs" ON login_logs FOR ALL USING (true) WITH CHECK (true);
+
+    DROP POLICY IF EXISTS "Public access audit_logs" ON audit_logs;
+    CREATE POLICY "Public access audit_logs" ON audit_logs FOR ALL USING (true) WITH CHECK (true);
+
+    DROP POLICY IF EXISTS "Public access scale_permissions" ON scale_permissions;
+    CREATE POLICY "Public access scale_permissions" ON scale_permissions FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 -- ==============================================================================
 -- 5. DADOS INICIAIS
 -- ==============================================================================
 
-INSERT INTO nurses (name, cpf, password, role)
-SELECT 'Administrador', '02170025367', '123456', 'ADMIN'
-WHERE NOT EXISTS (SELECT 1 FROM nurses WHERE cpf = '02170025367');
+INSERT INTO nurses (name, cpf, password, role, vinculo)
+SELECT 'Administrador', '02170025367', '123456', 'ADMIN', 'ADMIN'
+WHERE NOT EXISTS (SELECT 1 FROM nurses WHERE cpf = '02170025367' AND vinculo = 'ADMIN');
 
 INSERT INTO app_settings (key, bool_value)
 VALUES ('allow_same_day_swap', FALSE)
