@@ -226,12 +226,26 @@ export default function Schedule({
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(() => {
     if (initialMonth !== undefined) return initialMonth
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('enf_hma_last_month')
+      if (stored !== null && stored !== '') {
+        const parsed = parseInt(stored, 10)
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 11) return parsed
+      }
+    }
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     return nextMonth.getMonth()
   })
   const [selectedYear, setSelectedYear] = useState(() => {
     if (initialYear !== undefined) return initialYear
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('enf_hma_last_year')
+      if (stored !== null && stored !== '') {
+        const parsed = parseInt(stored, 10)
+        if (!isNaN(parsed)) return parsed
+      }
+    }
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     return nextMonth.getFullYear()
@@ -241,7 +255,13 @@ export default function Schedule({
   const [isFetchingAllNurses, setIsFetchingAllNurses] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
+  const [selectedUnitId, setSelectedUnitId] = useState<string>(() => {
+    if (initialUnitId) return initialUnitId
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('enf_hma_last_unit') || ''
+    }
+    return ''
+  })
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
   
@@ -634,6 +654,13 @@ export default function Schedule({
     if (l3) setHeaderLine3(l3)
     if (pg) setHeaderPage(pg)
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('enf_hma_last_month', String(selectedMonth))
+    localStorage.setItem('enf_hma_last_year', String(selectedYear))
+    if (selectedUnitId) localStorage.setItem('enf_hma_last_unit', String(selectedUnitId))
+  }, [selectedMonth, selectedYear, selectedUnitId])
   
   useEffect(() => {
     async function refreshUnitNumber() {
@@ -944,7 +971,13 @@ export default function Schedule({
   const handleClearSchedule = async () => {
     if (isScheduleReleased) return
     if (!selectedUnitId) return alert('Selecione um setor para excluir a escala')
-    if (!confirm('Tem certeza que deseja EXCLUIR TODA a escala deste mês para este setor? Esta ação removerá todos os profissionais e plantões deste mês e não poderá ser desfeita.')) return
+    const unitName = data.units.find(u => String(u.id) === String(selectedUnitId))?.title || 'SETOR'
+    if (!confirm(`Tem certeza que deseja EXCLUIR TODA a escala de ${MONTHS[selectedMonth]} / ${selectedYear} para o setor "${unitName}"?\n\nEsta ação removerá todos os profissionais e plantões deste mês e não poderá ser desfeita.`)) return
+    const code = prompt(`Para confirmar, digite: EXCLUIR ${MONTHS[selectedMonth].toUpperCase()} ${selectedYear}`)
+    if (!code || code.trim().toUpperCase() !== `EXCLUIR ${MONTHS[selectedMonth].toUpperCase()} ${selectedYear}`) {
+      alert('Operação cancelada. Código de confirmação incorreto.')
+      return
+    }
     
     setLoading(true)
     const res = await clearMonthlySchedule(selectedMonth + 1, selectedYear, selectedUnitId)
@@ -1614,17 +1647,22 @@ export default function Schedule({
             return { ...prev, shifts: filteredShifts }
         })
 
-        // 2. IMMEDIATE SERVER SAVE (Optional but requested for automation)
-        // If it's an automation, we save immediately to prevent data loss on such a large operation
-        if (targetRecurrence !== 'none') {
-            console.log(`[handleSaveShifts] Salvando automação no servidor...`)
-            const res = await saveShifts(shiftsToSave as any)
-            if (res.success) {
-                console.log(`[handleSaveShifts] Salvamento concluído. Atualizando dados...`)
-                await fetchData(true)
-            } else {
-                alert(res.message || 'Erro ao salvar automação no servidor.')
-            }
+        const shiftsToPersist = targetRecurrence === 'none'
+          ? [{
+              nurseId: shiftModalData.nurseId,
+              rosterId: shiftModalData.rosterId,
+              date: shiftModalData.date,
+              type: targetType === 'delete' ? 'DELETE' : targetType
+            }]
+          : shiftsToSave
+
+        const res = await saveShifts(shiftsToPersist as any)
+        if (res.success) {
+            clearCache()
+            await fetchData(true, false)
+        } else {
+            alert(res.message || 'Erro ao salvar plantões.')
+            await fetchData(true, false)
         }
 
         setIsShiftModalOpen(false)
@@ -2808,6 +2846,11 @@ export default function Schedule({
                }
                return (
                  <div className="w-full">
+                 {!isLaunched && !printOnly && (
+                   <div className="no-print mb-4 p-3 rounded border border-yellow-200 bg-yellow-50 text-yellow-900 text-sm font-medium">
+                     Nenhum profissional lançado para {MONTHS[selectedMonth]} / {selectedYear} neste setor. Se você já lançou em outro mês, selecione o Mês/Ano no topo.
+                   </div>
+                 )}
                  {visibleSections.map((section, index) => (
                     <div key={section.id} className="mb-8 last:mb-0 w-full">
                        <table className="table-fixed border-collapse border border-black text-black text-[9px] print:text-[11px] w-full">

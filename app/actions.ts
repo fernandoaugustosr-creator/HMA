@@ -3080,6 +3080,13 @@ export async function clearMonthlySchedule(month: number, year: number, unitId: 
   const lastDay = new Date(year, month, 0).getDate()
   const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
 
+  let currentUser: any = null
+  try {
+    currentUser = await checkUser()
+  } catch (e) {
+    currentUser = null
+  }
+
   if (isLocalMode()) {
     const db = readDb()
 
@@ -3101,6 +3108,18 @@ export async function clearMonthlySchedule(month: number, year: number, unitId: 
     }
 
     db.monthly_schedule_metadata = db.monthly_schedule_metadata.filter((m: any) => !(m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id)))
+
+    if (currentUser) {
+      db.audit_logs = db.audit_logs || []
+      db.audit_logs.push({
+        id: randomUUID(),
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'CLEAR_MONTHLY_SCHEDULE_LOCAL',
+        details: { month, year, unit_id: unitId, roster_count: rosterIds.length, startDate, endDate },
+        created_at: new Date().toISOString()
+      })
+    }
 
     writeDb(db)
     revalidatePath('/')
@@ -3153,6 +3172,15 @@ export async function clearMonthlySchedule(month: number, year: number, unitId: 
 
     const { error: metadataError } = await deleteMetadata
     if (metadataError) throw metadataError
+
+    if (currentUser) {
+      supabase.from('audit_logs').insert({
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action: 'CLEAR_MONTHLY_SCHEDULE',
+        details: { month, year, unit_id: unitId, roster_count: rosterIds.length, startDate, endDate }
+      }).then(() => {})
+    }
 
     revalidatePath('/')
     return { success: true }
