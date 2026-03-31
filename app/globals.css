@@ -39,7 +39,7 @@ html, body {
 
 @media print {
   @page {
-    size: landscape;
+    size: A4 landscape;
     margin: 4mm 6mm !important;
   }
 

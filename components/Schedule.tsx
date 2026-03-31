@@ -2865,7 +2865,7 @@ export default function Schedule({
       </div>
 
       <div className="print:bg-white bg-white w-full">
-      <div className={`overflow-x-auto w-full border-none shadow-none relative schedule-root ${printOnly ? 'print:overflow-visible' : ''}`}>
+      <div className={`overflow-x-auto w-full border-none shadow-none relative schedule-root print-schedule-root ${printOnly ? 'print:overflow-visible' : ''}`}>
         {loading ? (
              <div className="text-center py-4 text-black">Carregando...</div>
         ) : (
