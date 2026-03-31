@@ -5,7 +5,7 @@ import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { QRCodeSVG } from 'qrcode.react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission, getUnitMonthStatuses } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle, EyeOff } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
@@ -226,26 +226,12 @@ export default function Schedule({
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(() => {
     if (initialMonth !== undefined) return initialMonth
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('enf_hma_last_month')
-      if (stored !== null && stored !== '') {
-        const parsed = parseInt(stored, 10)
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 11) return parsed
-      }
-    }
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     return nextMonth.getMonth()
   })
   const [selectedYear, setSelectedYear] = useState(() => {
     if (initialYear !== undefined) return initialYear
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('enf_hma_last_year')
-      if (stored !== null && stored !== '') {
-        const parsed = parseInt(stored, 10)
-        if (!isNaN(parsed)) return parsed
-      }
-    }
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     return nextMonth.getFullYear()
@@ -255,15 +241,30 @@ export default function Schedule({
   const [isFetchingAllNurses, setIsFetchingAllNurses] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [selectedUnitId, setSelectedUnitId] = useState<string>(() => {
-    if (initialUnitId) return initialUnitId
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('enf_hma_last_unit') || ''
-    }
-    return ''
-  })
+  const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (initialMonth !== undefined || initialYear !== undefined || initialUnitId) return
+
+    const storedMonth = localStorage.getItem('enf_hma_last_month')
+    const storedYear = localStorage.getItem('enf_hma_last_year')
+    const storedUnit = localStorage.getItem('enf_hma_last_unit')
+
+    if (storedMonth !== null && storedMonth !== '') {
+      const parsed = parseInt(storedMonth, 10)
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 11) setSelectedMonth(parsed)
+    }
+
+    if (storedYear !== null && storedYear !== '') {
+      const parsed = parseInt(storedYear, 10)
+      if (!isNaN(parsed)) setSelectedYear(parsed)
+    }
+
+    if (storedUnit) setSelectedUnitId(storedUnit)
+  }, [initialMonth, initialYear, initialUnitId])
   
   // Section Management State
   const [isAddingSection, setIsAddingSection] = useState(false)
@@ -314,6 +315,7 @@ export default function Schedule({
 
   // Dynamic Column Field State
   const [dynamicField, setDynamicField] = useState<'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('coren')
+  const [displayDynamicField, setDisplayDynamicField] = useState<'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('coren')
   const [isSetorHidden, setIsSetorHidden] = useState(false)
 
   // Insertion State
@@ -339,6 +341,7 @@ export default function Schedule({
   const [isEditingHeader, setIsEditingHeader] = useState(false)
   const [unitNumber, setUnitNumber] = useState<string>('')
   const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
+  const [unitMonthStatuses, setUnitMonthStatuses] = useState<Record<string, { launched: boolean, released: boolean }>>({})
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO' | 'MOTORISTA' | 'RECEPCAO' | 'AGENTE_DE_PORTARIA' | 'ASSISTENTE_SOCIAL'>('ALL')
   
   // Permission Management State
@@ -417,6 +420,17 @@ export default function Schedule({
           await fetchData(true)
       }
       setLoading(false)
+  }
+
+  const handleDisplayDynamicFieldChange = async (field: 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+    setDisplayDynamicField(field)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`, field)
+    }
+
+    if (isAdmin && !isScheduleReleased) {
+      await handleDynamicFieldChange(field)
+    }
   }
 
   const handleToggleSetorVisibility = async (isHidden: boolean) => {
@@ -657,6 +671,20 @@ export default function Schedule({
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    const stored =
+      localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`) ||
+      localStorage.getItem('enf_hma_display_field')
+
+    if (stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role') {
+      setDisplayDynamicField(stored)
+      return
+    }
+
+    setDisplayDynamicField(dynamicField)
+  }, [dynamicField, selectedUnitId, selectedMonth, selectedYear])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
     localStorage.setItem('enf_hma_last_month', String(selectedMonth))
     localStorage.setItem('enf_hma_last_year', String(selectedYear))
     if (selectedUnitId) localStorage.setItem('enf_hma_last_unit', String(selectedUnitId))
@@ -681,6 +709,12 @@ export default function Schedule({
     }
     loadAllNumbers()
   }, [data.units])
+
+  useEffect(() => {
+    getUnitMonthStatuses(selectedMonth + 1, selectedYear)
+      .then((m: any) => setUnitMonthStatuses(m || {}))
+      .catch(() => setUnitMonthStatuses({}))
+  }, [selectedMonth, selectedYear])
   
   const handleSaveHeader = () => {
     if (isScheduleReleased) return
@@ -2276,7 +2310,7 @@ export default function Schedule({
                 {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
               <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">
-                {canEditSelectedUnit && !isScheduleReleased && dynamicField === 'coren' ? (
+                {canEditSelectedUnit && !isScheduleReleased && displayDynamicField === 'coren' ? (
                   <select
                     value={nurse.coren || ''}
                     onChange={async (e) => {
@@ -2307,9 +2341,9 @@ export default function Schedule({
                     // Try to find the nurse in the base data.nurses to get the most up-to-date fields
                     const baseNurse = data.nurses.find(n => n.id === nurse.id)
                     const source = baseNurse || nurse
-                    const val = source[dynamicField as keyof Nurse]
+                    const val = source[displayDynamicField as keyof Nurse]
                     
-                    if (dynamicField === 'role') return formatRole(val as string)
+                    if (displayDynamicField === 'role') return formatRole(val as string)
                     
                     return <span className="print:text-[11px]">{String(val || '-')}</span>
                   })()
@@ -2624,13 +2658,11 @@ export default function Schedule({
                           if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb
                           return a.title.localeCompare(b.title)
                         }).map(unit => {
-                          const isReleased = data.releases?.some(r => String(r.unit_id) === String(unit.id) && r.month === selectedMonth + 1 && r.year === selectedYear && r.is_released)
-                          const isLaunched = data.roster?.some(r => String(r.unit_id) === String(unit.id) && r.month === selectedMonth + 1 && r.year === selectedYear)
                           const num = unitNumbersMap[unit.id]
                           
                           let status = ''
-                          if (isReleased) status = ' ✅ (LIBERADA)'
-                          else if (isLaunched) status = ' ✅ (LANÇADA)'
+                          const s = unitMonthStatuses[String(unit.id)]
+                          if (s?.released) status = ' ✅ (LIBERADA)'
 
                           return (
                             <option key={unit.id} value={unit.id}>
@@ -2953,7 +2985,24 @@ export default function Schedule({
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>CATEGORIA</th>
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>VÍNCULO</th>
                                 <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-20 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>
-                                    <span className="uppercase">{dynamicField === 'role' ? 'CATEGORIA' : dynamicField}</span>
+                                    <>
+                                      <select
+                                        value={displayDynamicField}
+                                        onChange={(e) => handleDisplayDynamicFieldChange(e.target.value as any)}
+                                        className="no-print bg-transparent w-full text-center uppercase font-bold outline-none"
+                                        title="Clique para escolher a coluna (COREN/CRM/CPF/Telefone)"
+                                      >
+                                        <option value="coren">COREN</option>
+                                        <option value="crm">CRM</option>
+                                        <option value="cpf">CPF</option>
+                                        <option value="phone">TELEFONE</option>
+                                        <option value="role">CARGO</option>
+                                        <option value="vinculo">VÍNCULO</option>
+                                      </select>
+                                      <span className="hidden print:block uppercase">
+                                        {displayDynamicField === 'role' ? 'CARGO' : displayDynamicField}
+                                      </span>
+                                    </>
                                 </th>
                                 {!isSetorHidden && (
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2] group relative" rowSpan={2}>

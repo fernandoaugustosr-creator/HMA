@@ -81,10 +81,8 @@ export default function Sidebar({ user }: { user: any }) {
   const escalaIcon = allNavItems.find(item => item.name === 'Escala')?.icon
 
   const escalaHref = useMemo(() => {
-    if (isAdmin) return '/escala'
-    if (editableUnits.length === 0) return '/escala'
-    return `/escala?unit=${encodeURIComponent(editableUnits[0].id)}`
-  }, [editableUnits, isAdmin])
+    return '/escala'
+  }, [])
 
   let navItems: { name: string; href: string; icon: JSX.Element }[] = []
 
@@ -221,18 +219,7 @@ export default function Sidebar({ user }: { user: any }) {
                       </Link>
                     )}
                     {itemPath === '/escala' && !isCollapsed && editableUnits.length > 0 && (
-                      <>
-                        {editableUnits.map((u) => (
-                          <Link
-                            key={u.id}
-                            href={`/escala?unit=${encodeURIComponent(u.id)}`}
-                            onClick={() => setIsMobileMenuOpen(false)}
-                            className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                          >
-                            <span className="truncate">{u.title}</span>
-                          </Link>
-                        ))}
-                      </>
+                      null
                     )}
                   </div>
                 )
@@ -339,21 +326,7 @@ export default function Sidebar({ user }: { user: any }) {
                   </>
                 )}
                 {itemPath === '/escala' && !isCollapsed && editableUnits.length > 0 && (
-                  <>
-                    {editableUnits.map((u) => (
-                      <Link
-                        key={u.id}
-                        href={`/escala?unit=${encodeURIComponent(u.id)}`}
-                        className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
-                          pathname === '/escala'
-                            ? 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                        }`}
-                      >
-                        <span className="truncate">{u.title}</span>
-                      </Link>
-                    ))}
-                  </>
+                  null
                 )}
               </div>
             )

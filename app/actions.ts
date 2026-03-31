@@ -488,6 +488,79 @@ export async function getEditableUnits() {
   return mapped
 }
 
+export async function getUnitMonthStatuses(month: number, year: number) {
+  let user: any
+  try {
+    user = await checkUser()
+  } catch (e) {
+    return {}
+  }
+
+  const isGlobalAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+  const allowedUnitIds = new Set<string>()
+
+  if (!isGlobalAdmin) {
+    const units = await getEditableUnits()
+    units.forEach((u: any) => {
+      if (u?.id) allowedUnitIds.add(String(u.id))
+    })
+  }
+
+  const allow = (unitId: any) => {
+    if (isGlobalAdmin) return true
+    return allowedUnitIds.has(String(unitId))
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const rosterRows = (db.monthly_rosters || []).filter((r: any) => r.month === month && r.year === year && r.unit_id)
+    const releasedRows = (db.monthly_schedule_metadata || []).filter((m: any) => m.month === month && m.year === year && m.unit_id && m.is_released)
+
+    const map: Record<string, { launched: boolean; released: boolean }> = {}
+
+    rosterRows.forEach((r: any) => {
+      if (!allow(r.unit_id)) return
+      const id = String(r.unit_id)
+      if (!map[id]) map[id] = { launched: false, released: false }
+      map[id].launched = true
+    })
+
+    releasedRows.forEach((m: any) => {
+      if (!allow(m.unit_id)) return
+      const id = String(m.unit_id)
+      if (!map[id]) map[id] = { launched: false, released: false }
+      map[id].released = true
+    })
+
+    return map
+  }
+
+  const supabase = createClient()
+  const [rostersRes, releasesRes] = await Promise.all([
+    supabase.from('monthly_rosters').select('unit_id').eq('month', month).eq('year', year).not('unit_id', 'is', null).range(0, 20000),
+    supabase.from('monthly_schedule_metadata').select('unit_id,is_released').eq('month', month).eq('year', year).not('unit_id', 'is', null).range(0, 20000),
+  ])
+
+  const map: Record<string, { launched: boolean; released: boolean }> = {}
+
+  ;(rostersRes.data || []).forEach((r: any) => {
+    if (!allow(r.unit_id)) return
+    const id = String(r.unit_id)
+    if (!map[id]) map[id] = { launched: false, released: false }
+    map[id].launched = true
+  })
+
+  ;(releasesRes.data || []).forEach((m: any) => {
+    if (!m.is_released) return
+    if (!allow(m.unit_id)) return
+    const id = String(m.unit_id)
+    if (!map[id]) map[id] = { launched: false, released: false }
+    map[id].released = true
+  })
+
+  return map
+}
+
 export async function addScalePermission(nurseId: string, unitId: string) {
   try {
     await checkGeneralAdmin()
@@ -2467,15 +2540,34 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       // Initialize monthly_rosters if missing
       if (!db.monthly_rosters) db.monthly_rosters = []
 
-      const roster = db.monthly_rosters.filter(r => r.month === month && r.year === year)
+      const roster = db.monthly_rosters.filter(r => {
+        if (r.month !== month || r.year !== year) return false
+        if (unitId === undefined) return true
+        if (!unitId) return !r.unit_id
+        return String(r.unit_id) === String(unitId)
+      })
       
       const nurses = db.nurses // RETURN ALL NURSES
-      const shifts = db.shifts.filter(s => s.shift_date >= startDate && s.shift_date <= endDate)
+      const rosterIdsForContext = new Set((roster || []).map((r: any) => r.id).filter(Boolean))
+      const shifts = db.shifts.filter((s: any) => {
+        const date = s.shift_date || s.date
+        if (!date) return false
+        if (date < startDate || date > endDate) return false
+        if (rosterIdsForContext.size > 0) {
+          return s.roster_id && rosterIdsForContext.has(s.roster_id)
+        }
+        return true
+      })
       const timeOffs = db.time_off_requests.filter(t => 
         ['approved', 'pending'].includes(t.status) && 
         ((t.start_date <= endDate && t.end_date >= startDate))
       )
-      const releases = db.monthly_schedule_metadata.filter(m => m.month === month && m.year === year)
+      const releases = db.monthly_schedule_metadata.filter((m: any) => {
+        if (m.month !== month || m.year !== year) return false
+        if (unitId === undefined) return true
+        if (!unitId) return !m.unit_id
+        return String(m.unit_id) === String(unitId)
+      })
       const absences = (db.absences || []).filter(a => a.date >= startDate && a.date <= endDate)
 
       // Se for acesso público, verificar se a escala está liberada
@@ -2512,17 +2604,34 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       }
     }
 
-    // FETCH EVERYTHING IN PARALLEL WITHOUT SEQUENTIAL PRE-FETCH
-    const rosterQuery = supabase.from('monthly_rosters')
+    // FETCH BASE DATA IN PARALLEL (unit-scoped when unitId is provided)
+    let rosterQuery = supabase.from('monthly_rosters')
         .select('id, nurse_id, unit_id, section_id, month, year, observation, sector, created_at, list_order')
         .eq('month', month)
         .eq('year', year)
+
+    if (unitId) rosterQuery = rosterQuery.eq('unit_id', unitId)
+    else if (unitId !== undefined) rosterQuery = rosterQuery.is('unit_id', null)
+
+    const releasesQueryBase = supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year)
+    const releasesQuery = unitId ? releasesQueryBase.eq('unit_id', unitId) : (unitId === undefined ? releasesQueryBase : releasesQueryBase.is('unit_id', null))
+
+    let timeOffsQuery = supabase.from('time_off_requests')
+      .select('id, nurse_id, start_date, end_date, type, status, unit_id')
+      .in('status', ['approved', 'pending'])
+      .lte('start_date', endDate)
+      .gte('end_date', startDate)
+      .range(0, 1000)
+
+    if (unitId) timeOffsQuery = timeOffsQuery.eq('unit_id', unitId)
+
+    let absencesQuery = supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate).range(0, 1000)
+    if (unitId) absencesQuery = absencesQuery.eq('unit_id', unitId)
 
     const [
         { data: sections },
         { data: units },
         { data: rosterData },
-        { data: rawShifts },
         { data: timeOffsData },
         { data: releasesData },
         { data: absencesData },
@@ -2531,15 +2640,9 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
         rosterQuery.range(0, 5000), // Increased range for larger hospitals
-        supabase.from('shifts').select('id, nurse_id, date, type, roster_id, created_at').gte('date', startDate).lte('date', endDate).range(0, 15000), // Significantly increased to avoid missing data
-        supabase.from('time_off_requests')
-            .select('id, nurse_id, start_date, end_date, type, status, unit_id')
-            .in('status', ['approved', 'pending'])
-            .lte('start_date', endDate)
-            .gte('end_date', startDate)
-            .range(0, 1000),
-        supabase.from('monthly_schedule_metadata').select('*').eq('month', month).eq('year', year),
-        supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate).range(0, 1000),
+        timeOffsQuery,
+        releasesQuery,
+        absencesQuery,
         supabase.from('nurses').select('*').range(0, 1000).order('name')
     ])
 
@@ -2547,11 +2650,29 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
 
     const roster = rosterData || []
 
-    const shifts = rawShifts?.map((s: any) => ({
+    let shifts: any[] = []
+    const rosterIds = roster.map((r: any) => r.id).filter(Boolean)
+    if (rosterIds.length > 0) {
+      const chunk = (arr: any[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size))
+      const chunks = chunk(rosterIds, 200)
+      const shiftRows: any[] = []
+      for (const ids of chunks) {
+        const { data: chunkShifts, error: shiftsError } = await supabase
+          .from('shifts')
+          .select('id, nurse_id, date, type, roster_id, created_at')
+          .in('roster_id', ids)
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .range(0, 20000)
+        if (shiftsError) throw shiftsError
+        if (chunkShifts && chunkShifts.length > 0) shiftRows.push(...chunkShifts)
+      }
+      shifts = shiftRows.map((s: any) => ({
         ...s,
         shift_date: s.date,
         shift_type: s.type
-    })) || []
+      }))
+    }
 
     return {
         nurses: nurses || [],

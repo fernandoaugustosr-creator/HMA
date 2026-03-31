@@ -12,6 +12,14 @@ const nextConfig = {
         // your project has ESLint errors.
         ignoreDuringBuilds: true,
     },
+    async rewrites() {
+        return [
+            {
+                source: '/@vite/client',
+                destination: '/__hmr_stub/vite-client',
+            },
+        ]
+    },
 };
 
 export default nextConfig;
