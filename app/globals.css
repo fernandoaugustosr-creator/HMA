@@ -40,7 +40,7 @@ html, body {
 @media print {
   @page {
     size: A4 landscape;
-    margin: 4mm 6mm !important;
+    margin: 0mm !important;
   }
 
   html, body {
@@ -92,8 +92,9 @@ html, body {
   
   /* Adjust font size for print if necessary */
   table td, table th {
-    font-size: 8px !important; 
-    padding: 0.5px !important;
+    font-size: 6px !important; 
+    padding: 0px !important;
+    line-height: 1 !important;
   }
 
   * {
@@ -111,17 +112,33 @@ html, body {
 
   .print-schedule-root {
     page-break-after: auto;
-    page-break-inside: avoid;
+    page-break-inside: auto;
     width: 100%;
-    zoom: 0.75;
+    zoom: 0.55;
   }
   
   @supports not (zoom: 1) {
     .print-schedule-root {
-      transform: scale(0.75);
+      transform: scale(0.55);
       transform-origin: top left;
-      width: 133.33%;
+      width: 181.82%;
     }
+  }
+
+  .download-print-root .print-schedule-root {
+    zoom: 0.7;
+  }
+
+  @supports not (zoom: 1) {
+    .download-print-root .print-schedule-root {
+      transform: scale(0.7);
+      transform-origin: top left;
+      width: 142.86%;
+    }
+  }
+
+  .print-schedule-root .mb-8 {
+    margin-bottom: 2mm !important;
   }
 }
 

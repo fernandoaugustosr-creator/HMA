@@ -2593,7 +2593,7 @@ export default function Schedule({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded print:w-24 print:h-24 print:text-[48px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-0">
+          <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded print:w-24 print:h-24 print:text-[48px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-0 print:-mt-3 print:mb-2">
             {(unitNumber || headerPage) || '1'}
           </div>
           {isAdmin && !printOnly && !isScheduleReleased && (
@@ -2887,14 +2887,14 @@ export default function Schedule({
                     <div key={section.id} className="mb-8 last:mb-0 w-full">
                        <table className="table-fixed border-collapse border border-black text-black text-[9px] print:text-[11px] w-full">
                              <colgroup>
-                                <col className="w-6 print:w-10" />
-                                <col className="w-[200px] print:w-[240px]" />
-                                <col className="w-20 print:w-28" />
-                                <col className="w-20 print:w-28" />
-                                <col className="w-16 print:w-24" />
-                                {!isSetorHidden && <col className="w-20 print:w-28" />}
-                                {daysArray.map(d => <col key={d.day} className="w-5 print:w-8" />)}
-                                <col className="w-10 print:w-16" />
+                                <col className="w-6 print:w-8" />
+                                <col className="w-[200px] print:w-[190px]" />
+                                <col className="w-20 print:w-[70px]" />
+                                <col className="w-20 print:w-[70px]" />
+                                <col className="w-16 print:w-[70px]" />
+                                {!isSetorHidden && <col className="w-20 print:w-[70px]" />}
+                                {daysArray.map(d => <col key={d.day} className="w-5 print:w-5" />)}
+                                <col className="w-10 print:w-10" />
                              </colgroup>
                              <thead>
                                 {/* Header Row 1: Unit Title - Only for first section */}

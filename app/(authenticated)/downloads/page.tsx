@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { getReleasedSchedules, getMonthlyScheduleData } from '@/app/actions'
+import { getReleasedSchedules } from '@/app/actions'
 import Schedule from '@/components/Schedule'
 import { FileText, ArrowLeft, Download, Calendar } from 'lucide-react'
 import Image from 'next/image'
@@ -17,7 +17,6 @@ export default function DownloadsPage() {
   const [selectedRelease, setSelectedRelease] = useState<any | null>(null)
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('')
   const [isPrinting, setIsPrinting] = useState(false)
-  const [professionCount, setProfessionCount] = useState<number>(0)
   const printTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -130,10 +129,6 @@ export default function DownloadsPage() {
     setIsPrinting(true)
     
     try {
-      // Fetch data to determine scale before showing print view
-      const scheduleData = await getMonthlyScheduleData(release.month, release.year, release.unit_id, true)
-      setProfessionCount(scheduleData.roster.length)
-      
       const fileName = `Escala_${release.unit_name}_${MONTHS[release.month - 1]}_${release.year}`.replace(/\s+/g, '_')
       const oldTitle = document.title
 
@@ -160,10 +155,6 @@ export default function DownloadsPage() {
   }
 
   const [currentYear, currentMonth] = selectedMonthYear ? selectedMonthYear.split('-').map(Number) : [0, 0]
-
-  // Determine print scale based on number of professionals
-  // Large scales (> 15 professionals) get 80% scale, others 100%
-  const printScale = professionCount > 15 ? 0.8 : 1.0;
 
   return (
     <>
@@ -275,7 +266,7 @@ export default function DownloadsPage() {
       </div>
 
       {/* Hidden Print Area - Only visible quando imprimir */}
-      <div className="hidden print:block bg-white print-schedule-root">
+      <div className="hidden print:block bg-white download-print-root">
         {selectedRelease && (
           <div className="w-full flex justify-start items-start">
             <div className="w-full">
@@ -292,36 +283,6 @@ export default function DownloadsPage() {
           </div>
         )}
       </div>
-      
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: landscape;
-            margin: 2mm 5mm 5mm 5mm; /* Very small top margin to stay at the top */
-          }
-          body {
-            overflow: visible !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .print-schedule-root {
-            width: 100% !important;
-            background-color: #ffffff !important;
-            display: block !important;
-            margin-top: 0 !important;
-            padding-top: 0 !important;
-            zoom: ${printScale};
-          }
-          
-          @supports not (zoom: 1) {
-            .print-schedule-root {
-              width: ${100 / printScale}% !important;
-              transform: scale(${printScale}) !important;
-              transform-origin: top left !important;
-            }
-          }
-        }
-      `}</style>
     </>
   )
 }
