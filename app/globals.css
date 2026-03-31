@@ -127,6 +127,9 @@ html, body {
 
   .download-print-root .print-schedule-root {
     zoom: 0.7;
+    box-sizing: border-box;
+    padding-left: 30mm;
+    padding-right: 20mm;
   }
 
   @supports not (zoom: 1) {
