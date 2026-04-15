@@ -40,7 +40,7 @@ html, body {
 @media print {
   @page {
     size: A4 landscape;
-    margin: 0mm !important;
+    margin: 0mm 5mm 0mm 5mm !important;
   }
 
   html, body {
@@ -128,8 +128,8 @@ html, body {
   .download-print-root .print-schedule-root {
     zoom: 0.7;
     box-sizing: border-box;
-    padding-left: 30mm;
-    padding-right: 20mm;
+    padding-left: 0mm;
+    padding-right: 1mm;
   }
 
   @supports not (zoom: 1) {

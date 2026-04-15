@@ -80,6 +80,26 @@ export default function Sidebar({ user }: { user: any }) {
   const faltasIcon = allNavItems.find(item => item.name === 'Faltas')?.icon
   const escalaIcon = allNavItems.find(item => item.name === 'Escala')?.icon
 
+  const coordSubmenuItems = useMemo(() => {
+    if (isAdmin) {
+      return [
+        { name: 'Faltas', href: '/coordenacao?tab=falta' },
+        { name: 'Solicitações de Pagamentos', href: '/coordenacao?tab=pagamento' },
+        { name: 'Outras Solicitações', href: '/coordenacao?tab=outros' },
+        { name: 'Folgas', href: '/folgas' },
+        { name: 'Gestão de Coordenações', href: '/coordenacao/gestao' },
+      ]
+    }
+
+    if (role !== 'COORDENADOR') {
+      return [
+        { name: 'Folgas', href: '/folgas' },
+      ]
+    }
+
+    return []
+  }, [isAdmin, role])
+
   const escalaHref = useMemo(() => {
     return '/escala'
   }, [])
@@ -87,7 +107,7 @@ export default function Sidebar({ user }: { user: any }) {
   let navItems: { name: string; href: string; icon: JSX.Element }[] = []
 
   if (isAdmin) {
-    navItems = allNavItems.filter(item => item.name !== 'Faltas')
+    navItems = allNavItems.filter(item => item.name !== 'Faltas' && item.name !== 'Folgas')
   } else if (role === 'COORDENADOR') {
     navItems = [
       dashboardIcon && { name: 'Dashboard', href: '/', icon: dashboardIcon },
@@ -103,7 +123,6 @@ export default function Sidebar({ user }: { user: any }) {
     navItems = [
       dashboardIcon && { name: 'Dashboard', href: '/', icon: dashboardIcon },
       canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
-      folgasIcon && { name: 'Folgas', href: '/folgas', icon: folgasIcon },
       trocasIcon && { name: 'Permultas', href: '/trocas', icon: trocasIcon },
       faltasIcon && { name: 'Faltas', href: '/coordenacao', icon: faltasIcon },
       downloadsIcon && { name: 'Baixar Escala', href: '/downloads', icon: downloadsIcon },
@@ -163,7 +182,7 @@ export default function Sidebar({ user }: { user: any }) {
               {navItems.map((item) => {
                 const itemPath = item.href.split('?')[0]
                 const isCoord = itemPath === '/coordenacao'
-                const isActive = pathname === itemPath || (isCoord && pathname.startsWith('/coordenacao'))
+                const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas'))
                 return (
                   <div key={item.href}>
                     <Link
@@ -178,46 +197,24 @@ export default function Sidebar({ user }: { user: any }) {
                       <span className="mr-3">{item.icon}</span>
                       {item.name}
                     </Link>
-                    {isCoord && isAdmin && (
-                      <Link
-                        href="/coordenacao?tab=falta"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                      >
-                        <span className="truncate">Faltas</span>
-                      </Link>
-                    )}
-                    {isCoord && isAdmin && (
-                      <Link
-                        href="/coordenacao?tab=pagamento"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                      >
-                        <span className="truncate">Solicitações de Pagamentos</span>
-                      </Link>
-                    )}
-                    {isCoord && isAdmin && (
-                      <Link
-                        href="/coordenacao?tab=outros"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                      >
-                        <span className="truncate">Outras Solicitações</span>
-                      </Link>
-                    )}
-                    {isCoord && isAdmin && (
-                      <Link
-                        href="/coordenacao/gestao"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
-                          pathname === '/coordenacao/gestao'
-                            ? 'bg-indigo-50 text-indigo-700'
-                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                        }`}
-                      >
-                        <span className="truncate">Gestão de Coordenações</span>
-                      </Link>
-                    )}
+                    {isCoord && coordSubmenuItems.map((subItem) => {
+                      const subPath = subItem.href.split('?')[0]
+                      const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao'))
+                      return (
+                        <Link
+                          key={subItem.href}
+                          href={subItem.href}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
+                            isSubActive
+                              ? 'bg-indigo-50 text-indigo-700'
+                              : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                        >
+                          <span className="truncate">{subItem.name}</span>
+                        </Link>
+                      )
+                    })}
                     {itemPath === '/escala' && !isCollapsed && editableUnits.length > 0 && (
                       null
                     )}
@@ -278,7 +275,7 @@ export default function Sidebar({ user }: { user: any }) {
           {navItems.map((item) => {
             const itemPath = item.href.split('?')[0]
             const isCoord = itemPath === '/coordenacao'
-            const isActive = pathname === itemPath || (isCoord && pathname.startsWith('/coordenacao'))
+            const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas'))
             return (
               <div key={item.href}>
                 <Link
@@ -293,38 +290,23 @@ export default function Sidebar({ user }: { user: any }) {
                   <span className={`${isCollapsed ? '' : 'mr-3'}`}>{item.icon}</span>
                   {!isCollapsed && <span className="truncate">{item.name}</span>}
                 </Link>
-                {isCoord && isAdmin && !isCollapsed && (
-                  <>
+                {isCoord && !isCollapsed && coordSubmenuItems.map((subItem) => {
+                  const subPath = subItem.href.split('?')[0]
+                  const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao'))
+                  return (
                     <Link
-                      href="/coordenacao?tab=falta"
-                      className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                    >
-                      <span className="truncate">Faltas</span>
-                    </Link>
-                    <Link
-                      href="/coordenacao?tab=pagamento"
-                      className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                    >
-                      <span className="truncate">Solicitações de Pagamentos</span>
-                    </Link>
-                    <Link
-                      href="/coordenacao?tab=outros"
-                      className="ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                    >
-                      <span className="truncate">Outras Solicitações</span>
-                    </Link>
-                    <Link
-                      href="/coordenacao/gestao"
+                      key={subItem.href}
+                      href={subItem.href}
                       className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
-                        pathname === '/coordenacao/gestao'
+                        isSubActive
                           ? 'bg-indigo-50 text-indigo-700'
                           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
                       }`}
                     >
-                      <span className="truncate">Gestão de Coordenações</span>
+                      <span className="truncate">{subItem.name}</span>
                     </Link>
-                  </>
-                )}
+                  )
+                })}
                 {itemPath === '/escala' && !isCollapsed && editableUnits.length > 0 && (
                   null
                 )}

@@ -2518,6 +2518,8 @@ export default function Schedule({
       return myScalePermissionUnitIds.some(id => String(id) === String(selectedUnitId))
   }, [isAdmin, myScalePermissionUnitIds, selectedUnitId])
 
+  const canManageSelectedUnit = canEditSelectedUnit && !isScheduleReleased
+
   const visibleUnits = useMemo(() => {
       const allUnits = data.units || []
       if (isAdmin || myScalePermissionUnitIds.includes('*')) return allUnits
@@ -2873,7 +2875,7 @@ export default function Schedule({
                const rosterForContext = (data.roster || []).filter(r => r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || String(r.unit_id) === String(selectedUnitId)))
                const baseLaunched = rosterForContext.length > 0
                const isLaunched = baseLaunched
-               if (!isLaunched && !isAdmin && !printOnly) {
+               if (!isLaunched && !canEditSelectedUnit && !printOnly) {
                  return <div className="text-center py-6 text-sm text-gray-600">Escala em construção</div>
                }
                return (
@@ -3142,7 +3144,7 @@ export default function Schedule({
                  </div>
              ))}
              
-             {isAdmin && !isScheduleReleased && (
+             {canManageSelectedUnit && (
              <div className="mb-8 p-4 border border-dashed border-gray-400 rounded bg-gray-50 text-center no-print">
                 <p className="text-sm text-gray-600 mb-2">Adicionar grupo à escala deste setor:</p>
                 <select 

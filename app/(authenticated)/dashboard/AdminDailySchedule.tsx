@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getDailyShifts } from '@/app/actions'
+import { getDailyShifts, getEditableUnits } from '@/app/actions'
 
 export default function AdminDailySchedule() {
     const today = new Date()
@@ -15,6 +15,20 @@ export default function AdminDailySchedule() {
     const [loading, setLoading] = useState(false)
     const [openUnits, setOpenUnits] = useState<Record<string, boolean>>({})
     const [filterMode, setFilterMode] = useState<'day' | 'night' | 'all'>('day')
+    const [units, setUnits] = useState<{ id: string, title: string }[]>([])
+    const [selectedUnitId, setSelectedUnitId] = useState<string>('__all__')
+
+    useEffect(() => {
+        async function fetchUnits() {
+            try {
+                const res = await getEditableUnits()
+                setUnits((res || []).filter((u: any) => u?.id && u?.title))
+            } catch (e) {
+                setUnits([])
+            }
+        }
+        fetchUnits()
+    }, [])
 
     useEffect(() => {
         async function fetchShifts() {
@@ -51,28 +65,42 @@ export default function AdminDailySchedule() {
         return true
     })
 
-    // Agrupar plantões por setor (Unit)
-    const groupedShifts = filteredShifts.reduce((acc: any, shift: any) => {
-        const unit = shift.unit_name || 'Sem Setor'
-        if (!acc[unit]) {
-            acc[unit] = []
-        }
-        acc[unit].push(shift)
+    const unitsById: Record<string, string> = {}
+    units.forEach(u => { unitsById[String(u.id)] = String(u.title) })
+
+    const filteredByUnit = selectedUnitId === '__all__'
+        ? filteredShifts
+        : filteredShifts.filter((s: any) => {
+            const u = s.unit_id ? String(s.unit_id) : '__none__'
+            return u === selectedUnitId
+        })
+
+    const groupedShifts = filteredByUnit.reduce((acc: any, shift: any) => {
+        const unitId = shift.unit_id ? String(shift.unit_id) : '__none__'
+        if (!acc[unitId]) acc[unitId] = []
+        acc[unitId].push(shift)
         return acc
     }, {})
 
-    // Ordenar setores alfabeticamente
-    const sortedUnits = Object.keys(groupedShifts).sort()
+    const unitIdsToRender = selectedUnitId === '__all__'
+        ? [
+            ...units.map(u => String(u.id)),
+            ...(Object.keys(groupedShifts).includes('__none__') ? ['__none__'] : [])
+        ]
+        : [selectedUnitId]
 
     // Sempre que a data mudar ou os plantões mudarem, expandir todos
     useEffect(() => {
         const newOpenUnits: Record<string, boolean> = {}
-        shifts.forEach((shift: any) => {
-             const unit = shift.unit_name || 'Sem Setor'
-             newOpenUnits[unit] = true
-        })
+        if (selectedUnitId !== '__all__') {
+            newOpenUnits[selectedUnitId] = true
+        } else {
+            unitIdsToRender.forEach((unitId) => {
+                newOpenUnits[unitId] = true
+            })
+        }
         setOpenUnits(newOpenUnits)
-    }, [shifts])
+    }, [shifts, selectedUnitId, units.length])
 
     const toggleUnit = (unit: string) => {
         setOpenUnits(prev => ({
@@ -121,6 +149,20 @@ export default function AdminDailySchedule() {
                     </div>
 
                     <div className="relative">
+                        <select
+                            value={selectedUnitId}
+                            onChange={(e) => setSelectedUnitId(e.target.value)}
+                            className="pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-all hover:border-gray-300"
+                        >
+                            <option value="__all__">Todos os setores</option>
+                            {units.map(u => (
+                                <option key={u.id} value={String(u.id)}>{u.title}</option>
+                            ))}
+                            <option value="__none__">Sem Setor</option>
+                        </select>
+                    </div>
+
+                    <div className="relative">
                         <input 
                             type="date" 
                             value={selectedDate}
@@ -137,28 +179,29 @@ export default function AdminDailySchedule() {
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-3"></div>
                         <span className="text-sm font-medium">Carregando escala...</span>
                     </div>
-                ) : filteredShifts.length === 0 ? (
+                ) : filteredByUnit.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
                         <svg className="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <p className="text-sm font-medium">Nenhum profissional escalado para esta data.</p>
+                        <p className="text-sm font-medium">Nenhum profissional escalado para este setor nesta data.</p>
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {sortedUnits.map((unit) => {
-                            const isOpen = openUnits[unit] ?? false
-                            const count = groupedShifts[unit]?.length || 0
+                        {unitIdsToRender.map((unitId) => {
+                            const title = unitId === '__none__' ? 'Sem Setor' : (unitsById[unitId] || 'Setor')
+                            const isOpen = openUnits[unitId] ?? false
+                            const count = groupedShifts[unitId]?.length || 0
                             return (
-                                <div key={unit} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
+                                <div key={unitId} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
                                     <button
                                         type="button"
-                                        onClick={() => toggleUnit(unit)}
+                                        onClick={() => toggleUnit(unitId)}
                                         className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50/80 transition-colors group"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className={`w-1 h-8 rounded-full ${isOpen ? 'bg-indigo-500' : 'bg-gray-300 group-hover:bg-indigo-400'} transition-colors`}></div>
-                                            <span className="font-semibold text-gray-700 text-sm md:text-base text-left">{unit}</span>
+                                            <span className="font-semibold text-gray-700 text-sm md:text-base text-left">{title}</span>
                                             <span className="bg-indigo-50 text-indigo-600 text-xs px-2.5 py-0.5 rounded-full font-medium border border-indigo-100">
                                                 {count}
                                             </span>
@@ -173,7 +216,7 @@ export default function AdminDailySchedule() {
                                     {isOpen && (
                                         <div className="border-t border-gray-50 bg-gray-50/30 p-4">
                                             {(() => {
-                                                const unitShifts = groupedShifts[unit] || []
+                                                const unitShifts = groupedShifts[unitId] || []
                                                 const nurses = unitShifts.filter((s: any) => (s.nurse_role || '').toUpperCase().includes('ENFERMEIRO'))
                                                 const technicians = unitShifts.filter((s: any) => (s.nurse_role || '').toUpperCase().includes('TECNICO') || (s.nurse_role || '').toUpperCase().includes('TÉCNICO'))
                                                 const others = unitShifts.filter((s: any) => 

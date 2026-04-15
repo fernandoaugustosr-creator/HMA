@@ -2357,6 +2357,8 @@ export async function getDailyShifts(date: string) {
         ...s,
         nurse_name: nurse?.name || 'Desconhecido',
         nurse_role: nurse?.role || 'Desconhecido',
+        unit_id: unitId,
+        section_id: sectionId,
         unit_name: unitTitle,
         section_name: sectionTitle,
         is_in_roster: !!roster,
@@ -2515,6 +2517,8 @@ export async function getDailyShifts(date: string) {
       shift_date: s.date,
       nurse_name: nurseInfo.name,
       nurse_role: nurseInfo.role,
+      unit_id: rosterForShift?.unit_id ?? nurseInfo.unit_id ?? null,
+      section_id: rosterForShift?.section_id ?? nurseInfo.section_id ?? null,
       unit_name: unitTitle ?? unitFallback,
       section_name: sectionTitle ?? sectionFallback,
       is_in_roster: !!rosterForShift,
@@ -2781,7 +2785,11 @@ export async function getAllNurses() {
 
 export async function releaseSchedule(month: number, year: number, unitId: string | null) {
   try {
-      await checkAdmin()
+      if (unitId) {
+        await checkScaleEditor(unitId)
+      } else {
+        await checkAdmin()
+      }
       const session = cookies().get('session_user')
       const user = JSON.parse(session!.value)
       
@@ -2931,7 +2939,11 @@ export async function getRecentAbsences() {
 
 export async function unreleaseSchedule(month: number, year: number, unitId: string | null) {
   try {
-      await checkAdmin()
+      if (unitId) {
+        await checkScaleEditor(unitId)
+      } else {
+        await checkAdmin()
+      }
       
       if (isLocalMode()) {
         const db = readDb()

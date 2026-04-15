@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Sistema de Escala ENF-HMA",
-  description: "Sistema de gerenciamento de escalas de enfermagem",
+  title: "Sistema de Escalas do HMA",
+  description: "Sistema de gerenciamento de escalas do HMA",
 };
 
 export default function RootLayout({
