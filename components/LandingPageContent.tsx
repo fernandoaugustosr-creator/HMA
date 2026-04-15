@@ -137,7 +137,7 @@ export default function LandingPageContent() {
       </div>
       
       <div className="mt-12 text-center text-gray-400 text-sm font-bold uppercase tracking-widest print:hidden">
-        © {new Date().getFullYear()} Hospital Municipal de Açailândia • Gestão de Enfermagem
+        © {new Date().getFullYear()} Hospital Municipal de Açailândia • Gestão de Pessoas
       </div>
     </div>
   )
