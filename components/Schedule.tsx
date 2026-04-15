@@ -353,6 +353,42 @@ export default function Schedule({
   const [permissionUnitSearch, setPermissionUnitSearch] = useState('')
   const [myScalePermissionUnitIds, setMyScalePermissionUnitIds] = useState<string[]>([])
 
+  const selectedPermissionNurse = useMemo(
+    () => data.nurses.find(n => n.id === permissionNurseId) || null,
+    [data.nurses, permissionNurseId]
+  )
+
+  const selectedPermissionUnitIds = useMemo(
+    () => Array.from(new Set(
+      permissions
+        .filter((p: any) => String(p.nurse_id) === String(permissionNurseId))
+        .map((p: any) => String(p.unit_id))
+        .filter(Boolean)
+    )),
+    [permissions, permissionNurseId]
+  )
+
+  const selectedPermissionUnits = useMemo(
+    () => selectedPermissionUnitIds
+      .map(id => data.units.find(u => String(u.id) === String(id)))
+      .filter((u): u is Unit => !!u)
+      .sort((a, b) => a.title.localeCompare(b.title)),
+    [selectedPermissionUnitIds, data.units]
+  )
+
+  useEffect(() => {
+    if (!permissionNurseId) {
+      setPermissionUnitIds([])
+      setPermissionSelectAllUnits(false)
+      return
+    }
+    setPermissionUnitIds(selectedPermissionUnitIds)
+    setPermissionSelectAllUnits(
+      selectedPermissionUnitIds.length > 0 &&
+      selectedPermissionUnitIds.length === data.units.length
+    )
+  }, [permissionNurseId, selectedPermissionUnitIds, data.units.length])
+
   const applyReplicationToTargets = async (targetsToUpdate: { id: string }[]) => {
       if (!replicationData) return
 
@@ -3264,10 +3300,10 @@ export default function Schedule({
 
       {/* Footer Legends */}
       <div className="mt-0 space-y-2 print:mt-0 bg-white print-footer-legend">
-        {isAdmin && (
+        {canEditSelectedUnit && (
         <div className="flex flex-col items-end gap-2 mb-2 no-print">
             <div className="flex flex-wrap gap-2 justify-end">
-                {!isScheduleReleased && (
+                {isAdmin && !isScheduleReleased && (
                     <button 
                         onClick={handleEditFooter}
                         className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50"
@@ -4073,8 +4109,6 @@ CREATE POLICY "Admins can manage scale permissions" ON scale_permissions
                                     value={permissionNurseId}
                                     onChange={e => {
                                       setPermissionNurseId(e.target.value)
-                                      setPermissionUnitIds([])
-                                      setPermissionSelectAllUnits(false)
                                       setPermissionUnitSearch('')
                                     }}
                                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-black focus:ring-2 focus:ring-indigo-500"
@@ -4086,6 +4120,26 @@ CREATE POLICY "Admins can manage scale permissions" ON scale_permissions
                                         </option>
                                     ))}
                                 </select>
+                                {permissionNurseId && (
+                                  <div className="mt-2 p-2 rounded-lg bg-indigo-50 border border-indigo-100">
+                                    <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
+                                      Escalas liberadas para {selectedPermissionNurse?.name || 'Servidor'}: {selectedPermissionUnits.length}
+                                    </p>
+                                    {selectedPermissionUnits.length > 0 ? (
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {selectedPermissionUnits.map(u => (
+                                          <span key={u.id} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-indigo-200 text-indigo-700 font-semibold">
+                                            {u.title}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[11px] text-gray-500 mt-1">
+                                        Nenhuma escala específica liberada para este servidor.
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Setores / Escalas</label>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { getDailyShifts, getEditableUnits, getAllUnitNumbers } from '@/app/actions'
+import { getDailyShifts, getAllUnits, getAllUnitNumbers } from '@/app/actions'
 
 export default function AdminDailySchedule() {
     const today = new Date()
@@ -22,7 +22,7 @@ export default function AdminDailySchedule() {
     useEffect(() => {
         async function fetchUnits() {
             try {
-                const res = await getEditableUnits()
+                const res = await getAllUnits()
                 setUnits((res || []).filter((u: any) => u?.id && u?.title))
             } catch (e) {
                 setUnits([])
@@ -166,8 +166,9 @@ export default function AdminDailySchedule() {
     return (
         <div className="bg-white shadow-sm rounded-xl border border-gray-100 flex flex-col h-full overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-3">
                         <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -177,6 +178,21 @@ export default function AdminDailySchedule() {
                             <h2 className="text-lg font-bold text-gray-800 leading-tight">Plantões do Dia</h2>
                             <p className="text-xs text-gray-500">Visão geral dos profissionais escalados</p>
                         </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <select
+                            value={selectedUnitId}
+                            onChange={(e) => setSelectedUnitId(e.target.value)}
+                            className="w-full md:w-[360px] pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-all hover:border-gray-300"
+                        >
+                            <option value="__all__">Todos os setores</option>
+                            {sortedUnits.map(u => (
+                                <option key={u.id} value={String(u.id)}>{getUnitLabel(String(u.id))}</option>
+                            ))}
+                            <option value="__none__">Sem Setor</option>
+                        </select>
+                      </div>
                     </div>
                     
                     <div className="flex items-center gap-3">
@@ -210,19 +226,6 @@ export default function AdminDailySchedule() {
                         />
                     </div>
                 </div>
-            </div>
-            <div className="mt-3 flex justify-end">
-                <select
-                    value={selectedUnitId}
-                    onChange={(e) => setSelectedUnitId(e.target.value)}
-                    className="w-full md:w-[340px] pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-all hover:border-gray-300"
-                >
-                    <option value="__all__">Todos os setores</option>
-                    {sortedUnits.map(u => (
-                        <option key={u.id} value={String(u.id)}>{getUnitLabel(String(u.id))}</option>
-                    ))}
-                    <option value="__none__">Sem Setor</option>
-                </select>
             </div>
             </div>
             

@@ -488,6 +488,26 @@ export async function getEditableUnits() {
   return mapped
 }
 
+export async function getAllUnits() {
+  try {
+    await checkUser()
+  } catch (e) {
+    return []
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const units = (db.units || []).map((u: any) => ({ id: u.id, title: u.title }))
+    units.sort((a: any, b: any) => String(a.title || '').localeCompare(String(b.title || '')))
+    return units
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase.from('units').select('id,title').order('title', { ascending: true })
+  if (error) return []
+  return data || []
+}
+
 export async function getUnitMonthStatuses(month: number, year: number) {
   let user: any
   try {
@@ -4756,17 +4776,18 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
 }
 
 export async function assignLeave(prevState: any, formData: FormData) {
-  try {
-    await checkAdmin()
-  } catch (e) {
-    return { success: false, message: 'Acesso negado.' }
-  }
-
   const nurseId = formData.get('nurseId') as string
   const startDate = formData.get('startDate') as string
   const endDate = formData.get('endDate') as string
   const type = formData.get('type') as string || 'ferias'
   const unitId = formData.get('unitId') as string || null
+
+  try {
+    if (unitId) await checkScaleEditor(unitId)
+    else await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
   
   const reasonMap: Record<string, string> = {
     'ferias': 'Férias programadas',
@@ -5218,6 +5239,13 @@ export async function updateTimeOffStatus(requestId: string, newStatus: 'approve
 export async function deleteTimeOff(id: string) {
   if (isLocalMode()) {
     const db = readDb()
+    const req = db.time_off_requests.find(t => t.id === id)
+    try {
+      if (req?.unit_id) await checkScaleEditor(req.unit_id)
+      else await checkAdmin()
+    } catch (e) {
+      return { success: false, message: 'Acesso negado.' }
+    }
     db.time_off_requests = db.time_off_requests.filter(t => t.id !== id)
     writeDb(db)
     revalidatePath('/')
@@ -5225,6 +5253,20 @@ export async function deleteTimeOff(id: string) {
   }
 
   const supabase = createClient()
+  const { data: req, error: reqError } = await supabase
+    .from('time_off_requests')
+    .select('unit_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (reqError) return { success: false, message: 'Erro ao validar ausência: ' + reqError.message }
+
+  try {
+    if (req?.unit_id) await checkScaleEditor(req.unit_id)
+    else await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
   const { error } = await supabase.from('time_off_requests').delete().eq('id', id)
   
   if (error) return { success: false, message: 'Erro ao remover ausência: ' + error.message }
