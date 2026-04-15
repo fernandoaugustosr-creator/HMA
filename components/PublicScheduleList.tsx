@@ -234,25 +234,25 @@ export default function PublicScheduleList() {
                 <p className="text-lg font-medium">Nenhuma escala liberada encontrada.</p>
             </div>
         ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredReleases.map(release => (
                   <div 
                     key={release.id}
-                    className={`bg-white p-3 rounded-xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-3 group ${selectedRelease?.id === release.id ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-gray-100 hover:border-indigo-100'}`}
+                    className={`bg-white p-4 rounded-2xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 group ${selectedRelease?.id === release.id ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-gray-100 hover:border-indigo-100'}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-2 bg-[#eff6ff] rounded-xl group-hover:bg-[#dbeafe] transition-colors text-[#3b82f6] shrink-0">
-                        <FileText size={18} />
+                      <div className="p-3 bg-[#eff6ff] rounded-2xl group-hover:bg-[#dbeafe] transition-colors text-[#3b82f6] shrink-0">
+                        <FileText size={20} />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-black text-sm text-[#1e293b] group-hover:text-indigo-900 transition-colors uppercase tracking-tight truncate">
+                        <h3 className="font-black text-sm md:text-base text-[#1e293b] group-hover:text-indigo-900 transition-colors uppercase tracking-tight truncate">
                             {(() => {
                                 const num = unitNumbersMap[String(release.unit_id || '')]
                                 const title = String(release.unit_name || '')
                                 return num ? `${num} - ${title}` : title
                             })()}
                         </h3>
-                        <p className="text-gray-400 text-[11px] font-medium mt-0.5">
+                        <p className="text-gray-400 text-xs font-medium mt-1">
                           Liberado em: {release.released_at ? new Date(release.released_at).toLocaleDateString('pt-BR') : '-'}
                         </p>
                       </div>
@@ -261,7 +261,7 @@ export default function PublicScheduleList() {
                       type="button"
                       onClick={() => handlePrint(release)}
                       disabled={isPrinting}
-                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white text-xs font-black transition-all transform active:scale-95 shadow-sm shrink-0 ${
+                      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-black transition-all transform active:scale-95 shadow-sm shrink-0 ${
                         isPrinting && selectedRelease?.id === release.id 
                         ? 'bg-gray-400 cursor-not-allowed' 
                         : 'bg-[#3b82f6] hover:bg-[#2563eb]'
@@ -270,7 +270,7 @@ export default function PublicScheduleList() {
                       {isPrinting && selectedRelease?.id === release.id ? (
                           <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
                       ) : (
-                          <Download size={16} />
+                          <Download size={18} />
                       )}
                       <span>{isPrinting && selectedRelease?.id === release.id ? 'GERANDO...' : 'BAIXAR'}</span>
                     </button>

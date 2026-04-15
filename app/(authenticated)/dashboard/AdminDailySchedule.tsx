@@ -14,7 +14,7 @@ export default function AdminDailySchedule() {
     const [shifts, setShifts] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [openUnits, setOpenUnits] = useState<Record<string, boolean>>({})
-    const [filterMode, setFilterMode] = useState<'day' | 'night' | 'all'>('day')
+    const [filterMode, setFilterMode] = useState<'day' | 'night' | 'all'>('all')
     const [units, setUnits] = useState<{ id: string, title: string }[]>([])
     const [selectedUnitId, setSelectedUnitId] = useState<string>('__all__')
     const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
@@ -73,8 +73,9 @@ export default function AdminDailySchedule() {
     }
 
     const filteredShifts = shifts.filter((shift: any) => {
-        if (filterMode === 'day') return shift.shift_type === 'day' || shift.shift_type === 'mt'
-        if (filterMode === 'night') return shift.shift_type === 'night'
+        const t = String(shift.shift_type || '')
+        if (filterMode === 'day') return ['day', 'mt', 'morning', 'afternoon', 'dn'].includes(t)
+        if (filterMode === 'night') return ['night', 'dn'].includes(t)
         return true
     })
 
@@ -172,15 +173,13 @@ export default function AdminDailySchedule() {
                         </button>
                         <button 
                             onClick={() => setFilterMode('night')}
-                            disabled={true}
-                            className={`px-3 py-1.5 text-xs md:text-sm font-medium rounded-md transition-all opacity-50 cursor-not-allowed ${filterMode === 'night' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}
+                            className={`px-3 py-1.5 text-xs md:text-sm font-medium rounded-md transition-all ${filterMode === 'night' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         >
                             Noite
                         </button>
                         <button 
                             onClick={() => setFilterMode('all')}
-                            disabled={true}
-                            className={`px-3 py-1.5 text-xs md:text-sm font-medium rounded-md transition-all opacity-50 cursor-not-allowed ${filterMode === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'}`}
+                            className={`px-3 py-1.5 text-xs md:text-sm font-medium rounded-md transition-all ${filterMode === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         >
                             Todos
                         </button>
@@ -263,14 +262,26 @@ export default function AdminDailySchedule() {
                                                     !(s.nurse_role || '').toUpperCase().includes('TÉCNICO')
                                                 )
 
-                                                const renderCard = (shift: any, index: number) => (
+                                                const renderCard = (shift: any, index: number) => {
+                                                    const t = String(shift.shift_type || '')
+                                                    const label =
+                                                        t === 'night' ? 'N' :
+                                                        t === 'day' ? 'D' :
+                                                        t === 'dn' ? 'DN' :
+                                                        t === 'mt' ? 'MT' :
+                                                        t === 'morning' ? 'M' :
+                                                        t === 'afternoon' ? 'T' :
+                                                        t ? t.toUpperCase().slice(0, 2) : '?'
+                                                    const color =
+                                                        t === 'night' ? 'bg-slate-700' :
+                                                        t === 'dn' ? 'bg-indigo-700' :
+                                                        'bg-emerald-600'
+                                                    return (
                                                     <div key={shift.id || index} className="bg-white rounded-md border border-gray-200 shadow-sm flex overflow-hidden h-20 hover:shadow-md transition-shadow">
                                                         {/* Left Color Block */}
-                                                        <div className={`w-12 flex flex-col items-center justify-center text-white shrink-0 ${
-                                                            shift.shift_type === 'night' ? 'bg-slate-700' : 'bg-emerald-600'
-                                                        }`}>
+                                                        <div className={`w-12 flex flex-col items-center justify-center text-white shrink-0 ${color}`}>
                                                             <span className="text-xl font-bold leading-none">
-                                                                {shift.shift_type === 'night' ? 'N' : 'D'}
+                                                                {label}
                                                             </span>
                                                             <svg className="w-4 h-4 mt-1 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -301,7 +312,7 @@ export default function AdminDailySchedule() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                )
+                                                )}
 
                                                 return (
                                                     <div className="flex flex-col lg:flex-row gap-6">

@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    distDir: '.next-hma2',
     typescript: {
         // !! WARN !!
         // Dangerously allow production builds to successfully complete even if

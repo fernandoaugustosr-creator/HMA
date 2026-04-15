@@ -53,80 +53,82 @@ export default function LandingPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] flex flex-col items-center justify-start p-4 md:p-8 pt-6 md:pt-10 font-sans overflow-y-auto print:bg-white print:p-0 print:block print:min-h-0">
-      <div className="max-w-7xl w-full flex flex-col gap-6 print:block print:max-w-none print:w-full">
-        <div className="bg-white rounded-[2rem] shadow-2xl shadow-slate-200/60 border border-white p-4 md:p-6 print:hidden">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex items-center justify-center lg:justify-start gap-6">
+    <div className="min-h-screen bg-[#f1f5f9] flex flex-col items-center justify-start p-4 md:p-8 pt-8 md:pt-12 font-sans overflow-y-auto print:bg-white print:p-0 print:block print:min-h-0">
+      <div className="max-w-7xl w-full flex flex-col gap-8 print:block print:max-w-none print:w-full">
+        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white p-6 md:p-8 print:hidden">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex items-center gap-8 justify-center lg:justify-start">
               <Image
                 src={logoPrefeitura}
                 alt="Prefeitura de Açailândia"
-                width={140}
-                height={48}
-                className="h-10 w-auto object-contain"
+                width={160}
+                height={54}
+                className="h-12 md:h-14 w-auto object-contain"
                 priority
               />
-              <div className="h-8 w-px bg-gray-200" />
+              <div className="h-10 w-px bg-gray-200 hidden sm:block" />
               <Image
                 src={logoHma}
                 alt="HMA"
-                width={140}
-                height={48}
-                className="h-10 w-auto object-contain"
+                width={160}
+                height={54}
+                className="h-12 md:h-14 w-auto object-contain"
                 priority
               />
             </div>
 
-            <form action={formAction} className="flex flex-col md:flex-row md:items-end gap-3 w-full lg:w-auto">
-              <div className="flex-1 md:w-[220px]">
-                <label htmlFor="cpf" className="block text-xs font-black text-[#1e293b] mb-1 ml-1 uppercase tracking-wider">
-                  CPF
-                </label>
-                <input
-                  id="cpf"
-                  name="cpf"
-                  type="text"
-                  required
-                  className="appearance-none block w-full px-4 py-3 border-none rounded-xl text-[#1e293b] bg-[#eef2ff] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200 text-sm font-bold"
-                  placeholder="02170025367"
-                />
+            <form action={formAction} className="w-full lg:w-auto">
+              <div className="flex flex-col md:flex-row md:items-end gap-4">
+                <div className="w-full md:w-[260px]">
+                  <label htmlFor="cpf" className="block text-xs font-black text-[#1e293b] mb-2 uppercase tracking-widest">
+                    CPF
+                  </label>
+                  <input
+                    id="cpf"
+                    name="cpf"
+                    type="text"
+                    required
+                    className="appearance-none block w-full px-5 py-4 border-none rounded-2xl text-[#1e293b] bg-[#eef2ff] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200 text-base font-bold"
+                    placeholder="02170025367"
+                    autoComplete="username"
+                  />
+                </div>
+                <div className="w-full md:w-[260px]">
+                  <label htmlFor="password" className="block text-xs font-black text-[#1e293b] mb-2 uppercase tracking-widest">
+                    SENHA
+                  </label>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    className="appearance-none block w-full px-5 py-4 border-none rounded-2xl text-[#1e293b] bg-[#eef2ff] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200 text-base font-bold"
+                    placeholder="••••••"
+                    autoComplete="current-password"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full md:w-auto h-[56px] px-10 rounded-2xl text-white bg-[#4f46e5] hover:bg-[#4338ca] shadow-lg shadow-indigo-200 transition-all duration-200 transform active:scale-[0.98] font-black"
+                >
+                  Entrar
+                </button>
               </div>
 
-              <div className="flex-1 md:w-[220px]">
-                <label htmlFor="password" title="password" className="block text-xs font-black text-[#1e293b] mb-1 ml-1 uppercase tracking-wider">
-                  Senha
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  className="appearance-none block w-full px-4 py-3 border-none rounded-xl text-[#1e293b] bg-[#eef2ff] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200 text-sm font-bold"
-                  placeholder="••••••"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full md:w-auto flex justify-center px-6 py-3 border border-transparent text-sm font-black rounded-xl text-white bg-[#4f46e5] hover:bg-[#4338ca] shadow-lg shadow-indigo-200 transition-all duration-200 transform active:scale-[0.98]"
-              >
-                Entrar
-              </button>
+              {state?.message && (
+                <div className="mt-4 bg-red-50 text-red-600 text-sm font-bold p-3 rounded-2xl text-center border border-red-100">
+                  {state.message}
+                </div>
+              )}
             </form>
           </div>
-
-          {state?.message && (
-            <div className="mt-4 bg-red-50 text-red-600 text-sm font-bold p-3 rounded-xl text-center border border-red-100">
-              {state.message}
-            </div>
-          )}
         </div>
 
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl shadow-slate-200/60 border border-white h-full print:p-0 print:shadow-none print:border-none">
-          <div className="flex items-center justify-between mb-4 print:hidden">
+        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white p-6 md:p-8 print:p-0 print:shadow-none print:border-none">
+          <div className="flex items-center justify-between mb-8 print:hidden">
             <div>
-              <h2 className="text-2xl font-black text-[#1e293b] tracking-tight">Escalas Publicadas</h2>
-              <p className="text-gray-500 font-medium text-sm mt-1">Consulte e baixe as escalas sem necessidade de login</p>
+              <h2 className="text-3xl font-black text-[#1e293b] tracking-tight">Escalas Publicadas</h2>
+              <p className="text-gray-500 font-medium text-lg mt-1">Consulte e baixe as escalas sem necessidade de login</p>
             </div>
           </div>
 
@@ -134,10 +136,10 @@ export default function LandingPageContent() {
             <PublicScheduleList />
           </Suspense>
         </div>
-      </div>
-      
-      <div className="mt-12 text-center text-gray-400 text-sm font-bold uppercase tracking-widest print:hidden">
-        © {new Date().getFullYear()} Hospital Municipal de Açailândia • Gestão de Pessoas
+
+        <div className="text-center text-gray-400 text-sm font-bold uppercase tracking-widest print:hidden">
+          © {new Date().getFullYear()} Hospital Municipal de Açailândia • Gestão de Enfermagem
+        </div>
       </div>
     </div>
   )
