@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { getReleasedSchedules, getMonthlyScheduleData } from '@/app/actions'
+import { getReleasedSchedules, getMonthlyScheduleData, getAllUnitNumbers } from '@/app/actions'
 import Schedule from '@/components/Schedule'
 import { FileText, Download, Calendar } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
@@ -20,13 +20,18 @@ export default function PublicScheduleList() {
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('')
   const [isPrinting, setIsPrinting] = useState(false)
   const [professionCount, setProfessionCount] = useState<number>(0)
+  const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
   const printTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await getReleasedSchedules()
+        const [data, numbers] = await Promise.all([
+            getReleasedSchedules(),
+            getAllUnitNumbers()
+        ])
         setReleases(data)
+        setUnitNumbersMap(numbers || {})
 
         if (data.length > 0) {
             // Check for query params first
@@ -109,8 +114,21 @@ export default function PublicScheduleList() {
   const filteredReleases = React.useMemo(() => {
       if (!selectedMonthYear) return []
       const [year, month] = selectedMonthYear.split('-').map(Number)
-      return releases.filter(r => r.year === year && r.month === month)
-  }, [releases, selectedMonthYear])
+      const list = releases.filter(r => r.year === year && r.month === month)
+      list.sort((a, b) => {
+          const numA = unitNumbersMap[String(a.unit_id || '')] || ''
+          const numB = unitNumbersMap[String(b.unit_id || '')] || ''
+          const parsedA = parseInt(numA, 10)
+          const parsedB = parseInt(numB, 10)
+          const aHas = !isNaN(parsedA)
+          const bHas = !isNaN(parsedB)
+          if (aHas && bHas && parsedA !== parsedB) return parsedA - parsedB
+          if (aHas && !bHas) return -1
+          if (!aHas && bHas) return 1
+          return String(a.unit_name || '').localeCompare(String(b.unit_name || ''))
+      })
+      return list
+  }, [releases, selectedMonthYear, unitNumbersMap])
 
   const handleScheduleLoaded = useCallback(() => {
     if (printTimeoutRef.current) {
@@ -216,19 +234,25 @@ export default function PublicScheduleList() {
                 <p className="text-lg font-medium">Nenhuma escala liberada encontrada.</p>
             </div>
         ) : (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {filteredReleases.map(release => (
                   <div 
                     key={release.id}
-                    className={`bg-white p-5 rounded-2xl border-2 shadow-sm hover:shadow-lg hover:shadow-indigo-50 transition-all flex items-center justify-between gap-4 group ${selectedRelease?.id === release.id ? 'border-indigo-300 ring-4 ring-indigo-50' : 'border-gray-100 hover:border-indigo-100'}`}
+                    className={`bg-white p-3 rounded-xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-3 group ${selectedRelease?.id === release.id ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-gray-100 hover:border-indigo-100'}`}
                   >
-                    <div className="flex items-center gap-5">
-                      <div className="p-4 bg-[#eff6ff] rounded-2xl group-hover:bg-[#dbeafe] transition-colors text-[#3b82f6] shadow-inner">
-                        <FileText size={28} />
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 bg-[#eff6ff] rounded-xl group-hover:bg-[#dbeafe] transition-colors text-[#3b82f6] shrink-0">
+                        <FileText size={18} />
                       </div>
-                      <div>
-                        <h3 className="font-black text-xl text-[#1e293b] group-hover:text-indigo-900 transition-colors uppercase tracking-tight">{release.unit_name}</h3>
-                        <p className="text-gray-400 text-sm font-medium mt-1">
+                      <div className="min-w-0">
+                        <h3 className="font-black text-sm text-[#1e293b] group-hover:text-indigo-900 transition-colors uppercase tracking-tight truncate">
+                            {(() => {
+                                const num = unitNumbersMap[String(release.unit_id || '')]
+                                const title = String(release.unit_name || '')
+                                return num ? `${num} - ${title}` : title
+                            })()}
+                        </h3>
+                        <p className="text-gray-400 text-[11px] font-medium mt-0.5">
                           Liberado em: {release.released_at ? new Date(release.released_at).toLocaleDateString('pt-BR') : '-'}
                         </p>
                       </div>
@@ -237,16 +261,16 @@ export default function PublicScheduleList() {
                       type="button"
                       onClick={() => handlePrint(release)}
                       disabled={isPrinting}
-                      className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm font-black transition-all transform active:scale-95 shadow-md ${
+                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white text-xs font-black transition-all transform active:scale-95 shadow-sm shrink-0 ${
                         isPrinting && selectedRelease?.id === release.id 
                         ? 'bg-gray-400 cursor-not-allowed' 
-                        : 'bg-[#3b82f6] hover:bg-[#2563eb] shadow-blue-100'
+                        : 'bg-[#3b82f6] hover:bg-[#2563eb]'
                       }`}
                     >
                       {isPrinting && selectedRelease?.id === release.id ? (
                           <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
                       ) : (
-                          <Download size={18} />
+                          <Download size={16} />
                       )}
                       <span>{isPrinting && selectedRelease?.id === release.id ? 'GERANDO...' : 'BAIXAR'}</span>
                     </button>
@@ -254,7 +278,7 @@ export default function PublicScheduleList() {
                 ))}
                 
                 {filteredReleases.length === 0 && (
-                    <div className="text-center py-12 text-gray-400">
+                    <div className="text-center py-12 text-gray-400 md:col-span-2">
                         <p className="text-lg font-medium">Nenhuma escala para este mês.</p>
                     </div>
                 )}
