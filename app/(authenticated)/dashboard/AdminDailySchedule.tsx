@@ -120,12 +120,28 @@ export default function AdminDailySchedule() {
         return acc
     }, {})
 
-    const unitIdsToRender = selectedUnitId === '__all__'
-        ? [
-            ...sortedUnits.map(u => String(u.id)),
-            ...(Object.keys(groupedShifts).includes('__none__') ? ['__none__'] : [])
-        ]
-        : [selectedUnitId]
+    const unitIdsToRender = useMemo(() => {
+        if (selectedUnitId !== '__all__') return [selectedUnitId]
+
+        const ids = Object.keys(groupedShifts)
+        ids.sort((a, b) => {
+            if (a === '__none__') return 1
+            if (b === '__none__') return -1
+            const numA = unitNumbersMap[String(a)] || ''
+            const numB = unitNumbersMap[String(b)] || ''
+            const parsedA = parseInt(numA, 10)
+            const parsedB = parseInt(numB, 10)
+            const aHas = !isNaN(parsedA)
+            const bHas = !isNaN(parsedB)
+            if (aHas && bHas && parsedA !== parsedB) return parsedA - parsedB
+            if (aHas && !bHas) return -1
+            if (!aHas && bHas) return 1
+            const titleA = unitsById[String(a)] || ''
+            const titleB = unitsById[String(b)] || ''
+            return titleA.localeCompare(titleB)
+        })
+        return ids
+    }, [groupedShifts, selectedUnitId, unitNumbersMap, unitsById])
 
     // Sempre que a data mudar ou os plantões mudarem, expandir todos
     useEffect(() => {
