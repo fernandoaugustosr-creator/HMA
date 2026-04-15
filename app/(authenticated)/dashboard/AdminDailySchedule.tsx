@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { getDailyShifts, getEditableUnits } from '@/app/actions'
+import { useState, useEffect, useMemo } from 'react'
+import { getDailyShifts, getEditableUnits, getAllUnitNumbers } from '@/app/actions'
 
 export default function AdminDailySchedule() {
     const today = new Date()
@@ -17,6 +17,7 @@ export default function AdminDailySchedule() {
     const [filterMode, setFilterMode] = useState<'day' | 'night' | 'all'>('day')
     const [units, setUnits] = useState<{ id: string, title: string }[]>([])
     const [selectedUnitId, setSelectedUnitId] = useState<string>('__all__')
+    const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
 
     useEffect(() => {
         async function fetchUnits() {
@@ -28,6 +29,18 @@ export default function AdminDailySchedule() {
             }
         }
         fetchUnits()
+    }, [])
+
+    useEffect(() => {
+        async function fetchUnitNumbers() {
+            try {
+                const map = await getAllUnitNumbers()
+                setUnitNumbersMap(map || {})
+            } catch (e) {
+                setUnitNumbersMap({})
+            }
+        }
+        fetchUnitNumbers()
     }, [])
 
     useEffect(() => {
@@ -65,8 +78,32 @@ export default function AdminDailySchedule() {
         return true
     })
 
+    const sortedUnits = useMemo(() => {
+        const list = [...units]
+        list.sort((a, b) => {
+            const numA = unitNumbersMap[String(a.id)] || ''
+            const numB = unitNumbersMap[String(b.id)] || ''
+            const parsedA = parseInt(numA, 10)
+            const parsedB = parseInt(numB, 10)
+            const aHas = !isNaN(parsedA)
+            const bHas = !isNaN(parsedB)
+            if (aHas && bHas && parsedA !== parsedB) return parsedA - parsedB
+            if (aHas && !bHas) return -1
+            if (!aHas && bHas) return 1
+            return String(a.title || '').localeCompare(String(b.title || ''))
+        })
+        return list
+    }, [units, unitNumbersMap])
+
     const unitsById: Record<string, string> = {}
-    units.forEach(u => { unitsById[String(u.id)] = String(u.title) })
+    sortedUnits.forEach(u => { unitsById[String(u.id)] = String(u.title) })
+
+    const getUnitLabel = (unitId: string) => {
+        if (unitId === '__none__') return 'Sem Setor'
+        const title = unitsById[unitId] || 'Setor'
+        const num = unitNumbersMap[unitId]
+        return num ? `${num} - ${title}` : title
+    }
 
     const filteredByUnit = selectedUnitId === '__all__'
         ? filteredShifts
@@ -84,7 +121,7 @@ export default function AdminDailySchedule() {
 
     const unitIdsToRender = selectedUnitId === '__all__'
         ? [
-            ...units.map(u => String(u.id)),
+            ...sortedUnits.map(u => String(u.id)),
             ...(Object.keys(groupedShifts).includes('__none__') ? ['__none__'] : [])
         ]
         : [selectedUnitId]
@@ -111,20 +148,21 @@ export default function AdminDailySchedule() {
 
     return (
         <div className="bg-white shadow-sm rounded-xl border border-gray-100 flex flex-col h-full overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gray-50/30">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                        </svg>
+            <div className="p-6 border-b border-gray-100 bg-gray-50/30">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800 leading-tight">Plantões do Dia</h2>
+                            <p className="text-xs text-gray-500">Visão geral dos profissionais escalados</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 className="text-lg font-bold text-gray-800 leading-tight">Plantões do Dia</h2>
-                        <p className="text-xs text-gray-500">Visão geral dos profissionais escalados</p>
-                    </div>
-                </div>
-                
-                <div className="flex items-center gap-3">
+                    
+                    <div className="flex items-center gap-3">
                     <div className="flex bg-gray-100 p-1 rounded-lg">
                         <button 
                             onClick={() => setFilterMode('day')}
@@ -149,20 +187,6 @@ export default function AdminDailySchedule() {
                     </div>
 
                     <div className="relative">
-                        <select
-                            value={selectedUnitId}
-                            onChange={(e) => setSelectedUnitId(e.target.value)}
-                            className="pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-all hover:border-gray-300"
-                        >
-                            <option value="__all__">Todos os setores</option>
-                            {units.map(u => (
-                                <option key={u.id} value={String(u.id)}>{u.title}</option>
-                            ))}
-                            <option value="__none__">Sem Setor</option>
-                        </select>
-                    </div>
-
-                    <div className="relative">
                         <input 
                             type="date" 
                             value={selectedDate}
@@ -171,6 +195,20 @@ export default function AdminDailySchedule() {
                         />
                     </div>
                 </div>
+            </div>
+            <div className="mt-3 flex justify-end">
+                <select
+                    value={selectedUnitId}
+                    onChange={(e) => setSelectedUnitId(e.target.value)}
+                    className="w-full md:w-[340px] pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-all hover:border-gray-300"
+                >
+                    <option value="__all__">Todos os setores</option>
+                    {sortedUnits.map(u => (
+                        <option key={u.id} value={String(u.id)}>{getUnitLabel(String(u.id))}</option>
+                    ))}
+                    <option value="__none__">Sem Setor</option>
+                </select>
+            </div>
             </div>
             
             <div className="flex-1 overflow-y-auto max-h-[500px] p-6 bg-gray-50/50 custom-scrollbar">
@@ -189,7 +227,7 @@ export default function AdminDailySchedule() {
                 ) : (
                     <div className="space-y-4">
                         {unitIdsToRender.map((unitId) => {
-                            const title = unitId === '__none__' ? 'Sem Setor' : (unitsById[unitId] || 'Setor')
+                            const title = getUnitLabel(unitId)
                             const isOpen = openUnits[unitId] ?? false
                             const count = groupedShifts[unitId]?.length || 0
                             return (
