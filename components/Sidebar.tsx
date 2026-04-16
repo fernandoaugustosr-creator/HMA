@@ -187,6 +187,7 @@ export default function Sidebar({ user }: { user: any }) {
                   <div key={item.href}>
                     <Link
                       href={item.href}
+                      prefetch={false}
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                         isActive
@@ -204,6 +205,7 @@ export default function Sidebar({ user }: { user: any }) {
                         <Link
                           key={subItem.href}
                           href={subItem.href}
+                          prefetch={false}
                           onClick={() => setIsMobileMenuOpen(false)}
                           className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
                             isSubActive
@@ -280,6 +282,7 @@ export default function Sidebar({ user }: { user: any }) {
               <div key={item.href}>
                 <Link
                   href={item.href}
+                  prefetch={false}
                   className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-4'} py-3 text-sm font-medium rounded-lg transition-colors ${
                     isActive
                       ? 'bg-indigo-50 text-indigo-700'
@@ -297,6 +300,7 @@ export default function Sidebar({ user }: { user: any }) {
                     <Link
                       key={subItem.href}
                       href={subItem.href}
+                      prefetch={false}
                       className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
                         isSubActive
                           ? 'bg-indigo-50 text-indigo-700'

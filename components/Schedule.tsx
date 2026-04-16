@@ -5,7 +5,7 @@ import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { QRCodeSVG } from 'qrcode.react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, getUnitNumber, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission, getUnitMonthStatuses } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission, getUnitMonthStatuses, getEditableUnits } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle, EyeOff } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
@@ -226,12 +226,26 @@ export default function Schedule({
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(() => {
     if (initialMonth !== undefined) return initialMonth
+    if (typeof window !== 'undefined') {
+      const storedMonth = localStorage.getItem('enf_hma_last_month')
+      if (storedMonth !== null && storedMonth !== '') {
+        const parsed = parseInt(storedMonth, 10)
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 11) return parsed
+      }
+    }
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     return nextMonth.getMonth()
   })
   const [selectedYear, setSelectedYear] = useState(() => {
     if (initialYear !== undefined) return initialYear
+    if (typeof window !== 'undefined') {
+      const storedYear = localStorage.getItem('enf_hma_last_year')
+      if (storedYear !== null && storedYear !== '') {
+        const parsed = parseInt(storedYear, 10)
+        if (!isNaN(parsed)) return parsed
+      }
+    }
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     return nextMonth.getFullYear()
@@ -241,30 +255,13 @@ export default function Schedule({
   const [isFetchingAllNurses, setIsFetchingAllNurses] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
+  const [selectedUnitId, setSelectedUnitId] = useState<string>(() => {
+    if (initialUnitId) return initialUnitId
+    if (typeof window !== 'undefined') return localStorage.getItem('enf_hma_last_unit') || ''
+    return ''
+  })
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (initialMonth !== undefined || initialYear !== undefined || initialUnitId) return
-
-    const storedMonth = localStorage.getItem('enf_hma_last_month')
-    const storedYear = localStorage.getItem('enf_hma_last_year')
-    const storedUnit = localStorage.getItem('enf_hma_last_unit')
-
-    if (storedMonth !== null && storedMonth !== '') {
-      const parsed = parseInt(storedMonth, 10)
-      if (!isNaN(parsed) && parsed >= 0 && parsed <= 11) setSelectedMonth(parsed)
-    }
-
-    if (storedYear !== null && storedYear !== '') {
-      const parsed = parseInt(storedYear, 10)
-      if (!isNaN(parsed)) setSelectedYear(parsed)
-    }
-
-    if (storedUnit) setSelectedUnitId(storedUnit)
-  }, [initialMonth, initialYear, initialUnitId])
   
   // Section Management State
   const [isAddingSection, setIsAddingSection] = useState(false)
@@ -521,6 +518,7 @@ export default function Schedule({
   
   // Cache to store fetched data by month-year key
   const scheduleCache = useRef<Record<string, ScheduleData>>({})
+  const scheduleInFlight = useRef<Record<string, Promise<void>>>({})
 
   const clearCache = () => {
     scheduleCache.current = {}
@@ -555,56 +553,66 @@ export default function Schedule({
     // Skip fetching if a manual save is already in progress to avoid race conditions
     // BUT allow if it's a forced refresh (e.g. after a save)
     if (!forceRefresh && isSaving) return
+    if (!selectedUnitId) return
 
     const cacheKey = `${selectedMonth}-${selectedYear}-${selectedUnitId}`
-
-    // 1. FAST CACHE ACCESS
-    if (!forceRefresh && scheduleCache.current[cacheKey]) {
-        const cachedData = scheduleCache.current[cacheKey]
-        setData(cachedData)
-        
-        // Metadata from cache
-        const meta = cachedData.releases && cachedData.releases.length > 0 ? cachedData.releases[0] : null
-        if (meta) {
-            setFooterText(meta.footer_text || '')
-            setDynamicField(meta.dynamic_field || 'coren')
-            setIsSetorHidden(!!meta.is_setor_hidden)
-        } else {
-            setFooterText('')
-            setDynamicField('coren')
-            setIsSetorHidden(false)
-        }
-        
-        onLoaded?.()
+    if (!forceRefresh && scheduleInFlight.current[cacheKey]) {
+        await scheduleInFlight.current[cacheKey]
         return
     }
 
-    if (showLoading) setLoading(true)
+    const run = (async () => {
+        if (!forceRefresh && scheduleCache.current[cacheKey]) {
+            const cachedData = scheduleCache.current[cacheKey]
+            setData(cachedData)
+            
+            const meta = cachedData.releases && cachedData.releases.length > 0 ? cachedData.releases[0] : null
+            if (meta) {
+                setFooterText(meta.footer_text || '')
+                setDynamicField(meta.dynamic_field || 'coren')
+                setIsSetorHidden(!!meta.is_setor_hidden)
+            } else {
+                setFooterText('')
+                setDynamicField('coren')
+                setIsSetorHidden(false)
+            }
+            
+            onLoaded?.()
+            return
+        }
 
+        if (showLoading) setLoading(true)
+
+        try {
+          const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear, selectedUnitId)
+          const newData = result as ScheduleData
+          
+          scheduleCache.current[cacheKey] = newData
+          setData(newData)
+
+          const meta = newData.releases && newData.releases.length > 0 ? newData.releases[0] : null
+          if (meta) {
+              setFooterText(meta.footer_text || '')
+              setDynamicField(meta.dynamic_field || 'coren')
+              setIsSetorHidden(!!meta.is_setor_hidden)
+          } else {
+              setFooterText('')
+              setDynamicField('coren')
+              setIsSetorHidden(false)
+          }
+        } catch (error) {
+          console.error('Error fetching schedule:', error)
+        } finally {
+          if (showLoading) setLoading(false)
+          onLoaded?.()
+        }
+    })()
+
+    scheduleInFlight.current[cacheKey] = run
     try {
-      const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear, selectedUnitId)
-      const newData = result as ScheduleData
-      
-      // Update cache
-      scheduleCache.current[cacheKey] = newData
-      setData(newData)
-
-      // Set metadata fields
-      const meta = newData.releases && newData.releases.length > 0 ? newData.releases[0] : null
-      if (meta) {
-          setFooterText(meta.footer_text || '')
-          setDynamicField(meta.dynamic_field || 'coren')
-          setIsSetorHidden(!!meta.is_setor_hidden)
-      } else {
-          setFooterText('')
-          setDynamicField('coren')
-          setIsSetorHidden(false)
-      }
-    } catch (error) {
-      console.error('Error fetching schedule:', error)
+        await run
     } finally {
-      if (showLoading) setLoading(false)
-      onLoaded?.()
+        delete scheduleInFlight.current[cacheKey]
     }
   }, [selectedMonth, selectedYear, selectedUnitId, onLoaded, isSaving])
 
@@ -655,13 +663,39 @@ export default function Schedule({
   }
 
   useEffect(() => {
+    if (!selectedUnitId) return
     fetchData()
-  }, [fetchData])
+  }, [fetchData, selectedUnitId])
 
   useEffect(() => {
     getMyScalePermissionUnitIds()
       .then(setMyScalePermissionUnitIds)
       .catch(() => setMyScalePermissionUnitIds([]))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    getEditableUnits()
+      .then((units: any[]) => {
+        if (cancelled) return
+        const mapped = (units || []).map(u => ({ id: String(u.id), title: String(u.title || '') })) as any
+        setData(prev => ({ ...prev, units: mapped }))
+        if (!selectedUnitId && mapped.length > 0) {
+          setSelectedUnitId(mapped[0].id)
+          return
+        }
+        if (selectedUnitId && mapped.length > 0) {
+          const stillAllowed = mapped.some((u: any) => String(u.id) === String(selectedUnitId))
+          if (!stillAllowed) setSelectedUnitId(mapped[0].id)
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
+        setData(prev => ({ ...prev, units: [] }))
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Fetch permissions if admin
@@ -727,16 +761,12 @@ export default function Schedule({
   }, [selectedMonth, selectedYear, selectedUnitId])
   
   useEffect(() => {
-    async function refreshUnitNumber() {
-      if (!selectedUnitId) {
-        setUnitNumber('')
-        return
-      }
-      const n = await getUnitNumber(selectedUnitId)
-      setUnitNumber(n || '')
+    if (!selectedUnitId) {
+      setUnitNumber('')
+      return
     }
-    refreshUnitNumber()
-  }, [selectedUnitId])
+    setUnitNumber(unitNumbersMap[selectedUnitId] || '')
+  }, [selectedUnitId, unitNumbersMap])
   
   useEffect(() => {
     async function loadAllNumbers() {
@@ -744,13 +774,14 @@ export default function Schedule({
       setUnitNumbersMap(map || {})
     }
     loadAllNumbers()
-  }, [data.units])
+  }, [])
 
   useEffect(() => {
+    if (!isAdmin) return
     getUnitMonthStatuses(selectedMonth + 1, selectedYear)
       .then((m: any) => setUnitMonthStatuses(m || {}))
       .catch(() => setUnitMonthStatuses({}))
-  }, [selectedMonth, selectedYear])
+  }, [selectedMonth, selectedYear, isAdmin])
   
   const handleSaveHeader = () => {
     if (isScheduleReleased) return
