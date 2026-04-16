@@ -122,26 +122,11 @@ export default function AdminDailySchedule() {
 
     const unitIdsToRender = useMemo(() => {
         if (selectedUnitId !== '__all__') return [selectedUnitId]
-
-        const ids = Object.keys(groupedShifts)
-        ids.sort((a, b) => {
-            if (a === '__none__') return 1
-            if (b === '__none__') return -1
-            const numA = unitNumbersMap[String(a)] || ''
-            const numB = unitNumbersMap[String(b)] || ''
-            const parsedA = parseInt(numA, 10)
-            const parsedB = parseInt(numB, 10)
-            const aHas = !isNaN(parsedA)
-            const bHas = !isNaN(parsedB)
-            if (aHas && bHas && parsedA !== parsedB) return parsedA - parsedB
-            if (aHas && !bHas) return -1
-            if (!aHas && bHas) return 1
-            const titleA = unitsById[String(a)] || ''
-            const titleB = unitsById[String(b)] || ''
-            return titleA.localeCompare(titleB)
-        })
-        return ids
-    }, [groupedShifts, selectedUnitId, unitNumbersMap, unitsById])
+        return [
+            ...sortedUnits.map(u => String(u.id)),
+            '__none__'
+        ]
+    }, [selectedUnitId, sortedUnits])
 
     // Sempre que a data mudar ou os plantões mudarem, expandir todos
     useEffect(() => {
@@ -150,11 +135,12 @@ export default function AdminDailySchedule() {
             newOpenUnits[selectedUnitId] = true
         } else {
             unitIdsToRender.forEach((unitId) => {
-                newOpenUnits[unitId] = true
+                const count = groupedShifts[unitId]?.length || 0
+                newOpenUnits[unitId] = count > 0
             })
         }
         setOpenUnits(newOpenUnits)
-    }, [shifts, selectedUnitId, units.length])
+    }, [groupedShifts, selectedUnitId, unitIdsToRender])
 
     const toggleUnit = (unit: string) => {
         setOpenUnits(prev => ({
@@ -273,6 +259,13 @@ export default function AdminDailySchedule() {
                                         <div className="border-t border-gray-50 bg-gray-50/30 p-4">
                                             {(() => {
                                                 const unitShifts = groupedShifts[unitId] || []
+                                                if (unitShifts.length === 0) {
+                                                    return (
+                                                        <div className="text-sm text-gray-500 bg-white border border-dashed border-gray-200 rounded-lg px-4 py-6 text-center">
+                                                            Nenhum profissional escalado para este setor nesta data.
+                                                        </div>
+                                                    )
+                                                }
                                                 const nurses = unitShifts.filter((s: any) => (s.nurse_role || '').toUpperCase().includes('ENFERMEIRO'))
                                                 const technicians = unitShifts.filter((s: any) => (s.nurse_role || '').toUpperCase().includes('TECNICO') || (s.nurse_role || '').toUpperCase().includes('TÉCNICO'))
                                                 const others = unitShifts.filter((s: any) => 
