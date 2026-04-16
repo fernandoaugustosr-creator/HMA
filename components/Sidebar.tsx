@@ -26,7 +26,7 @@ export default function Sidebar({ user }: { user: any }) {
   }, [])
 
   const allNavItems = [
-    { name: 'Dashboard', href: '/', icon: (
+    { name: 'Dashboard', href: '/dashboard', icon: (
       <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
       </svg>
@@ -110,7 +110,7 @@ export default function Sidebar({ user }: { user: any }) {
     navItems = allNavItems.filter(item => item.name !== 'Faltas' && item.name !== 'Folgas')
   } else if (role === 'COORDENADOR') {
     navItems = [
-      dashboardIcon && { name: 'Dashboard', href: '/', icon: dashboardIcon },
+      dashboardIcon && { name: 'Dashboard', href: '/dashboard', icon: dashboardIcon },
       canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
       faltasIcon && { name: 'Lançar Falta', href: '/coordenacao?tab=falta', icon: faltasIcon },
       faltasIcon && { name: 'Solicitar Pagamentos', href: '/coordenacao?tab=pagamento', icon: faltasIcon },
@@ -121,7 +121,7 @@ export default function Sidebar({ user }: { user: any }) {
     ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
   } else {
     navItems = [
-      dashboardIcon && { name: 'Dashboard', href: '/', icon: dashboardIcon },
+      dashboardIcon && { name: 'Dashboard', href: '/dashboard', icon: dashboardIcon },
       canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
       trocasIcon && { name: 'Permultas', href: '/trocas', icon: trocasIcon },
       faltasIcon && { name: 'Faltas', href: '/coordenacao', icon: faltasIcon },
