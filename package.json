@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "dev": "node scripts/next-dev.js",
     "clean": "node scripts/clean-next.js",
-    "build": "next build",
-    "start": "next start",
+    "build": "node scripts/next-build.js",
+    "start": "node scripts/next-start.js",
     "lint": "next lint",
     "migrate": "node scripts/migrate.js"
   },

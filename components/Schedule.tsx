@@ -544,10 +544,10 @@ export default function Schedule({
 
   useEffect(() => {
     // When opening modals that need the full nurse list, ensure we fetch it
-    if (isNurseModalOpen || !!leaveModalType) {
+    if (isNurseModalOpen || !!leaveModalType || isPermissionManagerOpen) {
         fetchAllNursesList(true) // Force fetch to be sure we have the latest and complete list
     }
-  }, [isNurseModalOpen, leaveModalType, fetchAllNursesList])
+  }, [isNurseModalOpen, leaveModalType, isPermissionManagerOpen, fetchAllNursesList])
 
   const fetchData = useCallback(async (forceRefresh = false, showLoading = true) => {
     // Skip fetching if a manual save is already in progress to avoid race conditions

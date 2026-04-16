@@ -2,8 +2,9 @@ import { cookies } from 'next/headers'
 import Sidebar from '@/components/Sidebar'
 import SupabaseStatus from '@/components/SupabaseStatus'
 import { redirect } from 'next/navigation'
+import { getEditableUnits } from '@/app/actions'
 
-export default function AuthenticatedLayout({
+export default async function AuthenticatedLayout({
   children,
 }: {
   children: React.ReactNode
@@ -16,11 +17,12 @@ export default function AuthenticatedLayout({
   }
 
   const user = JSON.parse(sessionCookie.value)
+  const editableUnits = await getEditableUnits()
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-white">
       <div className="no-print md:h-screen md:sticky md:top-0">
-        <Sidebar user={user} />
+        <Sidebar user={user} initialEditableUnits={editableUnits || []} />
       </div>
       <main className="flex-1 flex flex-col w-full overflow-x-hidden">
         <div className="flex-1 bg-gray-50/30 w-full">

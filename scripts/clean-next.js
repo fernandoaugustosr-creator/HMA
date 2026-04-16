@@ -5,6 +5,8 @@ const projectRoot = path.resolve(__dirname, '..')
 
 const targets = [
   '.next',
+  '.next-dev',
+  '.next-build',
   '.next-hma',
   '.next-hma2',
   '.next-hma3',

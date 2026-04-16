@@ -10,6 +10,8 @@
 
 # next.js
 /.next/
+/.next-dev/
+/.next-build/
 /.next-hma/
 /.next-hma2/
 /.next-hma3/

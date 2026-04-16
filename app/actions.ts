@@ -2571,7 +2571,8 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         return String(r.unit_id) === String(unitId)
       })
       
-      const nurses = db.nurses // RETURN ALL NURSES
+      const nurseIds = new Set((roster || []).map((r: any) => r.nurse_id).filter(Boolean))
+      const nurses = (db.nurses || []).filter((n: any) => nurseIds.has(String(n.id)))
       const rosterIdsForContext = new Set((roster || []).map((r: any) => r.id).filter(Boolean))
       const shifts = db.shifts.filter((s: any) => {
         const date = s.shift_date || s.date
@@ -2658,21 +2659,29 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         { data: rosterData },
         { data: timeOffsData },
         { data: releasesData },
-        { data: absencesData },
-        { data: nurses, error: nursesError }
+        { data: absencesData }
     ] = await Promise.all([
         supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true }),
         supabase.from('units').select('*'),
         rosterQuery.range(0, 5000), // Increased range for larger hospitals
         timeOffsQuery,
         releasesQuery,
-        absencesQuery,
-        supabase.from('nurses').select('*').range(0, 1000).order('name')
+        absencesQuery
     ])
 
-    if (nursesError) console.error('Error fetching nurses:', nursesError)
-
     const roster = rosterData || []
+    const nurseIdList = Array.from(new Set(roster.map((r: any) => r.nurse_id).filter(Boolean)))
+    let nurses: any[] = []
+    if (nurseIdList.length > 0) {
+      const { data: nursesData, error: nursesError } = await supabase
+        .from('nurses')
+        .select('*')
+        .in('id', nurseIdList)
+        .order('name')
+        .range(0, 1000)
+      if (nursesError) console.error('Error fetching nurses:', nursesError)
+      nurses = nursesData || []
+    }
 
     let shifts: any[] = []
     const rosterIds = roster.map((r: any) => r.id).filter(Boolean)

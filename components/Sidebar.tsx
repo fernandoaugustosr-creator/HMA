@@ -4,15 +4,17 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
-import { usePathname } from 'next/navigation'
-import { getEditableUnits, logout } from '@/app/actions'
+import { usePathname, useRouter } from 'next/navigation'
+import { logout } from '@/app/actions'
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
 
-export default function Sidebar({ user }: { user: any }) {
+export default function Sidebar({ user, initialEditableUnits = [] }: { user: any, initialEditableUnits?: { id: string, title: string }[] }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [editableUnits, setEditableUnits] = useState<{ id: string, title: string }[]>([])
+  const [editableUnits, setEditableUnits] = useState<{ id: string, title: string }[]>(initialEditableUnits)
+  const [pendingPath, setPendingPath] = useState<string | null>(null)
 
   // Força a re-renderização para garantir que o botão de logout apareça
   const role = user?.role || ''
@@ -20,10 +22,19 @@ export default function Sidebar({ user }: { user: any }) {
   const canSeeScaleMenu = isAdmin || editableUnits.length > 0
 
   useEffect(() => {
-    getEditableUnits()
-      .then((units: any[]) => setEditableUnits((units || []).map(u => ({ id: String(u.id), title: String(u.title || '') }))))
-      .catch(() => setEditableUnits([]))
-  }, [])
+    setEditableUnits(initialEditableUnits)
+  }, [initialEditableUnits])
+
+  useEffect(() => {
+    if (!pendingPath) return
+    if (pathname === pendingPath) setPendingPath(null)
+  }, [pathname, pendingPath])
+
+  const handleNavClick = (href: string) => {
+    const nextPath = href.split('?')[0]
+    setPendingPath(nextPath)
+    router.push(href)
+  }
 
   const allNavItems = [
     { name: 'Dashboard', href: '/dashboard', icon: (
@@ -182,13 +193,19 @@ export default function Sidebar({ user }: { user: any }) {
               {navItems.map((item) => {
                 const itemPath = item.href.split('?')[0]
                 const isCoord = itemPath === '/coordenacao'
-                const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas'))
+                const isPending = pendingPath === itemPath || (isCoord && pendingPath === '/coordenacao')
+                const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas')) || isPending
                 return (
                   <div key={item.href}>
                     <Link
                       href={item.href}
                       prefetch={false}
-                      onClick={() => setIsMobileMenuOpen(false)}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setIsMobileMenuOpen(false)
+                        handleNavClick(item.href)
+                      }}
+                      onMouseEnter={() => router.prefetch(item.href)}
                       className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                         isActive
                           ? 'bg-indigo-50 text-indigo-700'
@@ -200,13 +217,19 @@ export default function Sidebar({ user }: { user: any }) {
                     </Link>
                     {isCoord && coordSubmenuItems.map((subItem) => {
                       const subPath = subItem.href.split('?')[0]
-                      const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao'))
+                      const isSubPending = pendingPath === subPath
+                      const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao')) || isSubPending
                       return (
                         <Link
                           key={subItem.href}
                           href={subItem.href}
                           prefetch={false}
-                          onClick={() => setIsMobileMenuOpen(false)}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setIsMobileMenuOpen(false)
+                            handleNavClick(subItem.href)
+                          }}
+                          onMouseEnter={() => router.prefetch(subItem.href)}
                           className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
                             isSubActive
                               ? 'bg-indigo-50 text-indigo-700'
@@ -277,12 +300,18 @@ export default function Sidebar({ user }: { user: any }) {
           {navItems.map((item) => {
             const itemPath = item.href.split('?')[0]
             const isCoord = itemPath === '/coordenacao'
-            const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas'))
+            const isPending = pendingPath === itemPath || (isCoord && pendingPath === '/coordenacao')
+            const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas')) || isPending
             return (
               <div key={item.href}>
                 <Link
                   href={item.href}
                   prefetch={false}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleNavClick(item.href)
+                  }}
+                  onMouseEnter={() => router.prefetch(item.href)}
                   className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-4'} py-3 text-sm font-medium rounded-lg transition-colors ${
                     isActive
                       ? 'bg-indigo-50 text-indigo-700'
@@ -295,12 +324,18 @@ export default function Sidebar({ user }: { user: any }) {
                 </Link>
                 {isCoord && !isCollapsed && coordSubmenuItems.map((subItem) => {
                   const subPath = subItem.href.split('?')[0]
-                  const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao'))
+                  const isSubPending = pendingPath === subPath
+                  const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao')) || isSubPending
                   return (
                     <Link
                       key={subItem.href}
                       href={subItem.href}
                       prefetch={false}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleNavClick(subItem.href)
+                      }}
+                      onMouseEnter={() => router.prefetch(subItem.href)}
                       className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
                         isSubActive
                           ? 'bg-indigo-50 text-indigo-700'

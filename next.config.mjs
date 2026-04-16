@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    distDir: process.env.NEXT_DIST_DIR || '.next',
     typescript: {
         // !! WARN !!
         // Dangerously allow production builds to successfully complete even if
@@ -20,12 +21,6 @@ const nextConfig = {
             },
         ]
     },
-    webpack: (config, { dev }) => {
-        if (dev) {
-            config.cache = false
-        }
-        return config
-    }
 };
 
 export default nextConfig;
