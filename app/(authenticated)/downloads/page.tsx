@@ -335,14 +335,13 @@ export default function DownloadsPage() {
                       return (
                       <div 
                         key={release.id}
-                        className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 px-4 py-4 group relative overflow-hidden ${selectedRelease?.id === release.id ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'}`}
+                        className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all flex items-start justify-between gap-3 px-4 py-4 group relative overflow-hidden ${selectedRelease?.id === release.id ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'}`}
                       >
-                        <div className="flex items-center gap-4 min-w-0">
-                          <div className="p-3 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors text-blue-600">
-                            <FileText size={22} />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-base text-gray-900 truncate">{displayName}</h3>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="min-w-0">
+                            <h3 className="font-bold text-[15px] text-gray-900 whitespace-normal break-words leading-snug">
+                              {displayName}
+                            </h3>
                             <p className="text-gray-500 text-xs font-semibold">
                               Liberado em: {release.released_at ? new Date(release.released_at).toLocaleDateString('pt-BR') : '-'}
                             </p>
@@ -353,7 +352,7 @@ export default function DownloadsPage() {
                             type="button"
                             onClick={() => handlePrint(release)}
                             disabled={isPrinting}
-                            className={`inline-flex items-center justify-center gap-2 px-6 py-2 rounded-full text-white text-xs font-black uppercase tracking-wide transition-colors ${
+                            className={`inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full text-white text-[11px] font-black uppercase tracking-wide transition-colors ${
                               isPrinting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
                             }`}
                             title="Baixar escala em PDF (via impressão do navegador)"
@@ -363,7 +362,7 @@ export default function DownloadsPage() {
                             ) : (
                                 <Download size={14} />
                             )}
-                            <span>{isPrinting && selectedRelease?.id === release.id ? 'Gerando...' : 'Baixar'}</span>
+                            <span>{isPrinting && selectedRelease?.id === release.id ? 'GERANDO...' : 'BAIXAR'}</span>
                           </button>
                         </div>
                       </div>

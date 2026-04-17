@@ -11,8 +11,7 @@ const child = spawn(nextBin, ['build'], {
   stdio: 'inherit',
   shell: true,
   env: {
-    ...process.env,
-    NEXT_DIST_DIR: '.next-build'
+    ...process.env
   }
 })
 
