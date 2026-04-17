@@ -25,6 +25,8 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   const [phone, setPhone] = useState(nurseToEdit?.phone || '')
   const [cpf, setCpf] = useState(nurseToEdit?.cpf || '')
   const [birthDate, setBirthDate] = useState(nurseToEdit?.birth_date || '')
+  const [certidaoNegativaDate, setCertidaoNegativaDate] = useState(nurseToEdit?.certidao_negativa_date || '')
+  const [corenExpiryDate, setCorenExpiryDate] = useState(nurseToEdit?.coren_expiry_date || '')
   const [showSqlModal, setShowSqlModal] = useState(false)
   const [roles, setRoles] = useState<{ id: string, label: string }[]>([])
   const [showRoleManager, setShowRoleManager] = useState(false)
@@ -37,11 +39,15 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
         const currentCpf = nurseToEdit.cpf || ''
         setCpf(currentCpf.startsWith('TEMP-') ? '' : currentCpf)
         setBirthDate(nurseToEdit.birth_date || '')
+        setCertidaoNegativaDate(nurseToEdit.certidao_negativa_date || '')
+        setCorenExpiryDate(nurseToEdit.coren_expiry_date || '')
         setSelectedRole(nurseToEdit.role || '')
     } else {
         setPhone('')
         setCpf('')
         setBirthDate('')
+        setCertidaoNegativaDate('')
+        setCorenExpiryDate('')
         setSelectedRole(defaultRole || '')
     }
   }, [nurseToEdit, defaultRole])
@@ -75,6 +81,15 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     }
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }))
   }, [roles, selectedRole])
+
+  const isCorenExpiryApplicable = useMemo(() => {
+    if (!selectedRole) return false
+    const id = String(selectedRole).toUpperCase().trim()
+    if (id === 'ENFERMEIRO' || id === 'TECNICO') return true
+    const label = roleOptions.find(r => r.id === selectedRole)?.label || ''
+    const normalized = String(label).toUpperCase()
+    return normalized.includes('ENFERMEIR') || normalized.includes('TÉC') || normalized.includes('TEC')
+  }, [selectedRole, roleOptions])
 
   if (!isOpen) return null
 
@@ -166,6 +181,9 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
       if (result.message?.includes('V18')) {
           setShowSqlModal(true)
       }
+      if (result.message?.includes('V19')) {
+          setShowSqlModal(true)
+      }
     }
     setLoading(false)
   }
@@ -202,6 +220,11 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
 -- V18 (Data de Nascimento)
 ALTER TABLE nurses
 ADD COLUMN IF NOT EXISTS birth_date DATE;
+
+-- V19 (Certidão Negativa / Vencimento COREN)
+ALTER TABLE nurses
+ADD COLUMN IF NOT EXISTS certidao_negativa_date DATE,
+ADD COLUMN IF NOT EXISTS coren_expiry_date DATE;
 `}
                     </pre>
                 </div>
@@ -389,6 +412,35 @@ ADD COLUMN IF NOT EXISTS birth_date DATE;
               />
             </div>
             <div />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700">Certidão negativa (Data)</label>
+              <input
+                type="date"
+                name="certidao_negativa_date"
+                value={certidaoNegativaDate}
+                onChange={(e) => setCertidaoNegativaDate(e.target.value)}
+                className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
+              />
+            </div>
+            <div>
+              {isCorenExpiryApplicable ? (
+                <>
+                  <label className="block text-xs font-semibold text-gray-700">Vencimento da carteira do COREN</label>
+                  <input
+                    type="date"
+                    name="coren_expiry_date"
+                    value={corenExpiryDate}
+                    onChange={(e) => setCorenExpiryDate(e.target.value)}
+                    className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
+                  />
+                </>
+              ) : (
+                <div />
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

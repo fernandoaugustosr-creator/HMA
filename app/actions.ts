@@ -929,11 +929,11 @@ export const getNurses = cache(async () => {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('nurses')
-    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,birth_date,created_at')
+    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
     .range(0, 9999)
     .order('name')
   if (error) {
-    if (error.message?.includes('birth_date')) {
+    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date')) {
       const { data: fallbackData } = await supabase
         .from('nurses')
         .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
@@ -955,12 +955,12 @@ export async function getNursesBySection(sectionId: string) {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('nurses')
-    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,birth_date,created_at')
+    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
     .eq('section_id', sectionId)
     .range(0, 9999)
     .order('name')
   if (error) {
-    if (error.message?.includes('birth_date')) {
+    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date')) {
       const { data: fallbackData } = await supabase
         .from('nurses')
         .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
@@ -990,6 +990,8 @@ export async function createNurse(prevState: any, formData: FormData) {
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string || ''
   const birthDate = (formData.get('birth_date') as string) || ''
+  const certidaoNegativaDate = (formData.get('certidao_negativa_date') as string) || ''
+  const corenExpiryDate = (formData.get('coren_expiry_date') as string) || ''
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
   const sector = formData.get('sector') as string // Manual sector name if provided
@@ -1033,6 +1035,8 @@ export async function createNurse(prevState: any, formData: FormData) {
       section_id: finalSectionId,
       unit_id: unitId,
       birth_date: birthDate || '',
+      certidao_negativa_date: certidaoNegativaDate || '',
+      coren_expiry_date: corenExpiryDate || '',
       created_at: new Date().toISOString()
     }
 
@@ -1091,6 +1095,8 @@ export async function createNurse(prevState: any, formData: FormData) {
     vinculo,
     role,
     birth_date: birthDate || null,
+    certidao_negativa_date: certidaoNegativaDate || null,
+    coren_expiry_date: corenExpiryDate || null,
     section_id: finalSectionId || null,
     unit_id: unitId || null
   }).select().single()
@@ -1102,6 +1108,9 @@ export async function createNurse(prevState: any, formData: FormData) {
     }
     if (error.message?.includes('birth_date')) {
         return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V18). Solicite ao suporte para rodar o script de Data de Nascimento.' }
+    }
+    if (error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V19). Solicite ao suporte para rodar o script de Certidão Negativa e Vencimento do COREN.' }
     }
     if (error.code === '23505') {
         // Detect specific constraint violation
@@ -5169,6 +5178,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string
   const birthDate = (formData.get('birth_date') as string) || ''
+  const certidaoNegativaDate = (formData.get('certidao_negativa_date') as string) || ''
+  const corenExpiryDate = (formData.get('coren_expiry_date') as string) || ''
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
   const sector = formData.get('sector') as string
@@ -5223,6 +5234,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     nurse.role = role
     nurse.sector = sector || nurse.sector
     nurse.birth_date = birthDate
+    nurse.certidao_negativa_date = certidaoNegativaDate
+    nurse.coren_expiry_date = corenExpiryDate
     
     // Only update location if provided (optional) or corrected
     if (finalSectionId) nurse.section_id = finalSectionId
@@ -5301,6 +5314,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   if (unitId) updateData.unit_id = unitId
   if (sector) updateData.sector = sector
   updateData.birth_date = birthDate || null
+  updateData.certidao_negativa_date = certidaoNegativaDate || null
+  updateData.coren_expiry_date = corenExpiryDate || null
 
   if (useDefaultPassword) {
     updateData.password = '123456'
@@ -5316,6 +5331,9 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     }
     if (error.message?.includes('birth_date')) {
         return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V18). Solicite ao suporte para rodar o script de Data de Nascimento.' }
+    }
+    if (error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V19). Solicite ao suporte para rodar o script de Certidão Negativa e Vencimento do COREN.' }
     }
     if (error.code === '23505') return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
     return { success: false, message: 'Erro ao atualizar: ' + error.message }

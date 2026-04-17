@@ -14,6 +14,7 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
   const formRef = useRef<HTMLFormElement>(null)
   const [useDefaultPassword, setUseDefaultPassword] = useState(false)
   const [roles, setRoles] = useState<{ id: string, label: string }[]>([])
+  const [selectedRole, setSelectedRole] = useState<string>('ENFERMEIRO')
 
   useEffect(() => {
     getSystemRoles()
@@ -25,8 +26,18 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
     if (state.success && formRef.current) {
       formRef.current.reset()
       setUseDefaultPassword(false)
+      setSelectedRole('ENFERMEIRO')
     }
   }, [state.success])
+
+  const isCorenExpiryApplicable = (() => {
+    if (!selectedRole) return false
+    const id = String(selectedRole).toUpperCase().trim()
+    if (id === 'ENFERMEIRO' || id === 'TECNICO') return true
+    const label = roles.find(r => r.id === selectedRole)?.label || ''
+    const normalized = String(label).toUpperCase()
+    return normalized.includes('ENFERMEIR') || normalized.includes('TÉC') || normalized.includes('TEC')
+  })()
 
   return (
     <form ref={formRef} action={formAction} className="space-y-4">
@@ -69,6 +80,8 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
             name="role"
             id="role"
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+            value={selectedRole}
+            onChange={(e) => setSelectedRole(e.target.value)}
           >
             {roles.length === 0 ? (
               <>
@@ -96,6 +109,30 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
             id="birth_date"
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
           />
+        </div>
+        <div>
+          <label htmlFor="certidao_negativa_date" className="block text-sm font-medium text-gray-700">Certidão negativa (Data)</label>
+          <input
+            type="date"
+            name="certidao_negativa_date"
+            id="certidao_negativa_date"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+          />
+        </div>
+        <div>
+          {isCorenExpiryApplicable ? (
+            <>
+              <label htmlFor="coren_expiry_date" className="block text-sm font-medium text-gray-700">Vencimento da carteira do COREN</label>
+              <input
+                type="date"
+                name="coren_expiry_date"
+                id="coren_expiry_date"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+              />
+            </>
+          ) : (
+            <div />
+          )}
         </div>
         <div>
           <label htmlFor="vinculo" className="block text-sm font-medium text-gray-700">Vínculo</label>

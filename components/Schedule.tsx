@@ -359,10 +359,10 @@ export default function Schedule({
 
   }, [initialMonth, initialYear, initialUnitId])
 
-  const selectedPermissionNurse = useMemo(
-    () => data.nurses.find(n => n.id === permissionNurseId) || null,
-    [data.nurses, permissionNurseId]
-  )
+  const selectedPermissionNurse = useMemo(() => {
+    const source = allNurses.length > 0 ? allNurses : data.nurses
+    return source.find(n => n.id === permissionNurseId) || null
+  }, [allNurses, data.nurses, permissionNurseId])
 
   const selectedPermissionUnitIds = useMemo(
     () => Array.from(new Set(
@@ -4205,10 +4205,15 @@ CREATE POLICY "Admins can manage scale permissions" ON scale_permissions
                                       setPermissionNurseId(e.target.value)
                                       setPermissionUnitSearch('')
                                     }}
+                                    disabled={isFetchingAllNurses}
                                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-black focus:ring-2 focus:ring-indigo-500"
                                 >
-                                    <option value="">Selecione um servidor...</option>
-                                    {[...data.nurses].sort((a,b) => a.name.localeCompare(b.name)).map(n => (
+                                    <option value="">
+                                      {isFetchingAllNurses ? 'Carregando servidores...' : 'Selecione um servidor...'}
+                                    </option>
+                                    {[...(allNurses.length > 0 ? allNurses : data.nurses)]
+                                      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+                                      .map(n => (
                                         <option key={n.id} value={n.id}>
                                           {n.name}{n.vinculo ? ` (${n.vinculo})` : ''}
                                         </option>
