@@ -226,26 +226,12 @@ export default function Schedule({
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(() => {
     if (initialMonth !== undefined) return initialMonth
-    if (typeof window !== 'undefined') {
-      const storedMonth = localStorage.getItem('enf_hma_last_month')
-      if (storedMonth !== null && storedMonth !== '') {
-        const parsed = parseInt(storedMonth, 10)
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 11) return parsed
-      }
-    }
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     return nextMonth.getMonth()
   })
   const [selectedYear, setSelectedYear] = useState(() => {
     if (initialYear !== undefined) return initialYear
-    if (typeof window !== 'undefined') {
-      const storedYear = localStorage.getItem('enf_hma_last_year')
-      if (storedYear !== null && storedYear !== '') {
-        const parsed = parseInt(storedYear, 10)
-        if (!isNaN(parsed)) return parsed
-      }
-    }
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     return nextMonth.getFullYear()
@@ -255,11 +241,8 @@ export default function Schedule({
   const [isFetchingAllNurses, setIsFetchingAllNurses] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [selectedUnitId, setSelectedUnitId] = useState<string>(() => {
-    if (initialUnitId) return initialUnitId
-    if (typeof window !== 'undefined') return localStorage.getItem('enf_hma_last_unit') || ''
-    return ''
-  })
+  const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
+  const [hasHydrated, setHasHydrated] = useState(false)
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
   const [leaveModalType, setLeaveModalType] = useState<LeaveType | null>(null)
   
@@ -349,6 +332,32 @@ export default function Schedule({
   const [permissionSelectAllUnits, setPermissionSelectAllUnits] = useState(false)
   const [permissionUnitSearch, setPermissionUnitSearch] = useState('')
   const [myScalePermissionUnitIds, setMyScalePermissionUnitIds] = useState<string[]>([])
+
+  useEffect(() => {
+    setHasHydrated(true)
+    if (typeof window === 'undefined') return
+
+    if (initialMonth === undefined) {
+      const storedMonth = localStorage.getItem('enf_hma_last_month')
+      if (storedMonth !== null && storedMonth !== '') {
+        const parsed = parseInt(storedMonth, 10)
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 11) {
+          setSelectedMonth(parsed)
+        }
+      }
+    }
+
+    if (initialYear === undefined) {
+      const storedYear = localStorage.getItem('enf_hma_last_year')
+      if (storedYear !== null && storedYear !== '') {
+        const parsed = parseInt(storedYear, 10)
+        if (!isNaN(parsed)) {
+          setSelectedYear(parsed)
+        }
+      }
+    }
+
+  }, [initialMonth, initialYear, initialUnitId])
 
   const selectedPermissionNurse = useMemo(
     () => data.nurses.find(n => n.id === permissionNurseId) || null,
@@ -680,13 +689,9 @@ export default function Schedule({
         if (cancelled) return
         const mapped = (units || []).map(u => ({ id: String(u.id), title: String(u.title || '') })) as any
         setData(prev => ({ ...prev, units: mapped }))
-        if (!selectedUnitId && mapped.length > 0) {
-          setSelectedUnitId(mapped[0].id)
-          return
-        }
         if (selectedUnitId && mapped.length > 0) {
           const stillAllowed = mapped.some((u: any) => String(u.id) === String(selectedUnitId))
-          if (!stillAllowed) setSelectedUnitId(mapped[0].id)
+          if (!stillAllowed && !printOnly) setSelectedUnitId('')
         }
       })
       .catch(() => {
@@ -710,22 +715,16 @@ export default function Schedule({
     }
   }, [isAdmin])
 
-  // Auto-select first unit if none selected and units are available
+  // Não auto-selecionar: só carrega quando o usuário escolher
   useEffect(() => {
     const allUnits = data.units || []
     const availableUnits = (isAdmin || myScalePermissionUnitIds.includes('*'))
       ? allUnits
       : allUnits.filter(u => myScalePermissionUnitIds.some(id => String(id) === String(u.id)))
 
-    if (!selectedUnitId && availableUnits.length > 0) {
-      setSelectedUnitId(availableUnits[0].id)
-      return
-    }
-
-    if (selectedUnitId && availableUnits.length > 0) {
-      const stillAllowed = availableUnits.some(u => String(u.id) === String(selectedUnitId))
-      if (!stillAllowed) setSelectedUnitId(availableUnits[0].id)
-    }
+    if (!selectedUnitId) return
+    const stillAllowed = availableUnits.some(u => String(u.id) === String(selectedUnitId))
+    if (!stillAllowed && !printOnly) setSelectedUnitId('')
   }, [data.units, selectedUnitId, isAdmin, myScalePermissionUnitIds])
   
   useEffect(() => {
@@ -741,9 +740,7 @@ export default function Schedule({
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const stored =
-      localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`) ||
-      localStorage.getItem('enf_hma_display_field')
+    const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`)
 
     if (stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role') {
       setDisplayDynamicField(stored)
@@ -755,10 +752,11 @@ export default function Schedule({
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (!hasHydrated) return
     localStorage.setItem('enf_hma_last_month', String(selectedMonth))
     localStorage.setItem('enf_hma_last_year', String(selectedYear))
     if (selectedUnitId) localStorage.setItem('enf_hma_last_unit', String(selectedUnitId))
-  }, [selectedMonth, selectedYear, selectedUnitId])
+  }, [selectedMonth, selectedYear, selectedUnitId, hasHydrated])
   
   useEffect(() => {
     if (!selectedUnitId) {
@@ -2087,6 +2085,59 @@ export default function Schedule({
       return lookup
   }, [data.absences])
 
+  const footerLegendData = React.useMemo(() => {
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    const monthStart = `${selectedYear}-${pad(selectedMonth + 1)}-01`
+    const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
+    const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
+
+    const nurseNameById = new Map<string, string>()
+    ;[...(data.nurses || []), ...(allNurses || [])].forEach((n: any) => {
+      if (!n?.id) return
+      if (!nurseNameById.has(String(n.id))) {
+        nurseNameById.set(String(n.id), String(n.name || ''))
+      }
+    })
+
+    const grouped = new Map<string, Set<string>>()
+    const validTypes = new Set(['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'])
+
+    ;(data.timeOffs || []).forEach((t: any) => {
+      const type = String(t?.type || '')
+      if (!validTypes.has(type)) return
+      if (!t?.start_date || !t?.end_date) return
+      if (t.end_date < monthStart || t.start_date > monthEnd) return
+
+      // Filtro por unidade: se vier com unit_id preenchido, respeita; se for global (null), também exibe.
+      if (selectedUnitId && t.unit_id && String(t.unit_id) !== String(selectedUnitId)) return
+
+      const nurseName = nurseNameById.get(String(t.nurse_id)) || String((t as any).nurse_name || '')
+      if (!nurseName) return
+
+      const label = `${nurseName}${t.status === 'pending' ? '*' : ''}`
+      if (!grouped.has(type)) grouped.set(type, new Set<string>())
+      grouped.get(type)!.add(label)
+    })
+
+    const order = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga']
+    return order
+      .map((type) => {
+        const names = Array.from(grouped.get(type) || [])
+        if (names.length === 0) return null
+        return {
+          type,
+          label:
+            type === 'ferias' ? 'FÉRIAS' :
+            type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
+            type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' :
+            type === 'folga' ? 'FOLGA' :
+            'CESSÃO',
+          names: names.join(', ')
+        }
+      })
+      .filter(Boolean) as { type: string; label: string; names: string }[]
+  }, [data.timeOffs, data.nurses, allNurses, selectedMonth, selectedYear, selectedUnitId])
+
 
   const nurseOrderMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -2186,7 +2237,7 @@ export default function Schedule({
           return (
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
-                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 print:w-6 ${isAdmin ? '' : ''}`}
+                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 h-5 print:w-8 print:h-5 print:static print:left-auto print:z-0 leading-none ${isAdmin ? '' : ''}`}
                 title={canEditSelectedUnit && !isScheduleReleased ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
                 {canEditSelectedUnit && !isScheduleReleased ? (
@@ -2239,8 +2290,8 @@ export default function Schedule({
                   <span className="text-black font-bold print:text-[14px]">{rowNumber}</span>
                 )}
               </td>
-              <td className="border border-black px-1 py-0 text-[9px] font-medium text-black sticky left-6 bg-white z-10 w-[200px] print:w-[120px] border-r-2 border-r-black text-center">
-                <div className="flex items-center justify-center gap-1">
+              <td className="border border-black px-1 py-0 text-[9px] font-medium text-black sticky left-6 bg-white z-10 w-[200px] h-5 print:w-[170px] print:h-5 border-r-2 border-r-black text-center print:static print:left-auto print:z-0 leading-none overflow-hidden">
+                <div className="flex items-center justify-center gap-1 h-5 overflow-hidden">
                   {canEditSelectedUnit && !isScheduleReleased && (
                     <div className="flex flex-col gap-0.5 mr-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
                        <button 
@@ -2359,7 +2410,7 @@ export default function Schedule({
                      
                      const baseColorClass = nameColorClass || "text-gray-800"
                      
-                     return <span className={`text-lg font-bold ${baseColorClass} uppercase print:text-[14px]`}>
+                    return <span className={`text-lg font-bold ${baseColorClass} uppercase print:text-[12px] whitespace-nowrap overflow-hidden text-ellipsis block leading-none`}>
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
                          {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
@@ -2372,11 +2423,11 @@ export default function Schedule({
                    </div>
                 </div>
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">{formatRole(nurse.role)}</td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[10px] uppercase h-5 print:h-5 whitespace-nowrap leading-none overflow-hidden">{formatRole(nurse.role)}</td>
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase h-5 print:h-5 whitespace-nowrap leading-none overflow-hidden">
                 {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase h-5 print:h-5 whitespace-nowrap leading-none overflow-hidden">
                 {canEditSelectedUnit && !isScheduleReleased && displayDynamicField === 'coren' ? (
                   <select
                     value={nurse.coren || ''}
@@ -2412,12 +2463,12 @@ export default function Schedule({
                     
                     if (displayDynamicField === 'role') return formatRole(val as string)
                     
-                    return <span className="print:text-[11px]">{String(val || '-')}</span>
+                    return <span className="print:text-[11px] whitespace-nowrap">{String(val || '-')}</span>
                   })()
                 )}
               </td>
               {!isSetorHidden && (
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase h-5 print:h-5 whitespace-nowrap leading-none overflow-hidden">
                   <SectorCell 
                       initialValue={nurse.sector}
                       onSave={(val) => handleUpdateSector(nurse.unique_key || nurse.id, val)}
@@ -2954,15 +3005,15 @@ export default function Schedule({
                  )}
                  {visibleSections.map((section, index) => (
                     <div key={section.id} className="mb-8 last:mb-0 w-full">
-                       <table className="table-fixed border-collapse border border-black text-black text-[9px] print:text-[11px] w-full">
+                      <table className="table-fixed border-collapse border border-black text-black text-[8px] print:text-[11px] w-full">
                              <colgroup>
                                 <col className="w-6 print:w-8" />
-                                <col className="w-[200px] print:w-[190px]" />
-                                <col className="w-20 print:w-[70px]" />
-                                <col className="w-20 print:w-[70px]" />
-                                <col className="w-16 print:w-[70px]" />
+                                <col className="w-[200px] print:w-[170px]" />
+                                <col className="w-20 print:w-[90px]" />
+                                <col className="w-20 print:w-[80px]" />
+                                <col className="w-16 print:w-[65px]" />
                                 {!isSetorHidden && <col className="w-20 print:w-[70px]" />}
-                                {daysArray.map(d => <col key={d.day} className="w-5 print:w-5" />)}
+                                {daysArray.map(d => <col key={d.day} className="w-4 print:w-5" />)}
                                 <col className="w-10 print:w-10" />
                              </colgroup>
                              <thead>
@@ -2977,7 +3028,64 @@ export default function Schedule({
                                 {/* Header Row 2: Section Title + Month/Year */}
                                 <tr className="bg-[#1e3a5f] text-white">
                                     <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-base print:text-[16px] relative group">
-                                        ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
+                                        {editingSectionId === section.id ? (
+                                          <span className="no-print inline-flex items-center justify-center gap-2 w-full px-2">
+                                            <span className="shrink-0">ESCALA</span>
+                                            <input
+                                              value={editingSectionTitle}
+                                              onChange={(e) => setEditingSectionTitle(e.target.value)}
+                                              className="max-w-[420px] w-full text-sm font-bold uppercase text-black bg-white rounded px-2 py-1 outline-none"
+                                              autoFocus
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') saveSectionTitle()
+                                                if (e.key === 'Escape') setEditingSectionId(null)
+                                              }}
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                saveSectionTitle()
+                                              }}
+                                              className="p-1 rounded bg-white/10 hover:bg-white/20"
+                                              title="Salvar"
+                                            >
+                                              <Save size={16} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setEditingSectionId(null)
+                                              }}
+                                              className="p-1 rounded bg-white/10 hover:bg-white/20"
+                                              title="Cancelar"
+                                            >
+                                              <X size={16} />
+                                            </button>
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center justify-center gap-2">
+                                            ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
+                                            {canEditSelectedUnit && !isScheduleReleased && (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  startEditingSection(section)
+                                                }}
+                                                className="no-print text-white/80 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="Editar nome do grupo"
+                                              >
+                                                <Pencil size={16} />
+                                              </button>
+                                            )}
+                                          </span>
+                                        )}
+                                        <span className="hidden print:inline">
+                                          ESCALA {section.title} - {MONTHS[selectedMonth]} {selectedYear}
+                                        </span>
                                         {isAdmin && (
                                             <button 
                                                 onClick={async (e) => {
@@ -3006,7 +3114,7 @@ export default function Schedule({
                                 {/* Main Headers Row 3 (Columns) */}
                                 <tr className="bg-[#85b1e2] text-black">
                                     <th 
-                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#85b1e2] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] print:w-6"
+                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#85b1e2] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] w-6 print:w-8 print:static print:left-auto print:z-0"
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin || isScheduleReleased) return
@@ -3033,7 +3141,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[224px] sticky left-8 bg-[#85b1e2] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[170px] sticky left-8 bg-[#85b1e2] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group print:static print:left-auto print:z-0" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
@@ -3051,9 +3159,9 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>CATEGORIA</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-20 font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[90px] font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>CATEGORIA</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[80px] font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-[65px] font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>
                                     <>
                                       <select
                                         value={displayDynamicField}
@@ -3074,7 +3182,7 @@ export default function Schedule({
                                     </>
                                 </th>
                                 {!isSetorHidden && (
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-24 font-bold text-sm print:text-[14px] bg-[#85b1e2] group relative" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[70px] font-bold text-sm print:text-[14px] bg-[#85b1e2] group relative" rowSpan={2}>
                                     {editingSectorTitleId === section.id ? (
                                         <div className="flex items-center gap-1 w-full h-full text-black">
                                             <input 
@@ -3133,52 +3241,7 @@ export default function Schedule({
                             {(() => {
                                 if (index !== visibleSections.length - 1) return null;
 
-                                const activeLegendData = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].map(type => {
-                                    const pad = (n: number) => n.toString().padStart(2, '0')
-                                    const monthStart = `${selectedYear}-${pad(selectedMonth + 1)}-01`
-                                    const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate()
-                                    const monthEnd = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDay)}`
-
-                                    const activeLeaves = data.timeOffs
-                                        .filter(t => {
-                                            if (t.type !== type) return false
-                                            if (!t.start_date || !t.end_date) return false
-                                            if (t.end_date < monthStart) return false
-                                            if (t.start_date > monthEnd) return false
-
-                                            if (selectedUnitId) {
-                                                if (t.unit_id && String(t.unit_id) === String(selectedUnitId)) return true;
-                                                const nurse = data.nurses.find(n => n.id === t.nurse_id)
-                                                if (nurse && nurse.unit_id && String(nurse.unit_id) === String(selectedUnitId)) return true;
-                                                const isInUnit = data.roster.some(r => 
-                                                    r.nurse_id === t.nurse_id && 
-                                                    r.month === selectedMonth + 1 && 
-                                                    r.year === selectedYear && 
-                                                    String(r.unit_id) === String(selectedUnitId)
-                                                )
-                                                if (isInUnit) return true;
-                                                return false;
-                                            }
-                                            return true
-                                        })
-                                        .map(t => {
-                                            const nurse = data.nurses.find(n => n.id === t.nurse_id)
-                                            return nurse ? `${nurse.name}${t.status === 'pending' ? '*' : ''}` : ''
-                                        })
-                                        .filter(Boolean)
-                                        .join(', ')
-                                    
-                                    if (!activeLeaves) return null;
-
-                                    return {
-                                        type,
-                                        label: type === 'ferias' ? 'FÉRIAS' : 
-                                               type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
-                                               type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' : 
-                                               type === 'folga' ? 'FOLGA' : 'CESSÃO',
-                                        names: activeLeaves
-                                    };
-                                }).filter(Boolean);
+                                const activeLegendData = footerLegendData
 
                                 if (activeLegendData.length === 0 && !footerText) return null;
 
@@ -3334,7 +3397,7 @@ export default function Schedule({
         {canEditSelectedUnit && (
         <div className="flex flex-col items-end gap-2 mb-2 no-print">
             <div className="flex flex-wrap gap-2 justify-end">
-                {isAdmin && !isScheduleReleased && (
+                {canEditSelectedUnit && !isScheduleReleased && (
                     <button 
                         onClick={handleEditFooter}
                         className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50"

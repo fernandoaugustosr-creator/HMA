@@ -1,20 +1,40 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
-import { usePathname, useRouter } from 'next/navigation'
+import logoPrefeitura from '@/public/logo-prefeitura.png'
+import { usePathname } from 'next/navigation'
 import { logout } from '@/app/actions'
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
 
 export default function Sidebar({ user, initialEditableUnits = [] }: { user: any, initialEditableUnits?: { id: string, title: string }[] }) {
   const pathname = usePathname()
-  const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [editableUnits, setEditableUnits] = useState<{ id: string, title: string }[]>(initialEditableUnits)
-  const [pendingPath, setPendingPath] = useState<string | null>(null)
+
+  const getNavItemClass = (isActive: boolean, isCollapsedView: boolean) => {
+    const base = `group flex items-center rounded-xl transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white`
+    if (isActive) {
+      return `${base} bg-indigo-50 text-indigo-800 border border-indigo-100 shadow-sm ${isCollapsedView ? 'justify-center px-2' : 'px-4'} py-3`
+    }
+    return `${base} text-slate-600 hover:bg-indigo-50/60 hover:text-slate-900 ${isCollapsedView ? 'justify-center px-2' : 'px-4'} py-3`
+  }
+
+  const getNavIconClass = (isActive: boolean, isCollapsedView: boolean) => {
+    const base = 'shrink-0'
+    if (isCollapsedView) {
+      return `${base} p-2 rounded-lg ${isActive ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 group-hover:text-slate-700'}`
+    }
+    return `${base} ${isActive ? 'text-indigo-700' : 'text-slate-500 group-hover:text-slate-700'}`
+  }
+
+  const getSubItemClass = (isActive: boolean) => {
+    const base = `ml-10 mt-1 flex items-center px-4 py-2 text-xs font-semibold rounded-lg transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white`
+    if (isActive) return `${base} bg-indigo-50 text-indigo-800 border border-indigo-100`
+    return `${base} text-slate-500 hover:bg-indigo-50/50 hover:text-slate-900`
+  }
 
   // Força a re-renderização para garantir que o botão de logout apareça
   const role = user?.role || ''
@@ -24,17 +44,6 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
   useEffect(() => {
     setEditableUnits(initialEditableUnits)
   }, [initialEditableUnits])
-
-  useEffect(() => {
-    if (!pendingPath) return
-    if (pathname === pendingPath) setPendingPath(null)
-  }, [pathname, pendingPath])
-
-  const handleNavClick = (href: string) => {
-    const nextPath = href.split('?')[0]
-    setPendingPath(nextPath)
-    router.push(href)
-  }
 
   const allNavItems = [
     { name: 'Dashboard', href: '/dashboard', icon: (
@@ -67,7 +76,7 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zm4-8h6m-6 4h3" />
       </svg>
     )},
-    { name: 'Baixar Escala', href: '/downloads', icon: (
+    { name: 'Escalas Liberadas', href: '/downloads', icon: (
       <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
       </svg>
@@ -87,7 +96,7 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
   const dashboardIcon = allNavItems.find(item => item.name === 'Dashboard')?.icon
   const folgasIcon = allNavItems.find(item => item.name === 'Folgas')?.icon
   const trocasIcon = allNavItems.find(item => item.name === 'Permultas')?.icon
-  const downloadsIcon = allNavItems.find(item => item.name === 'Baixar Escala')?.icon
+  const downloadsIcon = allNavItems.find(item => item.name === 'Escalas Liberadas')?.icon
   const faltasIcon = allNavItems.find(item => item.name === 'Faltas')?.icon
   const escalaIcon = allNavItems.find(item => item.name === 'Escala')?.icon
 
@@ -128,7 +137,7 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
       faltasIcon && { name: 'Outras Solicitações', href: '/coordenacao?tab=outros', icon: faltasIcon },
       folgasIcon && { name: 'Folgas', href: '/folgas', icon: folgasIcon },
       trocasIcon && { name: 'Permultas', href: '/trocas', icon: trocasIcon },
-      downloadsIcon && { name: 'Baixar Escala', href: '/downloads', icon: downloadsIcon },
+      downloadsIcon && { name: 'Escalas Liberadas', href: '/downloads', icon: downloadsIcon },
     ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
   } else {
     navItems = [
@@ -136,7 +145,7 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
       canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
       trocasIcon && { name: 'Permultas', href: '/trocas', icon: trocasIcon },
       faltasIcon && { name: 'Faltas', href: '/coordenacao', icon: faltasIcon },
-      downloadsIcon && { name: 'Baixar Escala', href: '/downloads', icon: downloadsIcon },
+      downloadsIcon && { name: 'Escalas Liberadas', href: '/downloads', icon: downloadsIcon },
     ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
   }
 
@@ -145,8 +154,8 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
       {/* Mobile Navbar */}
       <div className="flex md:!hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-30 justify-between items-center shadow-sm w-full">
         <div className="flex items-center gap-2">
-          <Image src={logoHma} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
-          <Image src={logoHma} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
+          <Image src={logoPrefeitura} alt="Logo Prefeitura" width={120} height={40} className="h-8 w-auto object-contain" />
+          <Image src={logoHma} alt="HMA Logo" width={90} height={30} className="h-8 w-auto object-contain" />
         </div>
         <button 
           onClick={() => setIsMobileMenuOpen(true)}
@@ -171,8 +180,8 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
           <div className="relative flex flex-col w-64 max-w-xs h-full bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center gap-2">
-                <Image src={logoHma} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
-                <Image src={logoHma} alt="HMA Logo" width={32} height={32} className="h-8 w-auto object-contain" />
+                <Image src={logoPrefeitura} alt="Logo Prefeitura" width={120} height={40} className="h-8 w-auto object-contain" />
+                <Image src={logoHma} alt="HMA Logo" width={90} height={30} className="h-8 w-auto object-contain" />
               </div>
               <button 
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -193,51 +202,32 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
               {navItems.map((item) => {
                 const itemPath = item.href.split('?')[0]
                 const isCoord = itemPath === '/coordenacao'
-                const isPending = pendingPath === itemPath || (isCoord && pendingPath === '/coordenacao')
-                const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas')) || isPending
+                const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas'))
                 return (
                   <div key={item.href}>
-                    <Link
+                    <a
                       href={item.href}
-                      prefetch={false}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setIsMobileMenuOpen(false)
-                        handleNavClick(item.href)
-                      }}
-                      onMouseEnter={() => router.prefetch(item.href)}
-                      className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                        isActive
-                          ? 'bg-indigo-50 text-indigo-700'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={getNavItemClass(isActive, false)}
+                      title=""
+                      aria-current={isActive ? 'page' : undefined}
                     >
-                      <span className="mr-3">{item.icon}</span>
+                      <span className={`mr-3 ${getNavIconClass(isActive, false)}`}>{item.icon}</span>
                       {item.name}
-                    </Link>
+                    </a>
                     {isCoord && coordSubmenuItems.map((subItem) => {
                       const subPath = subItem.href.split('?')[0]
-                      const isSubPending = pendingPath === subPath
-                      const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao')) || isSubPending
+                      const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao'))
                       return (
-                        <Link
+                        <a
                           key={subItem.href}
                           href={subItem.href}
-                          prefetch={false}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setIsMobileMenuOpen(false)
-                            handleNavClick(subItem.href)
-                          }}
-                          onMouseEnter={() => router.prefetch(subItem.href)}
-                          className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
-                            isSubActive
-                              ? 'bg-indigo-50 text-indigo-700'
-                              : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                          }`}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={getSubItemClass(isSubActive)}
+                          aria-current={isSubActive ? 'page' : undefined}
                         >
                           <span className="truncate">{subItem.name}</span>
-                        </Link>
+                        </a>
                       )
                     })}
                     {itemPath === '/escala' && !isCollapsed && editableUnits.length > 0 && (
@@ -275,10 +265,11 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
       )}
 
       {/* Desktop Sidebar */}
-      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-full bg-white border-r border-gray-200 sticky top-0 transition-all duration-300`}>
+      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-full bg-white border-r border-gray-200 sticky top-0 z-40 pointer-events-auto transition-all duration-300`}>
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
             {!isCollapsed && (
               <div className="flex items-center gap-3">
+                <Image src={logoPrefeitura} alt="Logo Prefeitura" width={180} height={50} className="h-10 w-auto object-contain" />
                 <Image src={logoHma} alt="HMA Logo" width={120} height={40} className="h-10 w-auto object-contain" />
               </div>
             )}
@@ -291,7 +282,7 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
             </button>
         </div>
 
-        <nav className="flex-1 space-y-2 px-2 overflow-y-auto min-h-0 custom-scrollbar">
+        <nav className="flex-1 space-y-2 px-2 overflow-y-auto min-h-0 custom-scrollbar relative z-10 pointer-events-auto">
           {role === 'COORDENADOR' && user?.section_title && !isCollapsed && (
             <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-indigo-600">
               {`Login: Coordenador de ${user.section_title}`}
@@ -300,50 +291,30 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
           {navItems.map((item) => {
             const itemPath = item.href.split('?')[0]
             const isCoord = itemPath === '/coordenacao'
-            const isPending = pendingPath === itemPath || (isCoord && pendingPath === '/coordenacao')
-            const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas')) || isPending
+            const isActive = pathname === itemPath || (isCoord && (pathname.startsWith('/coordenacao') || pathname === '/folgas'))
             return (
               <div key={item.href}>
-                <Link
+                <a
                   href={item.href}
-                  prefetch={false}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    handleNavClick(item.href)
-                  }}
-                  onMouseEnter={() => router.prefetch(item.href)}
-                  className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-4'} py-3 text-sm font-medium rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
+                  className={getNavItemClass(isActive, isCollapsed)}
                   title={isCollapsed ? item.name : ''}
+                  aria-current={isActive ? 'page' : undefined}
                 >
-                  <span className={`${isCollapsed ? '' : 'mr-3'}`}>{item.icon}</span>
-                  {!isCollapsed && <span className="truncate">{item.name}</span>}
-                </Link>
+                  <span className={`${isCollapsed ? '' : 'mr-3'} ${getNavIconClass(isActive, isCollapsed)}`}>{item.icon}</span>
+                  {!isCollapsed && <span className="truncate font-semibold">{item.name}</span>}
+                </a>
                 {isCoord && !isCollapsed && coordSubmenuItems.map((subItem) => {
                   const subPath = subItem.href.split('?')[0]
-                  const isSubPending = pendingPath === subPath
-                  const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao')) || isSubPending
+                  const isSubActive = pathname === subPath || (subPath === '/coordenacao' && pathname.startsWith('/coordenacao'))
                   return (
-                    <Link
+                    <a
                       key={subItem.href}
                       href={subItem.href}
-                      prefetch={false}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleNavClick(subItem.href)
-                      }}
-                      onMouseEnter={() => router.prefetch(subItem.href)}
-                      className={`ml-10 mt-1 flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
-                        isSubActive
-                          ? 'bg-indigo-50 text-indigo-700'
-                          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
+                      className={getSubItemClass(isSubActive)}
+                      aria-current={isSubActive ? 'page' : undefined}
                     >
                       <span className="truncate">{subItem.name}</span>
-                    </Link>
+                    </a>
                   )
                 })}
                 {itemPath === '/escala' && !isCollapsed && editableUnits.length > 0 && (

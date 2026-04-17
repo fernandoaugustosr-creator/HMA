@@ -1,4 +1,4 @@
-import { getUserDashboardData, getCoordinationRequests, getTimeOffRequests, getRecentAbsences, getAbsenceSettings } from '@/app/actions'
+import { getUserDashboardData, getCoordinationRequests, getTimeOffRequests, getRecentAbsences, getAbsenceSettings, getBirthdaysForMonth } from '@/app/actions'
 import { getSwapRequests } from '@/app/swap-actions'
 import { redirect } from 'next/navigation'
 import MyShifts from './MyShifts'
@@ -9,7 +9,7 @@ import ManagementReportButton from '@/components/ManagementReportButton'
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: { month?: string; year?: string }
+  searchParams?: { month?: string; year?: string; birthdayMonth?: string }
 }) {
   const [data, recentAbsences, absenceSettings, swaps] = await Promise.all([
     getUserDashboardData(),
@@ -27,9 +27,12 @@ export default async function DashboardPage({
   const now = new Date()
   const rawMonth = searchParams?.month ? parseInt(searchParams.month, 10) : NaN
   const rawYear = searchParams?.year ? parseInt(searchParams.year, 10) : NaN
+  const rawBirthdayMonth = searchParams?.birthdayMonth ? parseInt(searchParams.birthdayMonth, 10) : NaN
 
   const selectedMonth = rawMonth >= 1 && rawMonth <= 12 ? rawMonth : now.getMonth() + 1
   const selectedYear = rawYear >= 2000 && rawYear <= 2100 ? rawYear : now.getFullYear()
+  const selectedBirthdayMonth = rawBirthdayMonth >= 1 && rawBirthdayMonth <= 12 ? rawBirthdayMonth : now.getMonth() + 1
+  const birthdays = await getBirthdaysForMonth(selectedBirthdayMonth)
 
   let coordinatorAbsences: any[] = []
   let coordinatorPayments: any[] = []
@@ -195,6 +198,53 @@ export default async function DashboardPage({
 
           {/* Pending Swaps for Approval */}
           <PendingSwapsList swaps={swaps} currentUserId={user.id} />
+      </div>
+
+      <div className="bg-white shadow rounded-lg p-6 font-sans">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 tracking-tight">Aniversariantes do mês</h2>
+          <p className="text-xs text-gray-500 mt-1">Mês selecionado: {monthOptions.find(m => m.value === selectedBirthdayMonth)?.label}</p>
+        </div>
+
+        <div className="flex items-center justify-between mb-3">
+          <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-bold">{birthdays.length}</span>
+          <form className="flex items-center gap-2">
+            <input type="hidden" name="month" value={String(selectedMonth)} />
+            <input type="hidden" name="year" value={String(selectedYear)} />
+            <label htmlFor="birthdayMonth" className="text-xs text-gray-600 font-semibold">Mês</label>
+            <select
+              id="birthdayMonth"
+              name="birthdayMonth"
+              defaultValue={String(selectedBirthdayMonth)}
+              className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-800 font-semibold"
+            >
+              {monthOptions.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 transition-colors"
+            >
+              Filtrar
+            </button>
+          </form>
+        </div>
+        {birthdays.length === 0 ? (
+          <p className="text-sm text-gray-500">Nenhum aniversariante cadastrado neste mês.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {birthdays.map((b: any) => (
+              <div key={b.id} className="flex items-center gap-3 px-3 py-2 rounded border border-gray-100 bg-gray-50">
+                <span className="w-9 text-center font-black text-indigo-700">{String(b.day).padStart(2, '0')}</span>
+                <span className="text-sm font-semibold text-gray-900 truncate">{b.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="text-xs text-gray-400 mt-3">Exibe somente o dia (sem o ano).</div>
       </div>
 
       {(user.role === 'COORDENADOR' || user.role === 'COORDENACAO_GERAL') && (

@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createNurse, updateNurse } from '@/app/actions'
+import { useState, useEffect, useMemo } from 'react'
+import { createNurse, getSystemRoles, updateNurse } from '@/app/actions'
+import RoleManagerModal from './RoleManagerModal'
+import { formatRole } from '@/lib/utils'
 
 interface NurseCreationModalProps {
   isOpen: boolean
@@ -22,7 +24,11 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   const [useDefaultPassword, setUseDefaultPassword] = useState(false)
   const [phone, setPhone] = useState(nurseToEdit?.phone || '')
   const [cpf, setCpf] = useState(nurseToEdit?.cpf || '')
+  const [birthDate, setBirthDate] = useState(nurseToEdit?.birth_date || '')
   const [showSqlModal, setShowSqlModal] = useState(false)
+  const [roles, setRoles] = useState<{ id: string, label: string }[]>([])
+  const [showRoleManager, setShowRoleManager] = useState(false)
+  const [selectedRole, setSelectedRole] = useState<string>(nurseToEdit?.role || defaultRole || '')
 
   useEffect(() => {
     if (nurseToEdit) {
@@ -30,11 +36,24 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
         // Se o CPF for um valor temporário (gerado automaticamente), exibe como vazio na UI
         const currentCpf = nurseToEdit.cpf || ''
         setCpf(currentCpf.startsWith('TEMP-') ? '' : currentCpf)
+        setBirthDate(nurseToEdit.birth_date || '')
+        setSelectedRole(nurseToEdit.role || '')
     } else {
         setPhone('')
         setCpf('')
+        setBirthDate('')
+        setSelectedRole(defaultRole || '')
     }
-  }, [nurseToEdit])
+  }, [nurseToEdit, defaultRole])
+
+  useEffect(() => {
+    if (!isOpen) return
+    getSystemRoles()
+      .then((data: any) => {
+        setRoles((data || []).sort((a: any, b: any) => String(a.label || '').localeCompare(String(b.label || ''), 'pt-BR')))
+      })
+      .catch(() => setRoles([]))
+  }, [isOpen])
 
   const formatPhone = (val: string) => {
     const digits = val.replace(/\D/g, '')
@@ -48,6 +67,14 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     const formatted = formatPhone(e.target.value)
     setPhone(formatted)
   }
+  const roleOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    roles.forEach((r) => map.set(String(r.id), String(r.label)))
+    if (selectedRole && !map.has(String(selectedRole))) {
+      map.set(String(selectedRole), formatRole(selectedRole) || String(selectedRole))
+    }
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label }))
+  }, [roles, selectedRole])
 
   if (!isOpen) return null
 
@@ -136,12 +163,24 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
       if (result.message?.includes('V15')) {
           setShowSqlModal(true)
       }
+      if (result.message?.includes('V18')) {
+          setShowSqlModal(true)
+      }
     }
     setLoading(false)
   }
 
   return (
     <>
+    <RoleManagerModal
+      isOpen={showRoleManager}
+      onClose={() => {
+        setShowRoleManager(false)
+        getSystemRoles()
+          .then((data: any) => setRoles((data || []).sort((a: any, b: any) => String(a.label || '').localeCompare(String(b.label || ''), 'pt-BR'))))
+          .catch(() => setRoles([]))
+      }}
+    />
     {showSqlModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
             <div className="bg-white p-6 rounded shadow-lg w-full max-w-2xl">
@@ -159,6 +198,10 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
 ALTER TABLE nurses 
 ADD COLUMN IF NOT EXISTS crm TEXT DEFAULT '',
 ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
+
+-- V18 (Data de Nascimento)
+ALTER TABLE nurses
+ADD COLUMN IF NOT EXISTS birth_date DATE;
 `}
                     </pre>
                 </div>
@@ -301,22 +344,26 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
           <div className="grid grid-cols-2 gap-3">
             <div>
                 <label className="block text-xs font-semibold text-gray-700">Cargo</label>
-                <select 
-                    name="role" 
-                    defaultValue={nurseToEdit?.role || ''}
-                    className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
-                >
-                    <option value="">Campo Vazio</option>
-                    <option value="ENFERMEIRO">Enfermeiro(a)</option>
-                    <option value="TECNICO">Téc. de Enfermagem</option>
-                    <option value="MEDICO">Médico(a)</option>
-                    <option value="MOTORISTA">Motorista</option>
-                    <option value="RECEPCAO">Recepção</option>
-                    <option value="AGENTE_DE_PORTARIA">Agente de Portaria</option>
-                    <option value="ASSISTENTE_SOCIAL">Assistente Social</option>
-                    <option value="COORDENADOR">Coordenador(a)</option>
-                    <option value="COORDENACAO_GERAL">Coordenação Geral</option>
-                </select>
+                <div className="flex gap-2">
+                  <select 
+                      name="role" 
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                      className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
+                  >
+                      <option value="">Campo Vazio</option>
+                      {roleOptions.map((r) => (
+                        <option key={r.id} value={r.id}>{r.label}</option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowRoleManager(true)}
+                    className="mt-0.5 px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Cargos
+                  </button>
+                </div>
             </div>
             <div>
                 <label className="block text-xs font-semibold text-gray-700">Setor Laboral (Histórico)</label>
@@ -328,6 +375,20 @@ ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
                     className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
                 />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700">Data de Nascimento</label>
+              <input
+                type="date"
+                name="birth_date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
+              />
+            </div>
+            <div />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

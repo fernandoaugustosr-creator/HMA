@@ -6,7 +6,9 @@ const nextBin = process.platform === 'win32'
   ? path.join(projectRoot, 'node_modules', '.bin', 'next.cmd')
   : path.join(projectRoot, 'node_modules', '.bin', 'next')
 
-const child = spawn(nextBin, ['dev', '-H', '0.0.0.0', '-p', '3000'], {
+const port = process.env.PORT || '3000'
+
+const child = spawn(nextBin, ['dev', '-H', '0.0.0.0', '-p', String(port)], {
   cwd: projectRoot,
   stdio: 'inherit',
   shell: true,

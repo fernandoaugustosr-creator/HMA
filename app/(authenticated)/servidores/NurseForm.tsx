@@ -1,7 +1,7 @@
 'use client'
 
 import { useFormState } from 'react-dom'
-import { createNurse } from '@/app/actions'
+import { createNurse, getSystemRoles } from '@/app/actions'
 import { useRef, useEffect, useState } from 'react'
 
 const initialState = {
@@ -13,6 +13,13 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
   const [state, formAction] = useFormState(createNurse, initialState)
   const formRef = useRef<HTMLFormElement>(null)
   const [useDefaultPassword, setUseDefaultPassword] = useState(false)
+  const [roles, setRoles] = useState<{ id: string, label: string }[]>([])
+
+  useEffect(() => {
+    getSystemRoles()
+      .then((data: any) => setRoles((data || []).sort((a: any, b: any) => String(a.label || '').localeCompare(String(b.label || ''), 'pt-BR'))))
+      .catch(() => setRoles([]))
+  }, [])
 
   useEffect(() => {
     if (state.success && formRef.current) {
@@ -63,15 +70,32 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
             id="role"
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
           >
-            <option value="ENFERMEIRO">Enfermeiro(a)</option>
-            <option value="TECNICO">Téc. de Enfermagem</option>
-            <option value="MEDICO">Médico(a)</option>
-            <option value="MOTORISTA">Motorista</option>
-            <option value="RECEPCAO">Recepção</option>
-            <option value="AGENTE_DE_PORTARIA">Agente de Portaria</option>
-            <option value="ASSISTENTE_SOCIAL">Assistente Social</option>
-            <option value="COORDENADOR">Coordenador(a)</option>
+            {roles.length === 0 ? (
+              <>
+                <option value="ENFERMEIRO">Enfermeiro(a)</option>
+                <option value="TECNICO">Téc. de Enfermagem</option>
+                <option value="MEDICO">Médico(a)</option>
+                <option value="MOTORISTA">Motorista</option>
+                <option value="RECEPCAO">Recepção</option>
+                <option value="AGENTE_DE_PORTARIA">Agente de Portaria</option>
+                <option value="ASSISTENTE_SOCIAL">Assistente Social</option>
+                <option value="COORDENADOR">Coordenador(a)</option>
+              </>
+            ) : (
+              roles.map((r) => (
+                <option key={r.id} value={r.id}>{r.label}</option>
+              ))
+            )}
           </select>
+        </div>
+        <div>
+          <label htmlFor="birth_date" className="block text-sm font-medium text-gray-700">Data de Nascimento</label>
+          <input
+            type="date"
+            name="birth_date"
+            id="birth_date"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+          />
         </div>
         <div>
           <label htmlFor="vinculo" className="block text-sm font-medium text-gray-700">Vínculo</label>

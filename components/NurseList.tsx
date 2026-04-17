@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { deleteNurse, getNurseSectorHistory } from '@/app/actions'
+import { deleteNurse, getNurseSectorHistory, getSystemRoles } from '@/app/actions'
 import NurseCreationModal from './NurseCreationModal'
 import { formatRole } from '@/lib/utils'
+import RoleManagerModal from './RoleManagerModal'
 import { Pencil, Trash2, Plus, History } from 'lucide-react'
 
 function SectorHistoryCell({ nurseId, currentSector }: { nurseId: string, currentSector: string }) {
@@ -67,12 +68,20 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [nurseToEdit, setNurseToEdit] = useState<any | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO' | 'COORDENADOR' | 'BLANK'>('ALL')
+  const [roleFilter, setRoleFilter] = useState<string>('ALL')
   const [vinculoFilter, setVinculoFilter] = useState<string>('ALL')
   const [sectionFilter, setSectionFilter] = useState<string>('ALL')
   const [nameFilter, setNameFilter] = useState<string>('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [roles, setRoles] = useState<{ id: string, label: string }[]>([])
+  const [showRoleManager, setShowRoleManager] = useState(false)
+
+  useEffect(() => {
+    getSystemRoles()
+      .then((data: any) => setRoles((data || []).sort((a: any, b: any) => String(a.label || '').localeCompare(String(b.label || ''), 'pt-BR'))))
+      .catch(() => setRoles([]))
+  }, [])
 
   const sectionLookup = useMemo(() => {
     const lookup: Record<string, string> = {}
@@ -81,6 +90,31 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
     })
     return lookup
   }, [sections])
+
+  const roleLabelLookup = useMemo(() => {
+    const lookup: Record<string, string> = {}
+    roles.forEach((r) => {
+      lookup[String(r.id)] = String(r.label)
+    })
+    return lookup
+  }, [roles])
+
+  const roleOptions = useMemo(() => {
+    const ids = new Set<string>()
+    roles.forEach(r => ids.add(String(r.id)))
+    ;(nurses || []).forEach((n: any) => {
+      const id = String(n.role || '').trim()
+      if (!id) return
+      ids.add(id)
+    })
+
+    const options = Array.from(ids).map((id) => ({
+      id,
+      label: roleLabelLookup[id] || formatRole(id) || id
+    }))
+
+    return options.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
+  }, [roles, nurses, roleLabelLookup])
 
   const handleEdit = (nurse: any) => {
     setNurseToEdit(nurse)
@@ -128,6 +162,30 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
       }),
     [nurses, roleFilter, vinculoFilter, sectionFilter, nameFilter]
   )
+
+  const birthdayPeople = useMemo(() => {
+    const now = new Date()
+    const month = now.getMonth() + 1
+    const list = (nurses || [])
+      .map((n: any) => {
+        const raw = n.birth_date
+        if (!raw) return null
+        const parts = String(raw).split('-')
+        if (parts.length < 3) return null
+        const m = Number(parts[1])
+        const day = Number(parts[2].slice(0, 2))
+        if (Number.isNaN(m) || Number.isNaN(day)) return null
+        if (m !== month) return null
+        return {
+          id: String(n.id),
+          name: String(n.name || ''),
+          day
+        }
+      })
+      .filter(Boolean) as { id: string, name: string, day: number }[]
+
+    return list.sort((a, b) => a.day - b.day || a.name.localeCompare(b.name, 'pt-BR'))
+  }, [nurses])
 
   const allVisibleSelected =
     filteredNurses.length > 0 &&
@@ -188,15 +246,32 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
 
   return (
     <>
+      <RoleManagerModal
+        isOpen={showRoleManager}
+        onClose={() => {
+          setShowRoleManager(false)
+          getSystemRoles()
+            .then((data: any) => setRoles((data || []).sort((a: any, b: any) => String(a.label || '').localeCompare(String(b.label || ''), 'pt-BR'))))
+            .catch(() => setRoles([]))
+        }}
+      />
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
         <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-700">Novo Cadastro</h2>
-            <button 
-                onClick={handleCreate}
-                className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"
-            >
-                <Plus size={18} /> Adicionar
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowRoleManager(true)}
+                className="bg-white text-gray-700 px-4 py-2 rounded border border-gray-300 flex items-center gap-2 hover:bg-gray-50"
+              >
+                Cargos
+              </button>
+              <button 
+                  onClick={handleCreate}
+                  className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"
+              >
+                  <Plus size={18} /> Adicionar
+              </button>
+            </div>
         </div>
       </div>
 
@@ -240,7 +315,16 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor Laboral</th>
               <th className="px-6 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="flex flex-col gap-1">
-                  <span>Cargo</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Cargo</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowRoleManager(true)}
+                      className="normal-case text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+                    >
+                      Gerenciar
+                    </button>
+                  </div>
                   <select
                     value={roleFilter}
                     onChange={(e) => setRoleFilter(e.target.value as any)}
@@ -248,15 +332,9 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                   >
                     <option value="ALL">Todos</option>
                     <option value="BLANK">Vazio (Sem Cargo)</option>
-                    <option value="ENFERMEIRO">Enfermeiro(a)</option>
-                    <option value="TECNICO">Técnico</option>
-                    <option value="MEDICO">Médico(a)</option>
-                    <option value="MOTORISTA">Motorista</option>
-                    <option value="RECEPCAO">Recepção</option>
-                    <option value="AGENTE_DE_PORTARIA">Agente de Portaria</option>
-                    <option value="ASSISTENTE_SOCIAL">Assistente Social</option>
-                    <option value="COORDENADOR">Coordenador(a)</option>
-                    <option value="COORDENACAO_GERAL">Coordenação Geral</option>
+                    {roleOptions.map((r) => (
+                      <option key={r.id} value={r.id}>{r.label}</option>
+                    ))}
                   </select>
                 </div>
               </th>
@@ -276,7 +354,12 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate">{nurse.name}</span>
+                    <div className="min-w-0">
+                      <div className="truncate">{nurse.name}</div>
+                      <div className="text-[10px] text-gray-500 font-semibold truncate">
+                        {roleLabelLookup[String(nurse.role || '')] || formatRole(nurse.role) || 'Sem cargo'}
+                      </div>
+                    </div>
                     <button
                       onClick={() => handleDelete(nurse.id)}
                       disabled={loadingId === nurse.id}
@@ -290,7 +373,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                   <SectorHistoryCell nurseId={nurse.id} currentSector={nurse.sector} />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{formatRole(nurse.role)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{roleLabelLookup[String(nurse.role || '')] || formatRole(nurse.role)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-2 justify-center">
                   <button 
                     onClick={() => handleEdit(nurse)}
@@ -309,6 +392,26 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
           </tbody>
         </table>
         </div>
+      </div>
+
+      <div className="mt-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-700">Aniversariantes do mês</h2>
+          <span className="text-xs text-gray-400 font-semibold">{birthdayPeople.length}</span>
+        </div>
+        {birthdayPeople.length === 0 ? (
+          <div className="text-sm text-gray-400">Nenhum aniversariante cadastrado neste mês.</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {birthdayPeople.map((p) => (
+              <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded border border-gray-100 bg-gray-50">
+                <span className="font-bold text-indigo-700">{String(p.day).padStart(2, '0')}</span>
+                <span className="text-sm text-gray-800 font-semibold truncate ml-3 flex-1">{p.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="text-xs text-gray-400 mt-3">Exibe somente o dia do mês (sem o ano).</div>
       </div>
 
       <NurseCreationModal 

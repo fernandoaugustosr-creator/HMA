@@ -37,9 +37,20 @@ export async function getSystemRoles() {
     { id: 'TECNICO', label: 'Téc. de Enfermagem' }
   ]
 
+  const mergeUnique = (base: { id: string, label: string }[], extra: { id: string, label: string }[]) => {
+    const map = new Map<string, { id: string, label: string }>()
+    base.forEach(r => map.set(String(r.id), { id: String(r.id), label: String(r.label) }))
+    extra.forEach(r => {
+      const id = String(r.id)
+      const label = String(r.label)
+      if (!map.has(id)) map.set(id, { id, label })
+    })
+    return Array.from(map.values())
+  }
+
   if (isLocalMode()) {
     const db = readDb()
-    return db.roles || defaultRoles
+    return mergeUnique(defaultRoles, db.roles || [])
   }
 
   const supabase = createClient()
@@ -60,10 +71,11 @@ export async function getSystemRoles() {
   // Let's assume we might need to add a value column or use bool_value.
   // Ideally we want to store the label.
   
-  return data.map((row: any) => ({
+  const fromSettings = data.map((row: any) => ({
     id: row.key.replace('role_', ''),
     label: row.value || row.key.replace('role_', '')
   }))
+  return mergeUnique(defaultRoles, fromSettings)
 }
 
 export async function addSystemRole(roleId: string, roleLabel: string) {
@@ -109,6 +121,120 @@ export async function addSystemRole(roleId: string, roleLabel: string) {
 
   revalidatePath('/')
   return { success: true }
+}
+
+export async function updateSystemRole(roleId: string, roleLabel: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const protectedRoles = new Set(['ADMIN', 'COORDENACAO_GERAL', 'COORDENADOR', 'ENFERMEIRO', 'TECNICO'])
+  if (protectedRoles.has(roleId)) {
+    return { success: false, message: 'Este cargo é protegido e não pode ser alterado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.roles = db.roles || []
+    const existing = db.roles.find((r: any) => r.id === roleId)
+    if (!existing) return { success: false, message: 'Cargo não encontrado.' }
+    existing.label = roleLabel
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({
+      key: `role_${roleId}`,
+      value: roleLabel,
+      bool_value: true
+    }, { onConflict: 'key' })
+
+  if (error) return { success: false, message: 'Erro ao alterar cargo: ' + error.message }
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function deleteSystemRole(roleId: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const protectedRoles = new Set(['ADMIN', 'COORDENACAO_GERAL', 'COORDENADOR', 'ENFERMEIRO', 'TECNICO'])
+  if (protectedRoles.has(roleId)) {
+    return { success: false, message: 'Este cargo é protegido e não pode ser removido.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.roles = (db.roles || []).filter((r: any) => r.id !== roleId)
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('app_settings').delete().eq('key', `role_${roleId}`)
+  if (error) return { success: false, message: 'Erro ao remover cargo: ' + error.message }
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function getBirthdaysForMonth(month: number) {
+  const session = cookies().get('session_user')
+  if (!session) return []
+
+  const parseBirthDate = (raw: any) => {
+    if (!raw) return null
+    const s = String(raw)
+    const parts = s.split('-')
+    if (parts.length >= 3 && parts[1] && parts[2]) {
+      const m = Number(parts[1])
+      const d = Number(parts[2].slice(0, 2))
+      if (!Number.isNaN(m) && !Number.isNaN(d)) return { month: m, day: d }
+    }
+    return null
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const list = (db.nurses || [])
+      .map((n: any) => {
+        const parsed = parseBirthDate(n.birth_date)
+        if (!parsed || parsed.month !== month) return null
+        return { id: String(n.id), name: String(n.name || ''), day: parsed.day }
+      })
+      .filter(Boolean) as { id: string, name: string, day: number }[]
+    return list.sort((a, b) => a.day - b.day || a.name.localeCompare(b.name, 'pt-BR'))
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('nurses')
+    .select('id,name,birth_date')
+    .range(0, 9999)
+
+  if (error) {
+    if (error.message?.includes('birth_date')) return []
+    return []
+  }
+
+  const list = (data || [])
+    .map((n: any) => {
+      const parsed = parseBirthDate(n.birth_date)
+      if (!parsed || parsed.month !== month) return null
+      return { id: String(n.id), name: String(n.name || ''), day: parsed.day }
+    })
+    .filter(Boolean) as { id: string, name: string, day: number }[]
+
+  return list.sort((a, b) => a.day - b.day || a.name.localeCompare(b.name, 'pt-BR'))
 }
 
 export async function getAbsenceSettings() {
@@ -801,11 +927,22 @@ export const getNurses = cache(async () => {
   }
   
   const supabase = createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('nurses')
-    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
+    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,birth_date,created_at')
     .range(0, 9999)
     .order('name')
+  if (error) {
+    if (error.message?.includes('birth_date')) {
+      const { data: fallbackData } = await supabase
+        .from('nurses')
+        .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
+        .range(0, 9999)
+        .order('name')
+      return fallbackData || []
+    }
+    return []
+  }
   return data || []
 })
 
@@ -816,12 +953,24 @@ export async function getNursesBySection(sectionId: string) {
   }
   
   const supabase = createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('nurses')
-    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
+    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,birth_date,created_at')
     .eq('section_id', sectionId)
     .range(0, 9999)
     .order('name')
+  if (error) {
+    if (error.message?.includes('birth_date')) {
+      const { data: fallbackData } = await supabase
+        .from('nurses')
+        .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
+        .eq('section_id', sectionId)
+        .range(0, 9999)
+        .order('name')
+      return fallbackData || []
+    }
+    return []
+  }
   return data || []
 }
 
@@ -840,6 +989,7 @@ export async function createNurse(prevState: any, formData: FormData) {
   const phone = formData.get('phone') as string
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string || ''
+  const birthDate = (formData.get('birth_date') as string) || ''
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
   const sector = formData.get('sector') as string // Manual sector name if provided
@@ -882,6 +1032,7 @@ export async function createNurse(prevState: any, formData: FormData) {
       role,
       section_id: finalSectionId,
       unit_id: unitId,
+      birth_date: birthDate || '',
       created_at: new Date().toISOString()
     }
 
@@ -939,6 +1090,7 @@ export async function createNurse(prevState: any, formData: FormData) {
     phone: phone || '',
     vinculo,
     role,
+    birth_date: birthDate || null,
     section_id: finalSectionId || null,
     unit_id: unitId || null
   }).select().single()
@@ -947,6 +1099,9 @@ export async function createNurse(prevState: any, formData: FormData) {
     console.error('Error creating nurse:', error)
     if (error.message?.includes('crm') || error.message?.includes('phone')) {
         return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V15). Solicite ao suporte para rodar o script de CRM e Telefone.' }
+    }
+    if (error.message?.includes('birth_date')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V18). Solicite ao suporte para rodar o script de Data de Nascimento.' }
     }
     if (error.code === '23505') {
         // Detect specific constraint violation
@@ -2471,8 +2626,6 @@ export async function getDailyShifts(date: string) {
   const [
     { data: rosterRows },
     { data: nursesRows },
-    { data: sectionsRows },
-    { data: unitsRows },
     { data: timeOffRows }
   ] = await Promise.all([
     supabase.from('monthly_rosters')
@@ -2483,10 +2636,6 @@ export async function getDailyShifts(date: string) {
     supabase.from('nurses')
       .select('id, name, role, unit_id, section_id')
       .in('id', nurseIds),
-    supabase.from('schedule_sections')
-      .select('id, title'),
-    supabase.from('units')
-      .select('id, title'),
     supabase.from('time_off_requests')
       .select('id, nurse_id, start_date, end_date, type, status')
       .eq('status', 'approved')
@@ -2496,17 +2645,34 @@ export async function getDailyShifts(date: string) {
 
   const rosterById: Record<string, { section_id: string | null, unit_id: string | null, nurse_id: string | null }> = {}
   const rosterByNurse: Record<string, { section_id: string | null, unit_id: string | null, id?: string | null }> = {}
+  const sectionIds = new Set<string>()
+  const unitIds = new Set<string>()
   ;(rosterRows || []).forEach((r: any) => {
     rosterById[r.id] = { section_id: r.section_id || null, unit_id: r.unit_id || null, nurse_id: r.nurse_id || null }
     if (r.nurse_id && !rosterByNurse[r.nurse_id]) {
       rosterByNurse[r.nurse_id] = { section_id: r.section_id || null, unit_id: r.unit_id || null, id: r.id || null }
     }
+    if (r.section_id) sectionIds.add(String(r.section_id))
+    if (r.unit_id) unitIds.add(String(r.unit_id))
   })
 
   const nursesById: Record<string, { name: string, role: string, unit_id?: string, section_id?: string }> = {}
   ;(nursesRows || []).forEach((n: any) => {
     nursesById[n.id] = { name: n.name, role: n.role, unit_id: n.unit_id, section_id: n.section_id }
+    if (n.section_id) sectionIds.add(String(n.section_id))
+    if (n.unit_id) unitIds.add(String(n.unit_id))
   })
+
+  const [sectionsResult, unitsResult] = await Promise.all([
+    sectionIds.size > 0
+      ? supabase.from('schedule_sections').select('id, title').in('id', Array.from(sectionIds))
+      : Promise.resolve({ data: [] as any[] }),
+    unitIds.size > 0
+      ? supabase.from('units').select('id, title').in('id', Array.from(unitIds))
+      : Promise.resolve({ data: [] as any[] })
+  ])
+  const sectionsRows = sectionsResult.data || []
+  const unitsRows = unitsResult.data || []
 
   const sectionsById: Record<string, string> = {}
   ;(sectionsRows || []).forEach((s: any) => { sectionsById[s.id] = s.title })
@@ -2583,10 +2749,21 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         }
         return true
       })
-      const timeOffs = db.time_off_requests.filter(t => 
+      const nurseNameById = new Map<string, string>()
+      ;(db.nurses || []).forEach((n: any) => {
+        if (!n?.id) return
+        nurseNameById.set(String(n.id), String(n.name || ''))
+      })
+
+      const timeOffs = db.time_off_requests
+        .filter(t => 
         ['approved', 'pending'].includes(t.status) && 
         ((t.start_date <= endDate && t.end_date >= startDate))
       )
+        .map((t: any) => ({
+          ...t,
+          nurse_name: nurseNameById.get(String(t.nurse_id)) || ''
+        }))
       const releases = db.monthly_schedule_metadata.filter((m: any) => {
         if (m.month !== month || m.year !== year) return false
         if (unitId === undefined) return true
@@ -2648,7 +2825,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       .gte('end_date', startDate)
       .range(0, 1000)
 
-    if (unitId) timeOffsQuery = timeOffsQuery.eq('unit_id', unitId)
+    if (unitId) timeOffsQuery = timeOffsQuery.or(`unit_id.eq.${unitId},unit_id.is.null`)
 
     let absencesQuery = supabase.from('absences').select('*').gte('date', startDate).lte('date', endDate).range(0, 1000)
     if (unitId) absencesQuery = absencesQuery.eq('unit_id', unitId)
@@ -2683,6 +2860,42 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       nurses = nursesData || []
     }
 
+    const timeOffsRaw = timeOffsData || []
+    const timeOffNurseIds = Array.from(new Set(timeOffsRaw.map((t: any) => t.nurse_id).filter(Boolean)))
+    const knownNameById = new Map<string, string>()
+    nurses.forEach((n: any) => {
+      if (!n?.id) return
+      knownNameById.set(String(n.id), String(n.name || ''))
+    })
+    const missingTimeOffIds = timeOffNurseIds.filter((id) => !knownNameById.has(String(id)))
+
+    if (missingTimeOffIds.length > 0) {
+      const chunk = (arr: any[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size))
+      const chunks = chunk(missingTimeOffIds, 200)
+      for (const ids of chunks) {
+        const { data: extraNames, error: extraErr } = await supabase
+          .from('nurses')
+          .select('id,name')
+          .in('id', ids)
+          .range(0, 1000)
+        if (extraErr) {
+          console.error('Error fetching time-off nurse names:', extraErr)
+          continue
+        }
+        ;(extraNames || []).forEach((n: any) => {
+          if (!n?.id) return
+          if (!knownNameById.has(String(n.id))) {
+            knownNameById.set(String(n.id), String(n.name || ''))
+          }
+        })
+      }
+    }
+
+    const timeOffs = timeOffsRaw.map((t: any) => ({
+      ...t,
+      nurse_name: knownNameById.get(String(t.nurse_id)) || ''
+    }))
+
     let shifts: any[] = []
     const rosterIds = roster.map((r: any) => r.id).filter(Boolean)
     if (rosterIds.length > 0) {
@@ -2711,7 +2924,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         nurses: nurses || [],
         roster: roster,
         shifts: shifts,
-        timeOffs: timeOffsData || [],
+        timeOffs: timeOffs,
         absences: absencesData || [],
         sections: sections || [],
         units: units || [],
@@ -3015,9 +3228,11 @@ export async function unreleaseSchedule(month: number, year: number, unitId: str
 
 export async function updateScheduleFooter(month: number, year: number, unitId: string | null, footerText: string) {
   try {
-      await checkAdmin()
-      const session = cookies().get('session_user')
-      const user = JSON.parse(session!.value)
+      if (unitId) {
+        await checkScaleEditor(unitId)
+      } else {
+        await checkAdmin()
+      }
 
       if (isLocalMode()) {
         const db = readDb()
@@ -4953,6 +5168,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const phone = formData.get('phone') as string
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string
+  const birthDate = (formData.get('birth_date') as string) || ''
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
   const sector = formData.get('sector') as string
@@ -5006,6 +5222,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     nurse.vinculo = vinculo
     nurse.role = role
     nurse.sector = sector || nurse.sector
+    nurse.birth_date = birthDate
     
     // Only update location if provided (optional) or corrected
     if (finalSectionId) nurse.section_id = finalSectionId
@@ -5083,6 +5300,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   if (finalSectionId) updateData.section_id = finalSectionId
   if (unitId) updateData.unit_id = unitId
   if (sector) updateData.sector = sector
+  updateData.birth_date = birthDate || null
 
   if (useDefaultPassword) {
     updateData.password = '123456'
@@ -5095,6 +5313,9 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   if (error) {
     if (error.message?.includes('crm') || error.message?.includes('phone')) {
         return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V15). Solicite ao suporte para rodar o script de CRM e Telefone.' }
+    }
+    if (error.message?.includes('birth_date')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V18). Solicite ao suporte para rodar o script de Data de Nascimento.' }
     }
     if (error.code === '23505') return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
     return { success: false, message: 'Erro ao atualizar: ' + error.message }

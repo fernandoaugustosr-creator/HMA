@@ -16,7 +16,7 @@ export default function AdminDailySchedule() {
     const [openUnits, setOpenUnits] = useState<Record<string, boolean>>({})
     const [filterMode, setFilterMode] = useState<'day' | 'night' | 'all'>('all')
     const [units, setUnits] = useState<{ id: string, title: string }[]>([])
-    const [selectedUnitId, setSelectedUnitId] = useState<string>('__all__')
+    const [selectedUnitId, setSelectedUnitId] = useState<string>('')
     const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
 
     useEffect(() => {
@@ -44,23 +44,40 @@ export default function AdminDailySchedule() {
     }, [])
 
     useEffect(() => {
+        if (selectedUnitId === '') {
+            setShifts([])
+            setLoading(false)
+            return
+        }
+
+        let cancelled = false
+
         async function fetchShifts() {
             setLoading(true)
             try {
                 const res = await getDailyShifts(selectedDate)
+                if (cancelled) return
                 if (res.success && res.data) {
                     setShifts(res.data)
                 } else {
                     setShifts([])
                 }
             } catch (error) {
-                console.error('Error fetching daily shifts:', error)
+                if (!cancelled) {
+                    console.error('Error fetching daily shifts:', error)
+                }
             } finally {
-                setLoading(false)
+                if (!cancelled) {
+                    setLoading(false)
+                }
             }
         }
+
         fetchShifts()
-    }, [selectedDate])
+        return () => {
+            cancelled = true
+        }
+    }, [selectedDate, selectedUnitId])
 
     const getShiftTypeLabel = (type: string) => {
         switch (type) {
@@ -106,7 +123,9 @@ export default function AdminDailySchedule() {
         return num ? `${num} - ${title}` : title
     }
 
-    const filteredByUnit = selectedUnitId === '__all__'
+    const filteredByUnit = selectedUnitId === ''
+        ? []
+        : selectedUnitId === '__all__'
         ? filteredShifts
         : filteredShifts.filter((s: any) => {
             const u = s.unit_id ? String(s.unit_id) : '__none__'
@@ -121,6 +140,7 @@ export default function AdminDailySchedule() {
     }, {})
 
     const unitIdsToRender = useMemo(() => {
+        if (selectedUnitId === '') return []
         if (selectedUnitId !== '__all__') return [selectedUnitId]
         return [
             ...sortedUnits.map(u => String(u.id)),
@@ -131,6 +151,10 @@ export default function AdminDailySchedule() {
     // Sempre que a data mudar ou os plantões mudarem, expandir todos
     useEffect(() => {
         const newOpenUnits: Record<string, boolean> = {}
+        if (selectedUnitId === '') {
+            setOpenUnits({})
+            return
+        }
         if (selectedUnitId !== '__all__') {
             newOpenUnits[selectedUnitId] = true
         } else {
@@ -172,7 +196,7 @@ export default function AdminDailySchedule() {
                             onChange={(e) => setSelectedUnitId(e.target.value)}
                             className="w-full md:w-[360px] pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-all hover:border-gray-300"
                         >
-                            <option value="__all__">Todos os setores</option>
+                            <option value="">Selecione um setor</option>
                             {sortedUnits.map(u => (
                                 <option key={u.id} value={String(u.id)}>{getUnitLabel(String(u.id))}</option>
                             ))}
@@ -220,6 +244,13 @@ export default function AdminDailySchedule() {
                     <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-3"></div>
                         <span className="text-sm font-medium">Carregando escala...</span>
+                    </div>
+                ) : selectedUnitId === '' ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                        <svg className="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h8M8 12h8m-8 5h5M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" />
+                        </svg>
+                        <p className="text-sm font-medium">Selecione um setor para visualizar a escala.</p>
                     </div>
                 ) : filteredByUnit.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
@@ -341,11 +372,10 @@ export default function AdminDailySchedule() {
                                                             </div>
                                                         )}
 
-                                                        {/* Técnicos Column */}
+                                                        {/* Funções do Setor Column */}
                                                         {(technicians.length > 0 || others.length > 0) && (
                                                             <div className="flex-1">
                                                                 <div className="flex items-center gap-2 mb-3 pb-2 border-b border-rose-100">
-                                                                    <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Técnicos</span>
                                                                     <span className="text-xs text-gray-400 font-medium">{technicians.length + others.length} profissionais</span>
                                                                 </div>
                                                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
@@ -367,3 +397,4 @@ export default function AdminDailySchedule() {
         </div>
     )
 }
+

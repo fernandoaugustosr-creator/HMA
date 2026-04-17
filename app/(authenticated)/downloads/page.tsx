@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { getReleasedSchedules } from '@/app/actions'
+import { getAllUnitNumbers, getReleasedSchedules } from '@/app/actions'
 import Schedule from '@/components/Schedule'
 import { FileText, ArrowLeft, Download, Calendar } from 'lucide-react'
 import Image from 'next/image'
@@ -16,6 +16,8 @@ export default function DownloadsPage() {
   const [loading, setLoading] = useState(true)
   const [selectedRelease, setSelectedRelease] = useState<any | null>(null)
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('')
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('')
+  const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
   const [isPrinting, setIsPrinting] = useState(false)
   const printTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -76,6 +78,26 @@ export default function DownloadsPage() {
     load()
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    getAllUnitNumbers()
+      .then((res: any) => {
+        if (cancelled) return
+        if (res?.success && res?.data) {
+          setUnitNumbersMap(res.data as Record<string, string>)
+        } else {
+          setUnitNumbersMap({})
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
+        setUnitNumbersMap({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // Extract unique Month/Year options
   const monthYearOptions = React.useMemo(() => {
       const options = new Set<string>()
@@ -97,6 +119,64 @@ export default function DownloadsPage() {
       const [year, month] = selectedMonthYear.split('-').map(Number)
       return releases.filter(r => r.year === year && r.month === month)
   }, [releases, selectedMonthYear])
+
+  const releasedUnitOptions = React.useMemo(() => {
+      const uniqueUnits = new Map<string, string>()
+      filteredReleases.forEach(release => {
+          if (release.unit_id && release.unit_name) {
+              uniqueUnits.set(String(release.unit_id), String(release.unit_name))
+          }
+      })
+
+      return Array.from(uniqueUnits.entries())
+          .map(([id, name]) => ({ id, name }))
+          .sort((a, b) => {
+            const aNumRaw = unitNumbersMap[a.id]
+            const bNumRaw = unitNumbersMap[b.id]
+            const aNum = aNumRaw ? parseInt(String(aNumRaw), 10) : NaN
+            const bNum = bNumRaw ? parseInt(String(bNumRaw), 10) : NaN
+            const aHas = !Number.isNaN(aNum)
+            const bHas = !Number.isNaN(bNum)
+            if (aHas && bHas && aNum !== bNum) return aNum - bNum
+            if (aHas !== bHas) return aHas ? -1 : 1
+            return a.name.localeCompare(b.name, 'pt-BR')
+          })
+  }, [filteredReleases, unitNumbersMap])
+
+  const visibleReleases = React.useMemo(() => {
+      const base = selectedUnitId
+        ? filteredReleases.filter(release => String(release.unit_id) === selectedUnitId)
+        : filteredReleases
+
+      return [...base].sort((a: any, b: any) => {
+        const aMapped = a?.unit_id ? unitNumbersMap[String(a.unit_id)] : ''
+        const bMapped = b?.unit_id ? unitNumbersMap[String(b.unit_id)] : ''
+        const aNum = aMapped ? parseInt(String(aMapped), 10) : NaN
+        const bNum = bMapped ? parseInt(String(bMapped), 10) : NaN
+        const aHas = !Number.isNaN(aNum)
+        const bHas = !Number.isNaN(bNum)
+        if (aHas && bHas && aNum !== bNum) return aNum - bNum
+        if (aHas !== bHas) return aHas ? -1 : 1
+
+        const aTime = a?.released_at ? new Date(a.released_at).getTime() : 0
+        const bTime = b?.released_at ? new Date(b.released_at).getTime() : 0
+        if (aTime !== bTime) return aTime - bTime
+        return String(a?.unit_name || '').localeCompare(String(b?.unit_name || ''), 'pt-BR')
+      })
+  }, [filteredReleases, selectedUnitId, unitNumbersMap])
+
+  useEffect(() => {
+      setSelectedUnitId('')
+      setSelectedRelease(null)
+  }, [selectedMonthYear])
+
+  useEffect(() => {
+      if (!selectedRelease) return
+      const stillVisible = visibleReleases.some(release => release.id === selectedRelease.id)
+      if (!stillVisible) {
+          setSelectedRelease(null)
+      }
+  }, [visibleReleases, selectedRelease])
 
   const handleScheduleLoaded = useCallback(() => {
     // Clear any existing timeout to prevent multiple prints
@@ -165,24 +245,42 @@ export default function DownloadsPage() {
                 <p className="text-gray-600">Selecione o mês e a escala para visualizar e baixar.</p>
             </div>
             
-            {/* Dropdown Filter */}
+            {/* Dropdown Filters */}
             {!loading && releases.length > 0 && (
-                <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm flex items-center gap-2">
-                    <Calendar className="text-blue-600" size={20} />
-                    <select 
-                        value={selectedMonthYear}
-                        onChange={(e) => setSelectedMonthYear(e.target.value)}
-                        className="bg-transparent font-bold text-gray-700 outline-none cursor-pointer min-w-[200px]"
-                    >
-                        {monthYearOptions.map(opt => {
-                            const [y, m] = opt.split('-').map(Number)
-                            return (
-                                <option key={opt} value={opt}>
-                                    {MONTHS[m - 1]} {y}
+                <div className="flex flex-col md:flex-row gap-2">
+                    <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm flex items-center gap-2">
+                        <Calendar className="text-blue-600" size={20} />
+                        <select 
+                            value={selectedMonthYear}
+                            onChange={(e) => setSelectedMonthYear(e.target.value)}
+                            className="bg-transparent font-bold text-gray-700 outline-none cursor-pointer min-w-[200px]"
+                        >
+                            {monthYearOptions.map(opt => {
+                                const [y, m] = opt.split('-').map(Number)
+                                return (
+                                    <option key={opt} value={opt}>
+                                        {MONTHS[m - 1]} {y}
+                                    </option>
+                                )
+                            })}
+                        </select>
+                    </div>
+
+                    <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm flex items-center gap-2">
+                        <FileText className="text-blue-600" size={20} />
+                        <select
+                            value={selectedUnitId}
+                            onChange={(e) => setSelectedUnitId(e.target.value)}
+                            className="bg-transparent font-bold text-gray-700 outline-none cursor-pointer min-w-[260px]"
+                        >
+                            <option value="">Todas as escalas liberadas</option>
+                            {releasedUnitOptions.map(option => (
+                                <option key={option.id} value={option.id}>
+                                    {option.name}
                                 </option>
-                            )
-                        })}
-                    </select>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             )}
         </div>
@@ -217,29 +315,45 @@ export default function DownloadsPage() {
                   </h2>
                 )}
 
-                <div className="space-y-4">
-                    {filteredReleases.map(release => (
+                <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                    {selectedUnitId
+                      ? `${visibleReleases.length} escala(s) liberada(s) encontrada(s) para o setor selecionado.`
+                      : `${filteredReleases.length} escala(s) liberada(s) disponível(is) neste mês.`}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {visibleReleases.map((release, idx) => {
+                      const mappedNumberRaw = release?.unit_id ? unitNumbersMap[String(release.unit_id)] : ''
+                      const mappedNumber = mappedNumberRaw ? String(mappedNumberRaw).trim() : ''
+                      const parsedNumberMatch = String(release?.unit_name || '').match(/^\s*(\d+)\s*-/)
+                      const parsedNumber = parsedNumberMatch ? parsedNumberMatch[1] : ''
+                      const unitNumber = mappedNumber || parsedNumber
+                      const safeUnitNumber = unitNumber ? String(unitNumber).padStart(2, '0') : ''
+                      const baseName = String(release?.unit_name || '').replace(/^\s*\d+\s*-\s*/, '').trim()
+                      const displayName = safeUnitNumber ? `${safeUnitNumber} - ${baseName || String(release?.unit_name || '')}` : String(release?.unit_name || '')
+
+                      return (
                       <div 
                         key={release.id}
-                        className={`bg-white p-4 rounded-xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 group border-l-4 relative overflow-hidden ${selectedRelease?.id === release.id ? 'border-blue-300 border-l-blue-600 ring-2 ring-blue-100' : 'border-gray-200 border-l-blue-500'}`}
+                        className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 px-4 py-4 group relative overflow-hidden ${selectedRelease?.id === release.id ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'}`}
                       >
-                        <div className="flex items-center gap-4 relative z-10">
+                        <div className="flex items-center gap-4 min-w-0">
                           <div className="p-3 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors text-blue-600">
-                            <FileText size={24} />
+                            <FileText size={22} />
                           </div>
                           <div>
-                            <h3 className="font-bold text-lg text-gray-900">{release.unit_name}</h3>
-                            <p className="text-gray-500 text-xs flex items-center gap-2">
+                            <h3 className="font-bold text-base text-gray-900 truncate">{displayName}</h3>
+                            <p className="text-gray-500 text-xs font-semibold">
                               Liberado em: {release.released_at ? new Date(release.released_at).toLocaleDateString('pt-BR') : '-'}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 relative z-10">
+                        <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
                             onClick={() => handlePrint(release)}
                             disabled={isPrinting}
-                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-white text-xs font-semibold transition-colors ${
+                            className={`inline-flex items-center justify-center gap-2 px-6 py-2 rounded-full text-white text-xs font-black uppercase tracking-wide transition-colors ${
                               isPrinting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
                             }`}
                             title="Baixar escala em PDF (via impressão do navegador)"
@@ -253,12 +367,13 @@ export default function DownloadsPage() {
                           </button>
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                 </div>
                 
-                {filteredReleases.length === 0 && (
+                {visibleReleases.length === 0 && (
                     <div className="text-center py-8 text-gray-400">
-                        <p>Nenhuma escala encontrada para este mês.</p>
+                        <p>Nenhuma escala liberada encontrada para este filtro.</p>
                     </div>
                 )}
             </div>
