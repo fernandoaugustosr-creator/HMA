@@ -51,6 +51,7 @@ interface Shift {
   roster_id?: string
   shift_date: string
   shift_type: 'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn'
+  is_red?: boolean
   created_at?: string
 }
 
@@ -275,6 +276,8 @@ export default function Schedule({
   // Shift Management State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [shiftModalData, setShiftModalData] = useState<{nurseId: string, rosterId?: string, nurseName: string, date: string} | null>(null)
+  const [manualRed, setManualRed] = useState(false)
+  const [manualBaseType, setManualBaseType] = useState<Shift['shift_type'] | null>(null)
   const [shiftType, setShiftType] = useState<'day' | 'night' | 'morning' | 'afternoon' | 'mt' | 'dn' | 'dn4' | 'nd4' | 'delete'>('day')
   const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'mon_fri' | '12x36' | '24x72' | 'every3' | 'd_off2' | 'off4' | 'off5' | 'off6' | 'dn_off3' | 'dn_off4' | 'nd_off4' | 'dn_off5' | 'dn_off6' | 'dn_off7' | 'dn_off8' | 'custom'>('none')
   const [customRecurrenceDays, setCustomRecurrenceDays] = useState<string>('')
@@ -1575,6 +1578,11 @@ export default function Schedule({
         if (entry) rosterId = entry.id
     }
 
+    const existingShiftKey = `${(rosterId || nurse.id)}_${dateStr}`
+    const existingShift = shiftsLookup.lookup[existingShiftKey]
+    setManualRed(!!existingShift?.is_red)
+    setManualBaseType((existingShift?.shift_type as any) || null)
+
     setShiftModalData({
         nurseId: nurse.id,
         rosterId: rosterId,
@@ -1591,12 +1599,13 @@ export default function Schedule({
     setIsShiftModalOpen(true)
   }
 
-  const handleSaveShifts = async (overrideType?: string, overrideRecurrence?: string) => {
+  const handleSaveShifts = async (overrideType?: string, overrideRecurrence?: string, overrideIsRed?: boolean) => {
     if (isScheduleReleased) return
     if (!shiftModalData) return
     
     const targetType = overrideType || shiftType
     const targetRecurrence = overrideRecurrence || recurrence
+    const targetIsRed = typeof overrideIsRed === 'boolean' ? overrideIsRed : manualRed
 
     console.log(`[handleSaveShifts] Início: tipo=${targetType}, recorrência=${targetRecurrence}, profissional=${shiftModalData.nurseName}`)
 
@@ -1701,13 +1710,15 @@ export default function Schedule({
             }
         }
 
-        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[] = []
+        const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[] = []
         shiftsMap.forEach((type, date) => {
+            const isRed = targetRecurrence === 'none' && type !== 'DELETE' ? targetIsRed : false
             shiftsToSave.push({
                 nurseId: shiftModalData.nurseId,
                 rosterId: shiftModalData.rosterId,
                 date: date,
-                type: type
+                type: type,
+                isRed
             })
         })
 
@@ -1737,6 +1748,7 @@ export default function Schedule({
                         roster_id: sToSave.rosterId,
                         shift_date: sToSave.date,
                         shift_type: sToSave.type as any,
+                        is_red: !!sToSave.isRed,
                         created_at: new Date().toISOString()
                     })
                 }
@@ -1751,7 +1763,8 @@ export default function Schedule({
               nurseId: shiftModalData.nurseId,
               rosterId: shiftModalData.rosterId,
               date: shiftModalData.date,
-              type: targetType === 'delete' ? 'DELETE' : targetType
+              type: targetType === 'delete' ? 'DELETE' : targetType,
+              isRed: targetType === 'delete' ? false : targetIsRed
             }]
           : shiftsToSave
 
@@ -1803,7 +1816,8 @@ export default function Schedule({
             nurseId: s.nurse_id,
             rosterId: s.roster_id,
             date: s.shift_date,
-            type: s.shift_type
+            type: s.shift_type,
+            isRed: !!(s as any).is_red
         }))
 
         console.log(`[handleSaveAll] ATOMIC SAVE: Sending ${batch.length} shifts for ${selectedMonth + 1}/${selectedYear}`)
@@ -2531,6 +2545,9 @@ export default function Schedule({
                    else if (shift.shift_type === 'afternoon') content = 'T'
                    else if (shift.shift_type === 'mt') content = 'MT'
                    else if (shift.shift_type === 'dn') content = 'DN'
+                  if (shift.is_red) {
+                    cellClass = cellClass.replace(' text-black', ' text-red-600')
+                  }
                 }
                 else if (absence) {
                    // content = "FT"
@@ -3727,84 +3744,84 @@ export default function Schedule({
                     <label className="block text-sm font-medium text-black mb-2 italic">1. Preenchimento Automático (Mês Todo)</label>
                     <div className="flex gap-2 flex-wrap mb-4 bg-blue-50 p-3 rounded border border-blue-200">
                         <button 
-                            onClick={() => handleSaveShifts('day', 'daily')}
+                            onClick={() => handleSaveShifts('day', 'daily', false)}
                             className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher todo o mês com Dia (D)"
                         >
                             Dia (D)
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('night', 'daily')}
+                            onClick={() => handleSaveShifts('night', 'daily', false)}
                             className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher todo o mês com Noite (N)"
                         >
                             Noite (N)
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('morning', 'daily')}
+                            onClick={() => handleSaveShifts('morning', 'daily', false)}
                             className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher todo o mês com Manhã (M)"
                         >
                             Manhã (M)
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('afternoon', 'daily')}
+                            onClick={() => handleSaveShifts('afternoon', 'daily', false)}
                             className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher todo o mês com Tarde (T)"
                         >
                             Tarde (T)
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('mt', 'daily')}
+                            onClick={() => handleSaveShifts('mt', 'daily', false)}
                             className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher todo o mês com MT"
                         >
                             MT
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('morning', 'mon_fri')}
+                            onClick={() => handleSaveShifts('morning', 'mon_fri', false)}
                             className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher Segunda a Sexta - Manhã (M)"
                         >
                             Seg a Sexta M
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('afternoon', 'mon_fri')}
+                            onClick={() => handleSaveShifts('afternoon', 'mon_fri', false)}
                             className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher Segunda a Sexta - Tarde (T)"
                         >
                             Seg a Sexta T
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('dn', 'daily')}
+                            onClick={() => handleSaveShifts('dn', 'daily', false)}
                             className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher todo o mês com DN"
                         >
                             DN
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('dn', 'dn_off4')}
+                            onClick={() => handleSaveShifts('dn', 'dn_off4', false)}
                             className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="DN Folga 4 (Repetir até o fim do mês)"
                         >
                             DN Folga 4
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('day', 'd_off2')}
+                            onClick={() => handleSaveShifts('day', 'd_off2', false)}
                             className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="D Folga 2 (Repetir até o fim do mês)"
                         >
                             D Folga 2
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('nd', 'nd_off4')}
+                            onClick={() => handleSaveShifts('nd', 'nd_off4', false)}
                             className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="ND Folga 4 (Repetir até o fim do mês)"
                         >
                             ND Folga 4
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('delete', 'daily')}
+                            onClick={() => handleSaveShifts('delete', 'daily', false)}
                             className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-red-600 border-red-300 hover:bg-red-600 hover:text-white transition-colors font-bold"
                             title="Limpar toda a linha (Mês inteiro)"
                         >
@@ -3817,18 +3834,45 @@ export default function Schedule({
                         {['day', 'night', 'morning', 'afternoon', 'mt', 'dn'].map(type => (
                             <button 
                                 key={type}
-                                onClick={() => handleSaveShifts(type, 'none')}
+                                onClick={() => handleSaveShifts(type, 'none', manualRed)}
                                 className="flex-1 min-w-[45px] py-1 px-1 rounded border bg-white text-gray-700 border-gray-300 hover:bg-gray-100 uppercase text-[10px]"
                             >
                                 {type === 'day' ? 'D' : type === 'night' ? 'N' : type === 'morning' ? 'M' : type === 'afternoon' ? 'T' : type.toUpperCase()}
                             </button>
                         ))}
                         <button 
-                            onClick={() => handleSaveShifts('delete', 'none')}
+                            onClick={() => handleSaveShifts('delete', 'none', false)}
                             className="flex-1 min-w-[45px] py-1 px-1 rounded border bg-white text-red-400 border-red-200 hover:bg-red-50 text-[10px]"
                         >
                             APAGAR
                         </button>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="manualRed"
+                          type="checkbox"
+                          checked={manualRed}
+                          onChange={(e) => setManualRed(e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        <label htmlFor="manualRed" className="text-sm font-semibold text-gray-800">
+                          Sinalizar letra em vermelho (somente manual)
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!manualBaseType) return
+                          handleSaveShifts(manualBaseType, 'none', manualRed)
+                        }}
+                        disabled={!manualBaseType}
+                        className={`px-3 py-2 rounded font-bold text-xs transition-colors ${manualBaseType ? 'bg-gray-800 text-white hover:bg-black' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                        title={manualBaseType ? 'Salvar somente a sinalização (sem mudar a letra)' : 'Não há letra neste dia para sinalizar'}
+                      >
+                        SALVAR SINALIZAÇÃO
+                      </button>
                     </div>
                 </div>
 

@@ -2912,20 +2912,36 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       const chunks = chunk(rosterIds, 200)
       const shiftRows: any[] = []
       for (const ids of chunks) {
-        const { data: chunkShifts, error: shiftsError } = await supabase
+        let { data: chunkShifts, error: shiftsError } = await supabase
           .from('shifts')
-          .select('id, nurse_id, date, type, roster_id, created_at')
+          .select('id, nurse_id, date, type, roster_id, created_at, is_red')
           .in('roster_id', ids)
           .gte('date', startDate)
           .lte('date', endDate)
           .range(0, 20000)
-        if (shiftsError) throw shiftsError
+        if (shiftsError) {
+          if (shiftsError.message?.includes('is_red')) {
+            const fallback = await supabase
+              .from('shifts')
+              .select('id, nurse_id, date, type, roster_id, created_at')
+              .in('roster_id', ids)
+              .gte('date', startDate)
+              .lte('date', endDate)
+              .range(0, 20000)
+            if (fallback.error) throw fallback.error
+            chunkShifts = fallback.data as any
+            shiftsError = null as any
+          } else {
+            throw shiftsError
+          }
+        }
         if (chunkShifts && chunkShifts.length > 0) shiftRows.push(...chunkShifts)
       }
       shifts = shiftRows.map((s: any) => ({
         ...s,
         shift_date: s.date,
-        shift_type: s.type
+        shift_type: s.type,
+        is_red: !!s.is_red
       }))
     }
 
@@ -2981,7 +2997,8 @@ export async function importMonthlySchedule(month: number, year: number, unitId:
             nurseId: s.nurse_id,
             rosterId: s.roster_id,
             date: s.shift_date || s.date,
-            type: s.shift_type || s.type
+            type: s.shift_type || s.type,
+            isRed: !!(s.is_red ?? s.isRed)
         }))
 
         // Use our safe saveShifts function to handle the actual DB work
@@ -5646,7 +5663,7 @@ export async function deleteSection(id: string) {
   return { success: true }
 }
 
-export async function saveShifts(shifts: { nurseId: string, rosterId?: string, date: string, type: string }[]) {
+export async function saveShifts(shifts: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[]) {
   // 0. Acesso e Validação básica
   try {
     const rosterIds = Array.from(new Set((shifts || []).map(s => s.rosterId).filter(Boolean))) as string[]
@@ -5721,6 +5738,7 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
             roster_id: s.rosterId || undefined, 
             shift_date: s.date, 
             shift_type: s.type, 
+            is_red: !!(s as any).isRed,
             updated_at: new Date().toISOString() 
           })
         }
@@ -5769,7 +5787,8 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
                 nurse_id: s.nurseId,
                 roster_id: s.rosterId || null,
                 date: s.date,
-                type: s.type
+                type: s.type,
+                is_red: !!(s as any).isRed
             })
         }
     })
@@ -5805,6 +5824,9 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
         const { error: insertError } = await supabase.from('shifts').insert(c)
         if (insertError) {
           console.error('[saveShifts] Erro no Insert:', insertError)
+          if (insertError.message?.includes('is_red')) {
+            throw new Error('Erro: O banco de dados Supabase precisa ser atualizado (V20). Solicite ao suporte para rodar o script de Sinalização Vermelha de Plantões.')
+          }
           throw new Error(`Falha na gravação: ${insertError.message}`)
         }
       }
