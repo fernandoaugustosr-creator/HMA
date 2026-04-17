@@ -228,9 +228,6 @@ export default function PublicScheduleList() {
                     className={`bg-white p-4 rounded-2xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 group ${selectedRelease?.id === release.id ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-gray-100 hover:border-indigo-100'}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-3 bg-[#eff6ff] rounded-2xl group-hover:bg-[#dbeafe] transition-colors text-[#3b82f6] shrink-0">
-                        <FileText size={20} />
-                      </div>
                       <div className="min-w-0">
                         <h3 className="font-black text-sm md:text-base text-[#1e293b] group-hover:text-indigo-900 transition-colors uppercase tracking-tight truncate">
                             {(() => {
