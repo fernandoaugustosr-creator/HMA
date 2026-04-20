@@ -2728,11 +2728,12 @@ export default function Schedule({
   const formatSectorPrintShort = useCallback((v: string) => {
     const s = String(v || '').toUpperCase().trim()
     if (!s || s === '-') return '-'
-    if (s.includes('ESTABIL')) return 'ESTAB.'
-    if (s.includes('PRONTO') && s.includes('SOCOR')) return 'P.S.'
-    if (s.includes('TRIAG')) return 'TRIAG.'
-    if (s.includes('CIRURG')) return 'CIR.'
-    if (s.includes('SALA') && s.includes('PART')) return 'PARTO'
+    const norm = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    if (norm.includes('ESTABIL')) return 'ESTAB.'
+    if (norm.includes('PRONTO') && norm.includes('SOCOR')) return 'P.S.'
+    if (norm.includes('TRIAG')) return 'TRIAG.'
+    if (norm.includes('CIRURG')) return 'CIRÚRGICA'
+    if (norm.includes('SALA') && norm.includes('PART')) return 'PARTO'
     return s.slice(0, 8)
   }, [])
 
