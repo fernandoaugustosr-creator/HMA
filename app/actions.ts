@@ -426,8 +426,8 @@ export async function checkScaleEditor(unitId?: string | null) {
   if (!session) throw new Error('Unauthorized')
   const user = JSON.parse(session.value)
   
-  // ADMIN and COORDENACAO_GERAL always have access
-  if (user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367') {
+  // ADMIN, COORDENACAO_GERAL e COORDENADOR têm acesso de edição de escala
+  if (user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.role === 'COORDENADOR' || user.cpf === '02170025367') {
     return user
   }
 
@@ -552,7 +552,7 @@ export async function getMyScalePermissionUnitIds() {
     return []
   }
 
-  if (user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367') {
+  if (user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.role === 'COORDENADOR' || user.cpf === '02170025367') {
     return ['*']
   }
 
@@ -582,7 +582,7 @@ export async function getEditableUnits() {
     return []
   }
 
-  const isGlobalAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
+  const isGlobalAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.role === 'COORDENADOR' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
     const db = readDb()
@@ -929,11 +929,11 @@ export const getNurses = cache(async () => {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('nurses')
-    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
+    .select('id,name,name_star,cpf,role,coren,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
     .range(0, 9999)
     .order('name')
   if (error) {
-    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date')) {
+    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date') || error.message?.includes('name_star')) {
       const { data: fallbackData } = await supabase
         .from('nurses')
         .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
@@ -955,12 +955,12 @@ export async function getNursesBySection(sectionId: string) {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('nurses')
-    .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
+    .select('id,name,name_star,cpf,role,coren,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
     .eq('section_id', sectionId)
     .range(0, 9999)
     .order('name')
   if (error) {
-    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date')) {
+    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date') || error.message?.includes('name_star')) {
       const { data: fallbackData } = await supabase
         .from('nurses')
         .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
@@ -992,6 +992,7 @@ export async function createNurse(prevState: any, formData: FormData) {
   const birthDate = (formData.get('birth_date') as string) || ''
   const certidaoNegativaDate = (formData.get('certidao_negativa_date') as string) || ''
   const corenExpiryDate = (formData.get('coren_expiry_date') as string) || ''
+  const nameStar = formData.get('name_star') === 'on'
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
   const sector = formData.get('sector') as string // Manual sector name if provided
@@ -1025,6 +1026,7 @@ export async function createNurse(prevState: any, formData: FormData) {
     const newNurse = {
       id: randomUUID(),
       name,
+      name_star: !!nameStar,
       cpf: finalCpf,
       password, // Plain text for local dev
       coren,
@@ -1087,6 +1089,7 @@ export async function createNurse(prevState: any, formData: FormData) {
 
   const { data: insertedNurse, error } = await supabase.from('nurses').insert({
     name,
+    name_star: !!nameStar,
     cpf: finalCpf,
     password,
     coren,
@@ -1111,6 +1114,9 @@ export async function createNurse(prevState: any, formData: FormData) {
     }
     if (error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date')) {
         return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V19). Solicite ao suporte para rodar o script de Certidão Negativa e Vencimento do COREN.' }
+    }
+    if (error.message?.includes('name_star')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V21). Solicite ao suporte para rodar o script de Marcação com * no Nome.' }
     }
     if (error.code === '23505') {
         // Detect specific constraint violation
@@ -2817,7 +2823,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
 
     // FETCH BASE DATA IN PARALLEL (unit-scoped when unitId is provided)
     let rosterQuery = supabase.from('monthly_rosters')
-        .select('id, nurse_id, unit_id, section_id, month, year, observation, sector, created_at, list_order')
+        .select('id, nurse_id, unit_id, section_id, month, year, observation, sector, created_at, list_order, name_star')
         .eq('month', month)
         .eq('year', year)
 
@@ -2842,7 +2848,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     const [
         { data: sections },
         { data: units },
-        { data: rosterData },
+        { data: rosterData, error: rosterError },
         { data: timeOffsData },
         { data: releasesData },
         { data: absencesData }
@@ -2855,7 +2861,18 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         absencesQuery
     ])
 
-    const roster = rosterData || []
+    let roster = rosterData || []
+    if ((!rosterData || rosterData.length === 0) && rosterError?.message?.includes('name_star')) {
+      let fallbackRosterQuery = supabase.from('monthly_rosters')
+        .select('id, nurse_id, unit_id, section_id, month, year, observation, sector, created_at, list_order')
+        .eq('month', month)
+        .eq('year', year)
+      if (unitId) fallbackRosterQuery = fallbackRosterQuery.eq('unit_id', unitId)
+      else if (unitId !== undefined) fallbackRosterQuery = fallbackRosterQuery.is('unit_id', null)
+      const { data: fallbackRoster, error: fallbackErr } = await fallbackRosterQuery.range(0, 5000)
+      if (fallbackErr) throw fallbackErr
+      roster = fallbackRoster || []
+    }
     const nurseIdList = Array.from(new Set(roster.map((r: any) => r.nurse_id).filter(Boolean)))
     let nurses: any[] = []
     if (nurseIdList.length > 0) {
@@ -5163,12 +5180,31 @@ export async function deleteNurse(id: string) {
     if (db.monthly_rosters) {
         db.monthly_rosters = db.monthly_rosters.filter(r => r.nurse_id !== id)
     }
+    if ((db as any).payment_requests) {
+      ;(db as any).payment_requests = (db as any).payment_requests.filter((p: any) => p.nurse_id !== id && p.coordinator_id !== id)
+    }
+    if ((db as any).general_requests) {
+      ;(db as any).general_requests = (db as any).general_requests.filter((g: any) => g.nurse_id !== id && g.coordinator_id !== id)
+    }
+    if ((db as any).shift_swaps) {
+      ;(db as any).shift_swaps = (db as any).shift_swaps.filter((s: any) => s.requester_id !== id && s.requested_id !== id)
+    }
+    if ((db as any).absences) {
+      ;(db as any).absences = (db as any).absences.filter((a: any) => a.nurse_id !== id && a.created_by !== id)
+    }
     writeDb(db)
     revalidatePath('/')
     return { success: true, message: 'Servidor removido com sucesso (Local)' }
   }
 
   const supabase = createClient()
+  try {
+    await supabase.from('payment_requests').update({ coordinator_id: null }).eq('coordinator_id', id)
+  } catch (e) {}
+  await supabase.from('payment_requests').delete().eq('nurse_id', id)
+  await supabase.from('general_requests').delete().eq('nurse_id', id)
+  await supabase.from('shift_swaps').delete().or(`requester_id.eq.${id},requested_id.eq.${id}`)
+  await supabase.from('absences').delete().eq('nurse_id', id)
   await supabase.from('shifts').delete().eq('nurse_id', id)
   await supabase.from('time_off_requests').delete().eq('nurse_id', id)
   await supabase.from('monthly_rosters').delete().eq('nurse_id', id)
@@ -5178,6 +5214,72 @@ export async function deleteNurse(id: string) {
   if (error) return { success: false, message: 'Erro ao remover servidor: ' + error.message }
   revalidatePath('/')
   return { success: true, message: 'Servidor removido com sucesso' }
+}
+
+export async function setNurseNameStar(id: string, nameStar: boolean) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const nurse = db.nurses.find((n: any) => n.id === id)
+    if (!nurse) return { success: false, message: 'Servidor não encontrado (Local)' }
+    nurse.name_star = !!nameStar
+    writeDb(db)
+    revalidatePath('/servidores')
+    revalidatePath('/escala')
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('nurses').update({ name_star: !!nameStar }).eq('id', id)
+  if (error) {
+    if (error.message?.includes('name_star')) {
+      return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V21). Solicite ao suporte para rodar o script de Marcação com * no Nome.' }
+    }
+    return { success: false, message: 'Erro ao atualizar: ' + error.message }
+  }
+  revalidatePath('/servidores')
+  revalidatePath('/escala')
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function setRosterNameStar(rosterId: string, nameStar: boolean) {
+  if (!rosterId) return { success: false, message: 'Dados inválidos.' }
+  try {
+    const unitId = await getUnitIdByRosterId(rosterId)
+    await checkScaleEditor(unitId)
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Acesso negado.' }
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const r = (db.monthly_rosters || []).find((x: any) => String(x.id) === String(rosterId))
+    if (!r) return { success: false, message: 'Registro não encontrado (Local).' }
+    r.name_star = !!nameStar
+    writeDb(db)
+    revalidatePath('/escala')
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('monthly_rosters').update({ name_star: !!nameStar }).eq('id', rosterId)
+  if (error) {
+    if (error.message?.includes('name_star')) {
+      return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V22). Solicite ao suporte para rodar o script de Asterisco por Linha.' }
+    }
+    return { success: false, message: 'Erro ao atualizar: ' + error.message }
+  }
+  revalidatePath('/escala')
+  revalidatePath('/')
+  return { success: true }
 }
 
 export async function updateNurse(id: string, prevState: any, formData: FormData) {
@@ -5197,6 +5299,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const birthDate = (formData.get('birth_date') as string) || ''
   const certidaoNegativaDate = (formData.get('certidao_negativa_date') as string) || ''
   const corenExpiryDate = (formData.get('coren_expiry_date') as string) || ''
+  const hasNameStar = formData.has('name_star')
+  const nameStar = hasNameStar ? (formData.get('name_star') === 'on') : undefined
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
   const sector = formData.get('sector') as string
@@ -5253,6 +5357,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     nurse.birth_date = birthDate
     nurse.certidao_negativa_date = certidaoNegativaDate
     nurse.coren_expiry_date = corenExpiryDate
+    if (hasNameStar) nurse.name_star = !!nameStar
     
     // Only update location if provided (optional) or corrected
     if (finalSectionId) nurse.section_id = finalSectionId
@@ -5333,6 +5438,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   updateData.birth_date = birthDate || null
   updateData.certidao_negativa_date = certidaoNegativaDate || null
   updateData.coren_expiry_date = corenExpiryDate || null
+  if (hasNameStar) updateData.name_star = !!nameStar
 
   if (useDefaultPassword) {
     updateData.password = '123456'
@@ -5351,6 +5457,9 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     }
     if (error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date')) {
         return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V19). Solicite ao suporte para rodar o script de Certidão Negativa e Vencimento do COREN.' }
+    }
+    if (error.message?.includes('name_star')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V21). Solicite ao suporte para rodar o script de Marcação com * no Nome.' }
     }
     if (error.code === '23505') return { success: false, message: 'Já existe um servidor com este CPF e Vínculo.' }
     return { success: false, message: 'Erro ao atualizar: ' + error.message }

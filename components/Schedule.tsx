@@ -5,7 +5,7 @@ import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { QRCodeSVG } from 'qrcode.react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission, getUnitMonthStatuses, getEditableUnits } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission, getUnitMonthStatuses, getEditableUnits, setRosterNameStar } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle, EyeOff } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
@@ -16,6 +16,7 @@ import NurseSelectionModal from './NurseSelectionModal'
 interface Nurse {
   id: string
   name: string
+  name_star?: boolean
   coren: string
   crm?: string
   phone?: string
@@ -143,12 +144,14 @@ const ObservationCell = ({
 
 const SectorCell = ({ 
   initialValue, 
+  printValue,
   onSave,
   onCopyDown,
   isAdmin,
   className = ""
 }: { 
   initialValue: string | undefined, 
+  printValue?: string,
   onSave: (val: string) => void,
   onCopyDown?: (val: string) => void,
   isAdmin: boolean,
@@ -177,7 +180,7 @@ const SectorCell = ({
   }
 
   if (!isAdmin) {
-    return <span className={`text-[10px] uppercase block font-bold text-black text-center ${className}`}>{value}</span>
+    return <span className={`text-[10px] print:text-[8px] uppercase block font-bold print:font-normal text-black text-center ${className}`}>{printValue ?? value}</span>
   }
 
   return (
@@ -190,7 +193,7 @@ const SectorCell = ({
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
         />
-        <span className={`text-[10px] uppercase hidden print:block font-bold text-black w-full h-full text-center ${className}`}>{value}</span>
+        <span className={`text-[10px] print:text-[8px] uppercase hidden print:block font-bold print:font-normal text-black w-full h-full text-center ${className}`}>{printValue ?? value}</span>
         {onCopyDown && value && (
             <button
                 onClick={(e) => {
@@ -305,6 +308,8 @@ export default function Schedule({
   const [isNurseModalOpen, setIsNurseModalOpen] = useState(false)
   const [isCreationModalOpen, setIsCreationModalOpen] = useState(false)
   const [insertionData, setInsertionData] = useState<{ sectionId: string, position: number, rosterId?: string, orderedIds: string[] } | null>(null)
+  const [reassignData, setReassignData] = useState<{ rosterId: string, sectionId: string } | null>(null)
+  const [isReassignModalOpen, setIsReassignModalOpen] = useState(false)
 
   // Replication State
   const [replicationModalOpen, setReplicationModalOpen] = useState(false)
@@ -556,10 +561,10 @@ export default function Schedule({
 
   useEffect(() => {
     // When opening modals that need the full nurse list, ensure we fetch it
-    if (isNurseModalOpen || !!leaveModalType || isPermissionManagerOpen) {
+    if (isNurseModalOpen || isReassignModalOpen || !!leaveModalType || isPermissionManagerOpen) {
         fetchAllNursesList(true) // Force fetch to be sure we have the latest and complete list
     }
-  }, [isNurseModalOpen, leaveModalType, isPermissionManagerOpen, fetchAllNursesList])
+  }, [isNurseModalOpen, isReassignModalOpen, leaveModalType, isPermissionManagerOpen, fetchAllNursesList])
 
   const fetchData = useCallback(async (forceRefresh = false, showLoading = true) => {
     // Skip fetching if a manual save is already in progress to avoid race conditions
@@ -1302,7 +1307,6 @@ export default function Schedule({
   }
 
   const saveFooterText = async () => {
-      if (isScheduleReleased) return
       // Optimistic Update
       const newText = tempFooterText
       setFooterText(newText)
@@ -1439,6 +1443,39 @@ export default function Schedule({
       insertionPosition: insertionData.position,
       insertionOrderedIds: insertionData.orderedIds
     })
+  }
+
+  const openReassignModal = (rosterId: string, sectionId: string) => {
+    if (isScheduleReleased) return
+    if (!rosterId) return
+    setReassignData({ rosterId, sectionId })
+    setIsReassignModalOpen(true)
+  }
+
+  const onReassignSelected = async (nurseId: string) => {
+    if (!reassignData) return
+    setIsReassignModalOpen(false)
+    await handleReassign(reassignData.rosterId, nurseId)
+    setReassignData(null)
+  }
+
+  const handleToggleNameStar = async (rosterId: string, nextValue: boolean) => {
+    if (isScheduleReleased) return
+    if (!rosterId) return
+    setLoading(true)
+    try {
+      const res = await setRosterNameStar(rosterId, nextValue)
+      if (!(res as any).success) {
+        alert((res as any).message || 'Erro ao atualizar')
+        return
+      }
+      setData(prev => ({
+        ...prev,
+        roster: (prev.roster || []).map((r: any) => String(r.id) === String(rosterId) ? ({ ...r, name_star: nextValue } as any) : r)
+      }))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const finalizeAssignNurse = async (observation: string) => {
@@ -1892,7 +1929,8 @@ export default function Schedule({
                   roster_created_at: entry.created_at,
                   observation: entry.observation,
                   sector: entry.sector,
-                  list_order: entry.list_order
+                  list_order: entry.list_order,
+                  name_star: !!entry.name_star
               }))
           }
           return [{ ...nurse, unique_key: nurse.id, is_rostered: false }]
@@ -2251,14 +2289,15 @@ export default function Schedule({
           return (
             <tr key={nurse.unique_key || `${nurse.id}-${index}`} className="bg-white hover:bg-gray-50 group">
               <td
-                className={`border border-black px-0.5 py-0.5 text-center text-xs font-medium sticky left-0 bg-yellow-400 z-10 w-8 h-5 print:w-8 print:h-5 print:static print:left-auto print:z-0 leading-none ${isAdmin ? '' : ''}`}
+                className={`border border-black px-0 py-0 text-center text-[11px] font-medium sticky left-0 bg-yellow-400 z-10 w-8 h-5 print:w-6 print:h-5 print:static print:left-auto print:z-0 leading-none ${isAdmin ? '' : ''}`}
                 title={canEditSelectedUnit && !isScheduleReleased ? 'Edite para reiniciar numeração a partir daqui' : undefined}
               >
                 {canEditSelectedUnit && !isScheduleReleased ? (
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     defaultValue={rowNumber}
-                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 appearance-none m-0 p-0 text-black font-bold print:text-[12px]"
+                    className="w-full h-full text-center bg-transparent border-none outline-none focus:bg-gray-100 m-0 p-0 text-black font-bold text-[11px] print:text-[12px]"
                     onKeyDown={async (e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
@@ -2304,7 +2343,7 @@ export default function Schedule({
                   <span className="text-black font-bold print:text-[14px]">{rowNumber}</span>
                 )}
               </td>
-              <td className="border border-black px-1 py-0 text-[9px] font-medium text-black sticky left-6 bg-white z-10 w-[200px] h-5 print:w-[170px] print:h-5 border-r-2 border-r-black text-center print:static print:left-auto print:z-0 leading-none overflow-hidden">
+              <td className="border border-black px-1 py-0 print:px-2 text-[9px] font-medium text-black sticky left-8 bg-white z-10 w-[320px] h-5 print:w-[200px] print:h-5 border-r-2 border-r-black text-center print:text-left print:static print:left-auto print:z-0 leading-none overflow-hidden">
                 <div className="flex items-center justify-center gap-1 h-5 overflow-hidden">
                   {canEditSelectedUnit && !isScheduleReleased && (
                     <div className="flex flex-col gap-0.5 mr-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2334,68 +2373,37 @@ export default function Schedule({
                   </button>
                   )}
                   {canEditSelectedUnit && !isScheduleReleased ? (
-                    <select 
-                      value={nurse.id} 
-                      onChange={(e) => handleReassign(nurse.unique_key || '', e.target.value)}
-                      className={`w-full bg-transparent border-none focus:ring-0 p-0 text-lg font-bold cursor-pointer outline-none uppercase no-print appearance-none text-center ${
-                        (((nurse.vinculo || '').toUpperCase().includes('SELETIVO') || (nurse.vinculo || '').toUpperCase().includes('CELETISTA'))) ? 'text-green-600' :
-                        (((nurse.vinculo || '').toUpperCase().includes('TERCEIRIZADO') || (nurse.vinculo || '').toUpperCase().includes('TERCERIZADO'))) ? 'text-purple-700' :
-                        (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
-                        (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
-                        'text-gray-800'
-                      }`}
-                    >
-                      {/* Option for current nurse to ensure header displays correctly */}
-                      {(() => {
-                          const vinculo = (nurse.vinculo || '').toUpperCase().trim()
-                          let suffix = ''
-                          if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
-                          if (vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) suffix += ' (TER)'
-                          if ((nurse.observation || '').toUpperCase().includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
-                          return (
-                            <option value={nurse.id} className="text-black font-bold">
-                                {nurse.name}{suffix}
-                            </option>
-                          )
-                      })()}
-
-                      {sortedUniqueNurses.filter(n => n.id !== nurse.id).map(n => {
-                        const rosterEntries = rosterMap[n.id] || []
-                        const isInCurrentContext = rosterEntries.some(r => r.section_id === section.id && (!selectedUnitId || r.unit_id === selectedUnitId))
-
-                        // Construct label with location info
-                        const locations = rosterEntries.map(r => {
-                             const sTitle = data.sections.find(s => s.id === r.section_id)?.title
-                             const uTitle = data.units.find(u => u.id === r.unit_id)?.title
-                             return `${sTitle}${uTitle ? ` (${uTitle})` : ''}`
-                        }).filter(Boolean).join(', ')
-
-                        const vinculo = (n.vinculo || '').toUpperCase().trim()
-                        let suffix = ''
-                        if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
-                        if (vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) suffix += ' (TER)'
-                        if (rosterEntries.some(r => r.observation?.includes('AB')) || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
-
-                        let label = `${n.name}${suffix}`
-
-                        if (isInCurrentContext) {
-                            // label += ' (Já nesta lista)'
-                        } else if (locations) {
-                            label += ` - ${locations}`
-                        }
-
-                        return (
-                            <option 
-                                key={n.id} 
-                                value={n.id}
-                                className={`text-black not-italic normal-case ${isInCurrentContext ? 'font-bold text-blue-600' : 'font-normal'}`}
-                                style={{ color: isInCurrentContext ? undefined : 'black' }}
-                            >
-                                {label}
-                            </option>
-                        )
-                      })}
-                    </select>
+                    <div className="w-full flex items-center justify-center gap-2 no-print">
+                      <button
+                        type="button"
+                        onClick={() => openReassignModal(nurse.unique_key || '', section.id)}
+                        className={`flex-1 min-w-0 bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none uppercase text-center whitespace-nowrap overflow-hidden text-ellipsis ${
+                          (((nurse.vinculo || '').toUpperCase().includes('SELETIVO') || (nurse.vinculo || '').toUpperCase().includes('CELETISTA'))) ? 'text-green-600' :
+                          (((nurse.vinculo || '').toUpperCase().includes('TERCEIRIZADO') || (nurse.vinculo || '').toUpperCase().includes('TERCERIZADO'))) ? 'text-purple-700' :
+                          (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
+                          (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
+                          'text-gray-800'
+                        }`}
+                        title={nurse.name}
+                      >
+                        {(() => {
+                            const vinculo = (nurse.vinculo || '').toUpperCase().trim()
+                            let suffix = ''
+                            if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
+                            if (vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) suffix += ' (TER)'
+                            if ((nurse.observation || '').toUpperCase().includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
+                            return `${nurse.name}${suffix}`
+                        })()}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleNameStar(nurse.unique_key || '', !nurse.name_star)}
+                        className={`px-2 py-1 rounded border text-lg font-black leading-none hover:bg-gray-50 ${nurse.name_star ? 'text-red-600 border-red-200 bg-red-50 hover:bg-red-50' : 'text-gray-500 border-gray-300 bg-white'}`}
+                        title={nurse.name_star ? 'Remover * do nome' : 'Adicionar * ao nome'}
+                      >
+                        *
+                      </button>
+                    </div>
                   ) : null}
                   <div className={`${canEditSelectedUnit && !isScheduleReleased ? 'hidden print:block' : 'block'} text-center w-full`}>
                   {(() => {
@@ -2424,24 +2432,40 @@ export default function Schedule({
                      
                      const baseColorClass = nameColorClass || "text-gray-800"
                      
-                    return <span className={`text-lg font-bold ${baseColorClass} uppercase print:text-[12px] whitespace-nowrap overflow-hidden text-ellipsis block leading-none`}>
+                    return <span className={`relative text-sm font-bold ${baseColorClass} uppercase print:text-[10px] whitespace-nowrap overflow-hidden text-ellipsis block leading-none ${nurse.name_star ? 'pr-4' : ''}`}>
                          {prefixes.map(p => <span key={p} className="mr-1">{p}</span>)}
-                         {nurse.name}
+                        {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
                          {(vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) && <span className="ml-1">(TER)</span>}
                          {/* {obs.includes('1ED') && !isSeletivo && <span className="ml-1">(1ED)</span>} */}
                         {(obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) && <span className="ml-1">(AB)</span>}
                         {displayObs ? displayObs : ''}
+                        {nurse.name_star ? (
+                          <span className="absolute right-0 top-1/2 -translate-y-1/2 font-black text-lg print:text-[14px] leading-none text-red-600">
+                            *
+                          </span>
+                        ) : null}
                      </span>
                    })()}
                    </div>
                 </div>
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[10px] uppercase h-5 print:h-5 whitespace-nowrap leading-none overflow-hidden">{formatRole(nurse.role)}</td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase h-5 print:h-5 whitespace-nowrap leading-none overflow-hidden">
-                {((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')}
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[8px] uppercase h-5 print:h-5 leading-none overflow-hidden">
+                <span className="block whitespace-nowrap overflow-hidden text-ellipsis font-bold print:hidden">{formatRole(nurse.role)}</span>
+                <span className="hidden print:block whitespace-nowrap overflow-hidden text-ellipsis font-normal">{formatRolePrintShort(nurse.role)}</span>
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase h-5 print:h-5 whitespace-nowrap leading-none overflow-hidden">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[8px] uppercase h-5 print:h-5 leading-none overflow-hidden">
+                {(() => {
+                  const v = ((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')
+                  return (
+                    <>
+                      <span className="block whitespace-nowrap overflow-hidden text-ellipsis font-bold print:hidden">{v}</span>
+                      <span className="hidden print:block whitespace-nowrap overflow-hidden text-ellipsis font-normal">{formatVinculoPrintShort(v)}</span>
+                    </>
+                  )
+                })()}
+              </td>
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[8px] uppercase h-5 print:h-5 leading-none overflow-hidden">
                 {canEditSelectedUnit && !isScheduleReleased && displayDynamicField === 'coren' ? (
                   <select
                     value={nurse.coren || ''}
@@ -2457,7 +2481,7 @@ export default function Schedule({
                       }
                       setLoading(false)
                     }}
-                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-[10px] print:text-[11px] cursor-pointer outline-none text-center appearance-none"
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-[10px] print:text-[8px] cursor-pointer outline-none text-center appearance-none font-bold print:font-normal"
                   >
                     <option value="">-</option>
                     {(() => {
@@ -2475,19 +2499,38 @@ export default function Schedule({
                     const source = baseNurse || nurse
                     const val = source[displayDynamicField as keyof Nurse]
                     
-                    if (displayDynamicField === 'role') return formatRole(val as string)
-                    
-                    return <span className="print:text-[11px] whitespace-nowrap">{String(val || '-')}</span>
+                    if (displayDynamicField === 'role') {
+                      const r = String(val || '')
+                      return (
+                        <>
+                          <span className="font-bold print:hidden">{formatRole(r)}</span>
+                          <span className="hidden print:block font-normal">{formatRolePrintShort(r)}</span>
+                        </>
+                      )
+                    }
+                    if (displayDynamicField === 'vinculo') {
+                      const v = String(val || '-')
+                      return (
+                        <>
+                          <span className="font-bold print:hidden">{v}</span>
+                          <span className="hidden print:block font-normal">{formatVinculoPrintShort(v)}</span>
+                        </>
+                      )
+                    }
+
+                    return <span className="print:text-[8px] whitespace-nowrap font-bold print:font-normal">{String(val || '-')}</span>
                   })()
                 )}
               </td>
               {!isSetorHidden && (
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[11px] uppercase h-5 print:h-5 whitespace-nowrap leading-none overflow-hidden">
+              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[8px] uppercase h-5 print:h-5 leading-none overflow-hidden tracking-tight">
                   <SectorCell 
                       initialValue={nurse.sector}
+                      printValue={formatSectorPrintShort(nurse.sector || '')}
                       onSave={(val) => handleUpdateSector(nurse.unique_key || nurse.id, val)}
                       onCopyDown={(val) => handleCopySectorDown(index, val)}
                       isAdmin={canEditSelectedUnit && !isScheduleReleased}
+                      className="font-bold print:font-normal"
                   />
               </td>
               )}
@@ -2506,7 +2549,7 @@ export default function Schedule({
                       // Fallback to nurse.id causes shifts from other rosters (same nurse) to leak into this one.
                       const shift = shiftsLookup.lookup[`${nurse.unique_key}_${dateStr}`]
 
-                let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-5 print:w-5 text-center text-[10px] print:text-[12px] leading-none relative text-black font-bold"
+                let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-5 print:w-4 text-center text-[10px] print:text-[10px] leading-none relative text-black font-bold print:font-normal"
                 let content = null
 
                 // Priority: Special Leaves > Shift > Absence > Generic Folga (implicit)
@@ -2617,7 +2660,7 @@ export default function Schedule({
         {canEditSelectedUnit && !isScheduleReleased && (
         <tr className="no-print bg-white">
           <td className="border border-black px-1 py-1 sticky left-0 bg-yellow-400 z-10"></td>
-          <td className="border border-black px-1 py-0 sticky left-6 bg-white z-10 border-r-2 border-r-black w-[200px] text-center">
+          <td className="border border-black px-1 py-0 sticky left-8 bg-white z-10 border-r-2 border-r-black w-[320px] text-center">
              <button 
                 onClick={() => {
                     const currentRosterIds = (nursesBySection[section.id] || [])
@@ -2654,6 +2697,44 @@ export default function Schedule({
   }, [isAdmin, myScalePermissionUnitIds, selectedUnitId])
 
   const canManageSelectedUnit = canEditSelectedUnit && !isScheduleReleased
+
+  const formatRolePrintShort = useCallback((role: string) => {
+    const r = String(role || '').toUpperCase().trim()
+    if (!r) return ''
+    if (r === 'TECNICO') return 'TÉC. ENF.'
+    if (r === 'ENFERMEIRO') return 'ENF.'
+    if (r === 'MEDICO') return 'MÉD.'
+    if (r === 'COORDENADOR') return 'COORD.'
+    if (r === 'COORDENACAO_GERAL') return 'COORD. G.'
+    if (r === 'RECEPCAO') return 'RECEPÇÃO'
+    if (r === 'AGENTE_DE_PORTARIA') return 'AG. PORT.'
+    if (r === 'ASSISTENTE_SOCIAL') return 'ASS. SOC.'
+    if (r === 'MOTORISTA') return 'MOTOR.'
+    return r
+  }, [])
+
+  const formatVinculoPrintShort = useCallback((v: string) => {
+    const s = String(v || '').toUpperCase().trim()
+    if (!s || s === '-') return '-'
+    if (s.includes('ESCALA DUPLA')) return 'E.D.'
+    if (s.includes('ESCALA DESCOBERTA')) return 'DESC.'
+    if (s.includes('SELETIVO')) return 'SEL.'
+    if (s.includes('CONCURSO')) return 'CONC.'
+    if (s.includes('TERCEIRIZ')) return 'TER.'
+    if (s.includes('CELETISTA')) return 'CEL.'
+    return s.slice(0, 8)
+  }, [])
+
+  const formatSectorPrintShort = useCallback((v: string) => {
+    const s = String(v || '').toUpperCase().trim()
+    if (!s || s === '-') return '-'
+    if (s.includes('ESTABIL')) return 'ESTAB.'
+    if (s.includes('PRONTO') && s.includes('SOCOR')) return 'P.S.'
+    if (s.includes('TRIAG')) return 'TRIAG.'
+    if (s.includes('CIRURG')) return 'CIR.'
+    if (s.includes('SALA') && s.includes('PART')) return 'PARTO'
+    return s.slice(0, 8)
+  }, [])
 
   const visibleUnits = useMemo(() => {
       const allUnits = data.units || []
@@ -2730,7 +2811,7 @@ export default function Schedule({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded print:w-24 print:h-24 print:text-[48px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-0 print:-mt-3 print:mb-2">
+          <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded leading-none text-sm print:w-24 print:h-24 print:text-[40px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-4 print:border-black print:-mt-3 print:mb-2">
             {(unitNumber || headerPage) || '1'}
           </div>
           {isAdmin && !printOnly && !isScheduleReleased && (
@@ -3022,29 +3103,29 @@ export default function Schedule({
                  )}
                  {visibleSections.map((section, index) => (
                     <div key={section.id} className="mb-8 last:mb-0 w-full">
-                      <table className="table-fixed border-collapse border border-black text-black text-[8px] print:text-[11px] w-full">
+                      <table className="table-fixed border-collapse border border-black text-black text-[8px] print:text-[10px] w-full">
                              <colgroup>
-                                <col className="w-6 print:w-8" />
-                                <col className="w-[200px] print:w-[170px]" />
-                                <col className="w-20 print:w-[90px]" />
-                                <col className="w-20 print:w-[80px]" />
-                                <col className="w-16 print:w-[65px]" />
-                                {!isSetorHidden && <col className="w-20 print:w-[70px]" />}
-                                {daysArray.map(d => <col key={d.day} className="w-4 print:w-5" />)}
+                <col className="w-8 print:w-6" />
+                                <col className="w-[320px] print:w-[200px]" />
+                                <col className="w-20 print:w-[92px]" />
+                                <col className="w-20 print:w-[66px]" />
+                                <col className="w-16 print:w-[56px]" />
+                                {!isSetorHidden && <col className="w-20 print:w-[78px]" />}
+                                {daysArray.map(d => <col key={d.day} className="w-4 print:w-4" />)}
                                 <col className="w-10 print:w-10" />
                              </colgroup>
                              <thead>
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-base print:text-[16px]">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold print:font-normal uppercase text-base print:text-[14px] whitespace-nowrap overflow-hidden text-ellipsis">
                                         {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
                                     </th>
                                 </tr>
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold uppercase text-base print:text-[16px] relative group">
+                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold print:font-normal uppercase text-base print:text-[15px] relative group whitespace-nowrap overflow-hidden text-ellipsis">
                                         {editingSectionId === section.id ? (
                                           <span className="no-print inline-flex items-center justify-center gap-2 w-full px-2">
                                             <span className="shrink-0">ESCALA</span>
@@ -3130,8 +3211,8 @@ export default function Schedule({
                                 </tr>
                                 {/* Main Headers Row 3 (Columns) */}
                                 <tr className="bg-[#85b1e2] text-black">
-                                    <th 
-                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#85b1e2] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] w-6 print:w-8 print:static print:left-auto print:z-0"
+                                <th
+                                      className="border border-black px-0.5 py-0.5 text-center sticky left-0 bg-[#85b1e2] z-20 font-bold cursor-pointer select-none text-sm print:text-[14px] w-8 print:w-6 print:static print:left-auto print:z-0"
                                       rowSpan={2}
                                   onClick={async () => {
                                     if (!isAdmin || isScheduleReleased) return
@@ -3158,7 +3239,7 @@ export default function Schedule({
                                 >
                                   #
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-[180px] print:w-[170px] sticky left-8 bg-[#85b1e2] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group print:static print:left-auto print:z-0" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-[320px] print:w-[200px] sticky left-8 bg-[#85b1e2] z-20 border-r-2 border-r-black font-bold uppercase text-sm print:text-[14px] group print:static print:left-auto print:z-0" rowSpan={2}>
                                      {editingSectionId === section.id ? (
                                         <div className="flex items-center gap-1 w-full justify-center text-black">
                                             <input 
@@ -3176,9 +3257,9 @@ export default function Schedule({
                                         </div>
                                     )}
                                 </th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[90px] font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>CATEGORIA</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[80px] font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-[65px] font-bold text-sm print:text-[14px] bg-[#85b1e2]" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[92px] font-bold text-sm print:text-[13px] bg-[#85b1e2]" rowSpan={2}>CATEGORIA</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[66px] font-bold text-sm print:text-[13px] bg-[#85b1e2]" rowSpan={2}>VÍNCULO</th>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-[56px] font-bold text-sm print:text-[13px] bg-[#85b1e2]" rowSpan={2}>
                                     <>
                                       <select
                                         value={displayDynamicField}
@@ -3199,7 +3280,7 @@ export default function Schedule({
                                     </>
                                 </th>
                                 {!isSetorHidden && (
-                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[70px] font-bold text-sm print:text-[14px] bg-[#85b1e2] group relative" rowSpan={2}>
+                                <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[78px] font-bold text-sm print:text-[13px] bg-[#85b1e2] group relative" rowSpan={2}>
                                     {editingSectorTitleId === section.id ? (
                                         <div className="flex items-center gap-1 w-full h-full text-black">
                                             <input 
@@ -3230,7 +3311,7 @@ export default function Schedule({
                                 </th>
                                 )}
                                 {daysArray.map(({ day, weekday, isWeekend }) => (
-                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[12px] font-bold ${isWeekend ? 'bg-[#3b5998] text-white' : 'bg-[#85b1e2] text-black'}`}>
+                                    <th key={`wd-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-4 text-[10px] print:text-[10px] font-bold ${isWeekend ? 'bg-[#3b5998] text-white' : 'bg-[#85b1e2] text-black'}`}>
                                     {weekday}
                                     </th>
                                 ))}
@@ -3239,7 +3320,7 @@ export default function Schedule({
                             {/* Main Headers Row 2 */}
                             <tr className="bg-[#85b1e2] text-black">
                                 {daysArray.map(({ day, isWeekend }) => (
-                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-5 text-[10px] print:text-[12px] font-bold ${isWeekend ? 'bg-[#3b5998] text-white' : 'bg-[#85b1e2] text-black'}`}>
+                                    <th key={`d-${day}`} className={`border border-black px-0 py-0 text-center w-4 print:w-4 text-[10px] print:text-[10px] font-bold ${isWeekend ? 'bg-[#3b5998] text-white' : 'bg-[#85b1e2] text-black'}`}>
                                       {day}
                                     </th>
                                 ))}
@@ -3414,7 +3495,7 @@ export default function Schedule({
         {canEditSelectedUnit && (
         <div className="flex flex-col items-end gap-2 mb-2 no-print">
             <div className="flex flex-wrap gap-2 justify-end">
-                {canEditSelectedUnit && !isScheduleReleased && (
+                {canEditSelectedUnit && (
                     <button 
                         onClick={handleEditFooter}
                         className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50"
@@ -3469,6 +3550,20 @@ export default function Schedule({
                             className="p-2 px-4 bg-white border border-gray-300 rounded hover:bg-gray-200 underline text-black text-lg"
                             title="Sublinhado"
                         >U</button>
+                        <button
+                            onMouseDown={(e) => { e.preventDefault(); document.execCommand('insertUnorderedList', false); }}
+                            className="p-2 px-3 bg-white border border-gray-300 rounded hover:bg-gray-200 text-black text-sm font-bold"
+                            title="Lista"
+                        >
+                            • Lista
+                        </button>
+                        <button
+                            onMouseDown={(e) => { e.preventDefault(); document.execCommand('removeFormat', false); }}
+                            className="p-2 px-3 bg-white border border-gray-300 rounded hover:bg-gray-200 text-black text-sm font-bold"
+                            title="Limpar formatação"
+                        >
+                            Limpar
+                        </button>
                         <div className="w-px h-8 bg-gray-300 mx-2"></div>
                         <input 
                             type="color" 
@@ -4111,6 +4206,19 @@ CREATE POLICY "Admins can manage scale permissions" ON scale_permissions
               isFetching={isFetchingAllNurses}
               sectionTitle={data.sections.find(s => s.id === insertionData?.sectionId)?.title}
               existingNurseIds={[]} // Allow adding someone already in the list for double scale
+          />
+      )}
+
+      {/* Nurse Selection Modal for Reassign */}
+      {isReassignModalOpen && (
+          <NurseSelectionModal
+              isOpen={isReassignModalOpen}
+              onClose={() => setIsReassignModalOpen(false)}
+              onSelect={onReassignSelected}
+              nurses={allNurses.length > 0 ? allNurses : data.nurses}
+              isFetching={isFetchingAllNurses}
+              sectionTitle={data.sections.find(s => s.id === reassignData?.sectionId)?.title}
+              existingNurseIds={[]}
           />
       )}
 

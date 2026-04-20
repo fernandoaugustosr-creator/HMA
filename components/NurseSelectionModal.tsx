@@ -7,6 +7,7 @@ import { Search } from 'lucide-react'
 interface Nurse {
   id: string
   name: string
+  name_star?: boolean
   coren: string
   role: string
   vinculo: string
@@ -79,6 +80,7 @@ export default function NurseSelectionModal({ isOpen, onClose, onSelect, nurses,
                                     <div>
                                         <p className="font-medium text-gray-800 text-sm">
                                             {nurse.name}
+                                            {nurse.name_star ? <span className="text-red-600 font-black ml-1">*</span> : null}
                                             {isSeletivo && <span className="text-xs font-normal text-gray-500 ml-1">(SEL)</span>}
                                             {isTerceirizado && <span className="text-xs font-normal text-gray-500 ml-1">(TER)</span>}
                                         </p>

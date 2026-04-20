@@ -184,6 +184,9 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
       if (result.message?.includes('V19')) {
           setShowSqlModal(true)
       }
+      if (result.message?.includes('V21')) {
+          setShowSqlModal(true)
+      }
     }
     setLoading(false)
   }
@@ -225,6 +228,10 @@ ADD COLUMN IF NOT EXISTS birth_date DATE;
 ALTER TABLE nurses
 ADD COLUMN IF NOT EXISTS certidao_negativa_date DATE,
 ADD COLUMN IF NOT EXISTS coren_expiry_date DATE;
+
+-- V21 (Marcar nome com *)
+ALTER TABLE nurses
+ADD COLUMN IF NOT EXISTS name_star BOOLEAN DEFAULT FALSE;
 `}
                     </pre>
                 </div>

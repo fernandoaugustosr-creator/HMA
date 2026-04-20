@@ -97,8 +97,16 @@ html, body {
     line-height: 1 !important;
   }
 
-  * {
+  .print-schedule-root {
     overflow: visible !important;
+  }
+
+  .print-schedule-root table td,
+  .print-schedule-root table th {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    font-weight: normal !important;
   }
 
   .schedule-root {
