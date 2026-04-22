@@ -1670,12 +1670,12 @@ export default function Schedule({
 
         console.log(`[handleSaveShifts] Plantões atuais encontrados para limpeza: ${currentProfessionalShifts.length}`)
 
-        // 2. Prepare a map of the month's state
-        const shiftsMap = new Map<string, string>()
+        // 2. Prepare a map of the month's state (preserve type + is_red per date)
+        const shiftsMap = new Map<string, { type: string, isRed: boolean }>()
         
         // Initialize map with EXISTING state
         currentProfessionalShifts.forEach(s => {
-            shiftsMap.set(s.shift_date, s.shift_type)
+            shiftsMap.set(s.shift_date, { type: s.shift_type, isRed: !!(s as any).is_red })
         })
 
         if (targetType === 'delete') {
@@ -1683,17 +1683,17 @@ export default function Schedule({
             if (targetRecurrence !== 'none') {
                 for (let d = 1; d <= lastDayOfMonth; d++) {
                     const dStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-                    shiftsMap.set(dStr, 'DELETE')
+                    shiftsMap.set(dStr, { type: 'DELETE', isRed: false })
                 }
             } else {
-                shiftsMap.set(shiftModalData.date, 'DELETE')
+                shiftsMap.set(shiftModalData.date, { type: 'DELETE', isRed: false })
             }
         } else {
             const clickedDate = new Date(shiftModalData.date + 'T12:00:00')
             const clickedDay = clickedDate.getDate()
 
             if (targetRecurrence === 'none') {
-                shiftsMap.set(shiftModalData.date, targetType)
+                shiftsMap.set(shiftModalData.date, { type: targetType, isRed: !!targetIsRed })
             } else {
                 const getPatternInfo = (rec: string) => {
                     if (rec === 'daily') return { period: 1, work: [0] }
@@ -1723,7 +1723,7 @@ export default function Schedule({
                     // CLEAR ENTIRE MONTH BEFORE APPLYING PATTERN
                     for (let d = 1; d <= lastDayOfMonth; d++) {
                         const dStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-                        shiftsMap.set(dStr, 'DELETE')
+                        shiftsMap.set(dStr, { type: 'DELETE', isRed: false })
                     }
 
                     // Apply pattern from Day 1 to End
@@ -1738,7 +1738,7 @@ export default function Schedule({
                             const dStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
                             const typeIdx = pattern.work.indexOf(mod)
                             const finalType = pattern.types ? pattern.types[typeIdx] : targetType
-                            shiftsMap.set(dStr, finalType)
+                            shiftsMap.set(dStr, { type: finalType, isRed: false })
                         }
                     }
                 } else {
@@ -1748,14 +1748,21 @@ export default function Schedule({
         }
 
         const shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string, isRed?: boolean }[] = []
-        shiftsMap.forEach((type, date) => {
-            const isRed = targetRecurrence === 'none' && type !== 'DELETE' ? targetIsRed : false
+        const affectedDates: string[] = targetRecurrence === 'none'
+          ? [shiftModalData.date]
+          : Array.from({ length: lastDayOfMonth }, (_, i) => {
+              const d = i + 1
+              return `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+            })
+
+        affectedDates.forEach(date => {
+            const state = shiftsMap.get(date) || { type: 'DELETE', isRed: false }
             shiftsToSave.push({
                 nurseId: shiftModalData.nurseId,
                 rosterId: shiftModalData.rosterId,
-                date: date,
-                type: type,
-                isRed
+                date,
+                type: state.type,
+                isRed: state.type !== 'DELETE' ? !!state.isRed : false
             })
         })
 
@@ -2604,7 +2611,12 @@ export default function Schedule({
                    const hasSpecialColor = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].includes(timeOff.type)
                    
                    if (!hasSpecialColor) {
-                       cellClass += " bg-[#3b5998] text-white"
+                       cellClass += " bg-[#3b5998]"
+                       if (cellClass.includes('text-red-600')) {
+                           cellClass += " text-red-600"
+                       } else {
+                           cellClass += " text-white"
+                       }
                    }
                 }
 
