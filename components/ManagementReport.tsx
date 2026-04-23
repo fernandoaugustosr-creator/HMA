@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { X, FileText, CheckCircle, AlertCircle, Users, Briefcase, UserPlus, Filter } from 'lucide-react'
 
 interface ManagementReportProps {
@@ -40,6 +40,116 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
   const filteredSectors = selectedProf 
     ? data.sectors.filter(s => s.professions.some(p => p.includes(selectedProf)))
     : data.sectors
+
+  const tableTotals = useMemo(() => {
+    const acc = { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 }
+    filteredSectors.forEach(sector => {
+      const sData = selectedProf ? sector.stats[selectedProf] : sector.stats.total
+      acc.concursados += sData.concursados || 0
+      acc.seletivados += sData.seletivados || 0
+      acc.escalaDupla += sData.escalaDupla || 0
+      acc.descoberta += sData.descoberta || 0
+      acc.total += sData.total || 0
+    })
+    return acc
+  }, [filteredSectors, selectedProf])
+
+  const handleGeneratePdf = () => {
+    const win = window.open('', '_blank', 'noopener,noreferrer')
+    if (!win) {
+      alert('Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-up está desativado.')
+      return
+    }
+
+    const profLabel = selectedProf ? `${selectedProf}s` : 'Todos'
+    const title = `Relatório Gerencial Mensal - ${monthName} ${year}`
+
+    const rowsHtml = filteredSectors.map(sector => {
+      const sData = selectedProf ? sector.stats[selectedProf] : sector.stats.total
+      const status = sector.isReleased ? 'LIBERADA' : 'PENDENTE'
+      return `
+        <tr>
+          <td class="sector">${escapeHtml(sector.title)}</td>
+          <td class="center">${status}</td>
+          <td class="center">${sData.concursados ?? 0}</td>
+          <td class="center">${sData.seletivados ?? 0}</td>
+          <td class="center red">${sData.escalaDupla ?? 0}</td>
+          <td class="center amber">${sData.descoberta ?? 0}</td>
+          <td class="center total">${sData.total ?? 0}</td>
+        </tr>
+      `
+    }).join('')
+
+    const totalsHtml = `
+      <tr class="totals">
+        <td class="sector">TOTAL</td>
+        <td class="center">-</td>
+        <td class="center">${tableTotals.concursados}</td>
+        <td class="center">${tableTotals.seletivados}</td>
+        <td class="center red">${tableTotals.escalaDupla}</td>
+        <td class="center amber">${tableTotals.descoberta}</td>
+        <td class="center total">${tableTotals.total}</td>
+      </tr>
+    `
+
+    win.document.open()
+    win.document.write(`
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>${escapeHtml(title)}</title>
+          <style>
+            @page { size: A4; margin: 12mm; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; color: #111827; }
+            h1 { font-size: 16px; margin: 0 0 6px 0; }
+            .subtitle { font-size: 11px; color: #4b5563; margin-bottom: 10px; }
+            .meta { font-size: 10px; color: #374151; margin: 0 0 10px 0; display: flex; gap: 12px; flex-wrap: wrap; }
+            table { width: 100%; border-collapse: collapse; font-size: 10px; }
+            th, td { border: 1px solid #e5e7eb; padding: 6px; }
+            th { background: #f3f4f6; text-align: left; }
+            .center { text-align: center; }
+            .sector { font-weight: 700; text-transform: uppercase; }
+            .red { color: #dc2626; font-weight: 700; }
+            .amber { color: #d97706; font-weight: 700; }
+            .total { color: #4f46e5; font-weight: 800; }
+            .totals td { background: #eef2ff; font-weight: 800; }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(title)}</h1>
+          <div class="subtitle">Relatório em formato A4</div>
+          <div class="meta">
+            <div><strong>Filtro:</strong> ${escapeHtml(profLabel)}</div>
+            <div><strong>Setores:</strong> ${filteredSectors.length}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Setor</th>
+                <th class="center">Status</th>
+                <th class="center">Concurso</th>
+                <th class="center">Seletivo</th>
+                <th class="center">Esc. Dupla</th>
+                <th class="center">Descoberta</th>
+                <th class="center">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || `<tr><td colspan="7" class="center">Nenhum setor encontrado.</td></tr>`}
+              ${filteredSectors.length ? totalsHtml : ''}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function () { setTimeout(function () { window.print(); }, 200); };
+          </script>
+        </body>
+      </html>
+    `)
+    win.document.close()
+  }
 
   // Obter as estatísticas baseadas no filtro selecionado
   const getDisplayStats = () => {
@@ -232,6 +342,23 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
                           </td>
                         </tr>
                       )}
+                      {filteredSectors.length > 0 && (
+                        <tr className="bg-indigo-50/70">
+                          <td className="px-6 py-4 rounded-l-3xl border-y border-l border-indigo-100">
+                            <span className="text-sm font-black text-gray-800 uppercase">Total</span>
+                          </td>
+                          <td className="px-4 py-4 border-y border-indigo-100 text-center">
+                            <span className="text-[9px] bg-white text-gray-400 px-2 py-1 rounded-full font-black uppercase border border-indigo-100">-</span>
+                          </td>
+                          <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-gray-700">{tableTotals.concursados}</td>
+                          <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-gray-700">{tableTotals.seletivados}</td>
+                          <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-red-700 bg-red-50/30">{tableTotals.escalaDupla}</td>
+                          <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-amber-700 bg-amber-50/30">{tableTotals.descoberta}</td>
+                          <td className="px-4 py-4 border-r border-y border-indigo-100 rounded-r-3xl text-center font-black text-indigo-700 bg-indigo-100/40">
+                            {tableTotals.total}
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -242,7 +369,13 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end">
+        <div className="p-6 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+          <button
+            onClick={handleGeneratePdf}
+            className="px-6 py-3 bg-white text-indigo-700 font-black rounded-2xl hover:bg-indigo-50 transition-all shadow-sm uppercase tracking-widest text-sm border border-indigo-200"
+          >
+            Gerar PDF (A4)
+          </button>
           <button 
             onClick={onClose}
             className="px-8 py-3 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 uppercase tracking-widest text-sm"
@@ -253,6 +386,15 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
       </div>
     </div>
   )
+}
+
+function escapeHtml(input: any) {
+  return String(input ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 function ProfessionBadge({ label, value, color, onClick }: { label: string, value: number, color: string, onClick: () => void }) {
