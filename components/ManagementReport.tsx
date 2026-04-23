@@ -55,12 +55,6 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
   }, [filteredSectors, selectedProf])
 
   const handleGeneratePdf = () => {
-    const win = window.open('', '_blank', 'noopener,noreferrer')
-    if (!win) {
-      alert('Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-up está desativado.')
-      return
-    }
-
     const profLabel = selectedProf ? `${selectedProf}s` : 'Todos'
     const title = `Relatório Gerencial Mensal - ${monthName} ${year}`
 
@@ -92,8 +86,7 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
       </tr>
     `
 
-    win.document.open()
-    win.document.write(`
+    const html = `
       <!doctype html>
       <html lang="pt-BR">
         <head>
@@ -142,13 +135,41 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
               ${filteredSectors.length ? totalsHtml : ''}
             </tbody>
           </table>
-          <script>
-            window.onload = function () { setTimeout(function () { window.print(); }, 200); };
-          </script>
         </body>
       </html>
-    `)
-    win.document.close()
+    `
+
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.right = '0'
+    iframe.style.bottom = '0'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.style.border = '0'
+    iframe.style.opacity = '0'
+    iframe.setAttribute('aria-hidden', 'true')
+
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc || !iframe.contentWindow) {
+      iframe.remove()
+      alert('Não foi possível gerar o PDF neste navegador.')
+      return
+    }
+
+    doc.open()
+    doc.write(html)
+    doc.close()
+
+    const cleanup = () => {
+      try { iframe.remove() } catch {}
+    }
+
+    iframe.contentWindow.onafterprint = cleanup
+    setTimeout(cleanup, 30000)
+
+    iframe.contentWindow.focus()
+    iframe.contentWindow.print()
   }
 
   // Obter as estatísticas baseadas no filtro selecionado
