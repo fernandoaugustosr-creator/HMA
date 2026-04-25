@@ -4988,7 +4988,9 @@ export async function uploadCityLogo(formData: FormData) {
 }
 
 export async function logout() {
-  cookies().delete('session_user')
+  const c = cookies()
+  try { c.delete('session_user') } catch {}
+  try { c.delete({ name: 'session_user', path: '/' }) } catch {}
   redirect('/login')
 }
 
