@@ -139,13 +139,15 @@ export default async function DashboardPage({
   const yearOptions = Array.from({ length: 5 }, (_, index) => currentYearValue - 2 + index)
 
   return (
-    <div className="w-full p-4 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6 font-sans">
-        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Bem-vindo(a), {user.name}</h1>
-        <p className="text-gray-600 font-medium">{user.role}</p>
-      </div>
+    <div className="w-full px-4 md:px-8 py-8 space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="bg-white/85 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6 font-sans">
+          <div className="h-1.5 w-full rounded-full bg-gradient-to-r from-indigo-600 via-blue-600 to-emerald-500 mb-4" />
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Bem-vindo(a), {user.name}</h1>
+          <p className="text-slate-600 font-semibold uppercase tracking-widest text-xs mt-1">{user.role}</p>
+        </div>
 
-      <AdminDailySchedule />
+        <AdminDailySchedule />
 
       {/* MyShifts (Moved up, Non-Coordinators only) */}
       {user.role !== 'COORDENADOR' && user.role !== 'COORDENACAO_GERAL' && (
@@ -156,7 +158,7 @@ export default async function DashboardPage({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Minhas Folgas (or Admin Approvals) */}
           {user.role !== 'COORDENADOR' && user.role !== 'COORDENACAO_GERAL' && (
-            <div className="bg-white shadow rounded-lg p-6 flex flex-col h-full font-sans">
+            <div className="bg-white/90 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6 flex flex-col h-full font-sans">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-800 flex items-center">
                     <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,7 +166,7 @@ export default async function DashboardPage({
                     </svg>
                     {user.isAdmin ? 'Todas as Folgas' : 'Minhas Folgas'}
                   </h2>
-                  <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-bold">{timeOffs.length}</span>
+                  <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full font-black">{timeOffs.length}</span>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto max-h-96">
@@ -200,14 +202,14 @@ export default async function DashboardPage({
           <PendingSwapsList swaps={swaps} currentUserId={user.id} />
       </div>
 
-      <div className="bg-white shadow rounded-lg p-6 font-sans">
+      <div className="bg-white/90 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6 font-sans">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-gray-800 tracking-tight">Aniversariantes do mês</h2>
           <p className="text-xs text-gray-500 mt-1">Mês selecionado: {monthOptions.find(m => m.value === selectedBirthdayMonth)?.label}</p>
         </div>
 
         <div className="flex items-center justify-between mb-3">
-          <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-bold">{birthdays.length}</span>
+          <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-black">{birthdays.length}</span>
           <form className="flex items-center gap-2">
             <input type="hidden" name="month" value={String(selectedMonth)} />
             <input type="hidden" name="year" value={String(selectedYear)} />
@@ -216,7 +218,7 @@ export default async function DashboardPage({
               id="birthdayMonth"
               name="birthdayMonth"
               defaultValue={String(selectedBirthdayMonth)}
-              className="border border-gray-300 rounded px-2 py-1 text-xs bg-white text-gray-800 font-semibold"
+              className="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white text-slate-800 font-bold"
             >
               {monthOptions.map((m) => (
                 <option key={m.value} value={m.value}>
@@ -226,7 +228,7 @@ export default async function DashboardPage({
             </select>
             <button
               type="submit"
-              className="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 transition-colors"
+              className="bg-indigo-600 text-white px-3 py-2 rounded-xl text-xs font-black hover:bg-indigo-700 transition-colors"
             >
               Filtrar
             </button>
@@ -237,7 +239,7 @@ export default async function DashboardPage({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {birthdays.map((b: any) => (
-              <div key={b.id} className="flex items-center gap-3 px-3 py-2 rounded border border-gray-100 bg-gray-50">
+              <div key={b.id} className="flex items-center gap-3 px-3 py-2 rounded-2xl border border-slate-200 bg-white">
                 <span className="w-9 text-center font-black text-indigo-700">{String(b.day).padStart(2, '0')}</span>
                 <span className="text-sm font-semibold text-gray-900 truncate">{b.name}</span>
               </div>
@@ -266,7 +268,7 @@ export default async function DashboardPage({
                 id="month"
                 name="month"
                 defaultValue={String(selectedMonth)}
-                className="border border-gray-300 rounded px-2 py-1 bg-white text-gray-800 font-bold"
+                className="border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-800 font-black"
               >
                 {monthOptions.map((m) => (
                   <option key={m.value} value={m.value}>
@@ -281,7 +283,7 @@ export default async function DashboardPage({
                 id="year"
                 name="year"
                 defaultValue={String(selectedYear)}
-                className="border border-gray-300 rounded px-2 py-1 bg-white text-gray-800 font-bold"
+                className="border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-800 font-black"
               >
                 {yearOptions.map((yearOption) => (
                   <option key={yearOption} value={yearOption}>
@@ -291,7 +293,7 @@ export default async function DashboardPage({
               </select>
               <button
                 type="submit"
-                className="bg-indigo-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-indigo-700 transition-colors"
+                className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-black hover:bg-indigo-700 transition-colors"
               >
                 Aplicar
               </button>
@@ -299,7 +301,7 @@ export default async function DashboardPage({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="bg-white/90 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-800 tracking-tight">Trocas de Plantão</h3>
                 <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-bold">
@@ -311,14 +313,14 @@ export default async function DashboardPage({
                   <p className="text-sm text-gray-500">Nenhuma troca registrada neste período.</p>
                 ) : (
                   <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Solicitante → Solicitado</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Data</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {filteredCoordinatorSwaps.slice(0, 50).map((swap: any) => (
                         <tr key={swap.id}>
                           <td className="px-2 py-1 text-gray-900">
@@ -350,7 +352,7 @@ export default async function DashboardPage({
               </div>
             </div>
 
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="bg-white/90 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-800 tracking-tight">Folgas cadastradas</h3>
                 <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold">
@@ -362,14 +364,14 @@ export default async function DashboardPage({
                   <p className="text-sm text-gray-500">Nenhuma folga registrada neste período.</p>
                 ) : (
                   <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Servidor</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Período</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {filteredCoordinatorTimeOffs.slice(0, 5).map((req: any) => (
                         <tr key={req.id}>
                           <td className="px-2 py-1 text-gray-900 font-bold">
@@ -398,7 +400,7 @@ export default async function DashboardPage({
               </div>
             </div>
 
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="bg-white/90 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-800 tracking-tight">Faltas</h3>
                 <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold">
@@ -410,14 +412,14 @@ export default async function DashboardPage({
                   <p className="text-sm text-gray-500">Nenhuma falta registrada neste período.</p>
                 ) : (
                   <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Servidor</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Data</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Motivo</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {filteredCoordinatorAbsences.slice(0, 5).map((item: any) => (
                         <tr key={item.id}>
                           <td className="px-2 py-1 text-gray-900 font-bold">
@@ -440,7 +442,7 @@ export default async function DashboardPage({
               </div>
             </div>
 
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="bg-white/90 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-800 tracking-tight">Solicitações de pagamentos</h3>
                 <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold">
@@ -454,7 +456,7 @@ export default async function DashboardPage({
                   </p>
                 ) : (
                   <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Servidor</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Data</th>
@@ -462,7 +464,7 @@ export default async function DashboardPage({
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Local</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {filteredCoordinatorPayments.slice(0, 5).map((item: any) => (
                         <tr key={item.id}>
                           <td className="px-2 py-1 text-gray-900 font-bold">
@@ -490,7 +492,7 @@ export default async function DashboardPage({
               </div>
             </div>
 
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="bg-white/90 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-800 tracking-tight">Outras solicitações</h3>
                 <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-bold">
@@ -504,14 +506,14 @@ export default async function DashboardPage({
                   </p>
                 ) : (
                   <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Descrição</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Servidor</th>
                         <th className="px-2 py-1 text-left font-bold text-gray-700">Data</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {filteredCoordinatorGeneralRequests.slice(0, 5).map((item: any) => (
                         <tr key={item.id}>
                           <td className="px-2 py-1 text-gray-900 font-medium">{item.content}</td>
@@ -533,6 +535,7 @@ export default async function DashboardPage({
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

@@ -183,15 +183,15 @@ export default function PublicScheduleList() {
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
                 {selectedMonthYear && (
-                  <span className="bg-[#e0e7ff] text-[#4338ca] px-5 py-2 rounded-full text-sm font-black uppercase tracking-widest shadow-sm">
+                  <span className="bg-indigo-100 text-indigo-700 px-5 py-2 rounded-full text-sm font-black uppercase tracking-widest shadow-sm border border-indigo-200/50">
                     {MONTHS[currentMonth - 1]} {currentYear}
                   </span>
                 )}
             </div>
             
             {!loading && releases.length > 0 && (
-                <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-3 px-4">
-                    <Calendar className="text-blue-600" size={20} />
+                <div className="bg-white/80 backdrop-blur p-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3 px-4">
+                    <Calendar className="text-indigo-600" size={20} />
                     <select 
                         value={selectedMonthYear}
                         onChange={(e) => setSelectedMonthYear(e.target.value)}
@@ -216,7 +216,7 @@ export default function PublicScheduleList() {
                 <p className="text-gray-500 text-base font-medium">Carregando escalas...</p>
             </div>
         ) : releases.length === 0 ? (
-            <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-[2rem] border border-dashed border-gray-200">
+            <div className="text-center py-16 text-slate-400 bg-white/70 backdrop-blur rounded-3xl border border-dashed border-slate-200">
                 <FileText size={48} className="mx-auto mb-4 text-gray-200" />
                 <p className="text-lg font-medium">Nenhuma escala liberada encontrada.</p>
             </div>
@@ -225,18 +225,18 @@ export default function PublicScheduleList() {
                 {filteredReleases.map(release => (
                   <div 
                     key={release.id}
-                    className={`bg-white p-4 rounded-2xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 group ${selectedRelease?.id === release.id ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-gray-100 hover:border-indigo-100'}`}
+                    className={`bg-white/90 backdrop-blur p-4 rounded-3xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between gap-4 group ${selectedRelease?.id === release.id ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-indigo-200'}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="min-w-0">
-                        <h3 className="font-black text-sm md:text-base text-[#1e293b] group-hover:text-indigo-900 transition-colors uppercase tracking-tight truncate">
+                        <h3 className="font-black text-sm md:text-base text-slate-900 group-hover:text-indigo-900 transition-colors uppercase tracking-tight truncate">
                             {(() => {
                                 const num = unitNumbersMap[String(release.unit_id || '')]
                                 const title = String(release.unit_name || '')
                                 return num ? `${num} - ${title}` : title
                             })()}
                         </h3>
-                        <p className="text-gray-400 text-xs font-medium mt-1">
+                        <p className="text-slate-500 text-xs font-medium mt-1">
                           Liberado em: {release.released_at ? new Date(release.released_at).toLocaleDateString('pt-BR') : '-'}
                         </p>
                       </div>
@@ -245,10 +245,10 @@ export default function PublicScheduleList() {
                       type="button"
                       onClick={() => handlePrint(release)}
                       disabled={isPrinting}
-                      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-black transition-all transform active:scale-95 shadow-sm shrink-0 ${
+                      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl text-white text-sm font-black transition-all transform active:scale-95 shadow-sm shrink-0 ${
                         isPrinting && selectedRelease?.id === release.id 
                         ? 'bg-gray-400 cursor-not-allowed' 
-                        : 'bg-[#3b82f6] hover:bg-[#2563eb]'
+                        : 'bg-indigo-600 hover:bg-indigo-700'
                       }`}
                     >
                       {isPrinting && selectedRelease?.id === release.id ? (

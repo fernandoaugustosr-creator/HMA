@@ -17,8 +17,8 @@ export default function LandingPageContent() {
 
   if (state?.step === 'select_profile' && state.profiles) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
-        <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-50 via-indigo-50/40 to-slate-100 py-12 px-4 sm:px-6 lg:px-8 font-sans">
+        <div className="max-w-md w-full space-y-8 bg-white/85 backdrop-blur rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/70 p-8">
           <div className="text-center">
             <h2 className="text-3xl font-black text-gray-900 tracking-tight">
               Selecione o Perfil
@@ -33,7 +33,7 @@ export default function LandingPageContent() {
                 <input type="hidden" name="selectedProfileId" value={profile.id} />
                 <button
                   type="submit"
-                  className="w-full flex flex-col items-center justify-center py-5 px-4 border border-gray-200 rounded-xl shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-indigo-50 hover:border-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 group"
+                  className="w-full flex flex-col items-center justify-center py-5 px-4 border border-slate-200/80 rounded-2xl shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-indigo-50/50 hover:border-indigo-200/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 group"
                 >
                   <span className="font-bold text-xl text-indigo-700 group-hover:text-indigo-800">{profile.role}</span>
                   <span className="text-gray-500 font-semibold mt-1 uppercase text-xs tracking-wider">{profile.vinculo}</span>
@@ -53,9 +53,15 @@ export default function LandingPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] flex flex-col items-center justify-start p-4 md:p-8 pt-8 md:pt-12 font-sans overflow-y-auto print:bg-white print:p-0 print:block print:min-h-0">
-      <div className="max-w-7xl w-full flex flex-col gap-8 print:block print:max-w-none print:w-full">
-        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white p-6 md:p-8 print:hidden">
+    <div className="min-h-screen relative bg-gradient-to-b from-slate-50 via-indigo-50/40 to-slate-100 flex flex-col items-center justify-start p-4 md:p-8 pt-8 md:pt-12 font-sans overflow-y-auto print:bg-white print:p-0 print:block print:min-h-0">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none print:hidden">
+        <div className="absolute -top-24 -left-20 h-80 w-80 rounded-full bg-indigo-400/15 blur-3xl" />
+        <div className="absolute -bottom-24 -right-20 h-80 w-80 rounded-full bg-blue-400/10 blur-3xl" />
+        <div className="absolute top-48 right-16 h-56 w-56 rounded-full bg-emerald-400/10 blur-3xl hidden md:block" />
+      </div>
+      <div className="max-w-7xl w-full flex flex-col gap-8 print:block print:max-w-none print:w-full relative">
+        <div className="bg-white/85 backdrop-blur rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/70 p-6 md:p-8 print:hidden">
+          <div className="h-1.5 w-full rounded-full bg-gradient-to-r from-indigo-600 via-blue-600 to-emerald-500 mb-6" />
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="flex items-center gap-8 justify-center lg:justify-start">
               <Image
@@ -66,7 +72,7 @@ export default function LandingPageContent() {
                 className="h-12 md:h-14 w-auto object-contain"
                 priority
               />
-              <div className="h-10 w-px bg-gray-200 hidden sm:block" />
+              <div className="h-10 w-px bg-slate-200/80 hidden sm:block" />
               <Image
                 src={logoHma}
                 alt="HMA"
@@ -80,7 +86,7 @@ export default function LandingPageContent() {
             <form action={formAction} className="w-full lg:w-auto">
               <div className="flex flex-col md:flex-row md:items-end gap-4">
                 <div className="w-full md:w-[260px]">
-                  <label htmlFor="cpf" className="block text-xs font-black text-[#1e293b] mb-2 uppercase tracking-widest">
+                  <label htmlFor="cpf" className="block text-xs font-black text-slate-800 mb-2 uppercase tracking-widest">
                     CPF
                   </label>
                   <input
@@ -88,13 +94,13 @@ export default function LandingPageContent() {
                     name="cpf"
                     type="text"
                     required
-                    className="appearance-none block w-full px-5 py-4 border-none rounded-2xl text-[#1e293b] bg-[#eef2ff] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200 text-base font-bold"
+                    className="appearance-none block w-full px-5 py-4 border border-slate-200/80 rounded-2xl text-slate-800 bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all duration-200 text-base font-bold"
                     placeholder="02170025367"
                     autoComplete="username"
                   />
                 </div>
                 <div className="w-full md:w-[260px]">
-                  <label htmlFor="password" className="block text-xs font-black text-[#1e293b] mb-2 uppercase tracking-widest">
+                  <label htmlFor="password" className="block text-xs font-black text-slate-800 mb-2 uppercase tracking-widest">
                     SENHA
                   </label>
                   <input
@@ -102,14 +108,14 @@ export default function LandingPageContent() {
                     name="password"
                     type="password"
                     required
-                    className="appearance-none block w-full px-5 py-4 border-none rounded-2xl text-[#1e293b] bg-[#eef2ff] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200 text-base font-bold"
+                    className="appearance-none block w-full px-5 py-4 border border-slate-200/80 rounded-2xl text-slate-800 bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all duration-200 text-base font-bold"
                     placeholder="••••••"
                     autoComplete="current-password"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full md:w-auto h-[56px] px-10 rounded-2xl text-white bg-[#4f46e5] hover:bg-[#4338ca] shadow-lg shadow-indigo-200 transition-all duration-200 transform active:scale-[0.98] font-black"
+                  className="w-full md:w-auto h-[56px] px-10 rounded-2xl text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200/70 transition-all duration-200 transform active:scale-[0.98] font-black"
                 >
                   Entrar
                 </button>
@@ -124,11 +130,12 @@ export default function LandingPageContent() {
           </div>
         </div>
 
-        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-white p-6 md:p-8 print:p-0 print:shadow-none print:border-none">
+        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/70 p-6 md:p-8 print:p-0 print:shadow-none print:border-none">
+          <div className="h-1.5 w-full rounded-full bg-gradient-to-r from-indigo-600 via-blue-600 to-emerald-500 mb-6 print:hidden" />
           <div className="flex items-center justify-between mb-8 print:hidden">
             <div>
-              <h2 className="text-3xl font-black text-[#1e293b] tracking-tight">Escalas Publicadas</h2>
-              <p className="text-gray-500 font-medium text-lg mt-1">Consulte e baixe as escalas sem necessidade de login</p>
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight">Escalas Publicadas</h2>
+              <p className="text-slate-600 font-medium text-lg mt-1">Consulte e baixe as escalas sem necessidade de login</p>
             </div>
           </div>
 

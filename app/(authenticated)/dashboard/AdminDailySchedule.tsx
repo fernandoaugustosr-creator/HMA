@@ -178,7 +178,7 @@ export default function AdminDailySchedule() {
     }
 
     return (
-        <div className="bg-white shadow-sm rounded-xl border border-gray-100 flex flex-col h-full overflow-hidden">
+        <div className="bg-white/90 backdrop-blur shadow-sm rounded-3xl border border-slate-200/70 flex flex-col h-full overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div className="flex flex-col gap-3">
@@ -250,14 +250,14 @@ export default function AdminDailySchedule() {
                         <span className="text-sm font-medium">Carregando escala...</span>
                     </div>
                 ) : selectedUnitId === '' ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200">
                         <svg className="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h8M8 12h8m-8 5h5M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" />
                         </svg>
                         <p className="text-sm font-medium">Selecione um setor para visualizar a escala.</p>
                     </div>
                 ) : filteredByUnit.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200">
                         <svg className="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -270,7 +270,7 @@ export default function AdminDailySchedule() {
                             const isOpen = openUnits[unitId] ?? false
                             const count = groupedShifts[unitId]?.length || 0
                             return (
-                                <div key={unitId} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
+                                <div key={unitId} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
                                     <button
                                         type="button"
                                         onClick={() => toggleUnit(unitId)}
@@ -296,7 +296,7 @@ export default function AdminDailySchedule() {
                                                 const unitShifts = groupedShifts[unitId] || []
                                                 if (unitShifts.length === 0) {
                                                     return (
-                                                        <div className="text-sm text-gray-500 bg-white border border-dashed border-gray-200 rounded-lg px-4 py-6 text-center">
+                                                        <div className="text-sm text-slate-500 bg-white border border-dashed border-slate-200 rounded-2xl px-4 py-6 text-center">
                                                             Nenhum profissional escalado para este setor nesta data.
                                                         </div>
                                                     )
@@ -324,7 +324,7 @@ export default function AdminDailySchedule() {
                                                         t === 'dn' ? 'bg-indigo-700' :
                                                         'bg-emerald-600'
                                                     return (
-                                                    <div key={shift.id || index} className="bg-white rounded-md border border-gray-200 shadow-sm flex overflow-hidden h-20 hover:shadow-md transition-shadow">
+                                                    <div key={shift.id || index} className="bg-white rounded-2xl border border-slate-200 shadow-sm flex overflow-hidden h-20 hover:shadow-md transition-shadow">
                                                         {/* Left Color Block */}
                                                         <div className={`w-12 flex flex-col items-center justify-center text-white shrink-0 ${color}`}>
                                                             <span className="text-xl font-bold leading-none">

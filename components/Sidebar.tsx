@@ -15,9 +15,9 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
   const [editableUnits, setEditableUnits] = useState<{ id: string, title: string }[]>(initialEditableUnits)
 
   const getNavItemClass = (isActive: boolean, isCollapsedView: boolean) => {
-    const base = `group flex items-center rounded-xl transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white`
+    const base = `group flex items-center rounded-2xl transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white`
     if (isActive) {
-      return `${base} bg-indigo-50 text-indigo-800 border border-indigo-100 shadow-sm ${isCollapsedView ? 'justify-center px-2' : 'px-4'} py-3`
+      return `${base} bg-gradient-to-r from-indigo-50 via-blue-50/40 to-emerald-50/40 text-indigo-900 border border-indigo-200/60 shadow-sm ${isCollapsedView ? 'justify-center px-2' : 'px-4'} py-3`
     }
     return `${base} text-slate-600 hover:bg-indigo-50/60 hover:text-slate-900 ${isCollapsedView ? 'justify-center px-2' : 'px-4'} py-3`
   }
@@ -25,14 +25,14 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
   const getNavIconClass = (isActive: boolean, isCollapsedView: boolean) => {
     const base = 'shrink-0'
     if (isCollapsedView) {
-      return `${base} p-2 rounded-lg ${isActive ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 group-hover:text-slate-700'}`
+      return `${base} p-2 rounded-xl ${isActive ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 group-hover:text-slate-700'}`
     }
     return `${base} ${isActive ? 'text-indigo-700' : 'text-slate-500 group-hover:text-slate-700'}`
   }
 
   const getSubItemClass = (isActive: boolean) => {
-    const base = `ml-10 mt-1 flex items-center px-4 py-2 text-xs font-semibold rounded-lg transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white`
-    if (isActive) return `${base} bg-indigo-50 text-indigo-800 border border-indigo-100`
+    const base = `ml-10 mt-1 flex items-center px-4 py-2 text-xs font-semibold rounded-xl transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white`
+    if (isActive) return `${base} bg-indigo-50 text-indigo-900 border border-indigo-200/60`
     return `${base} text-slate-500 hover:bg-indigo-50/50 hover:text-slate-900`
   }
 
@@ -152,14 +152,14 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
   return (
     <>
       {/* Mobile Navbar */}
-      <div className="flex md:!hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-30 justify-between items-center shadow-sm w-full">
+      <div className="flex md:!hidden bg-white/85 backdrop-blur border-b border-slate-200/70 p-4 sticky top-0 z-30 justify-between items-center shadow-sm w-full">
         <div className="flex items-center gap-2">
           <Image src={logoPrefeitura} alt="Logo Prefeitura" width={120} height={40} className="h-8 w-auto object-contain" />
           <Image src={logoHma} alt="HMA Logo" width={90} height={30} className="h-8 w-auto object-contain" />
         </div>
         <button 
           onClick={() => setIsMobileMenuOpen(true)}
-          className="text-gray-600 focus:outline-none p-2"
+          className="text-slate-600 focus:outline-none p-2 rounded-xl hover:bg-indigo-50/60"
         >
           <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -177,7 +177,7 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
           ></div>
 
           {/* Sidebar Content */}
-          <div className="relative flex flex-col w-64 max-w-xs h-full bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
+          <div className="relative flex flex-col w-64 max-w-xs h-full bg-white/90 backdrop-blur shadow-xl transform transition-transform duration-300 ease-in-out border-r border-slate-200/70">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center gap-2">
                 <Image src={logoPrefeitura} alt="Logo Prefeitura" width={120} height={40} className="h-8 w-auto object-contain" />
@@ -191,6 +191,9 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+            </div>
+            <div className="px-4 pt-4">
+              <div className="h-1.5 w-full rounded-full bg-gradient-to-r from-indigo-600 via-blue-600 to-emerald-500" />
             </div>
 
             <nav className="flex-1 overflow-y-auto py-4 space-y-2 px-2">
@@ -265,7 +268,7 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
       )}
 
       {/* Desktop Sidebar */}
-      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-full bg-white border-r border-gray-200 sticky top-0 z-40 pointer-events-auto transition-all duration-300`}>
+      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-full bg-white/85 backdrop-blur border-r border-slate-200/70 sticky top-0 z-40 pointer-events-auto transition-all duration-300`}>
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
             {!isCollapsed && (
               <div className="flex items-center gap-3">
@@ -275,11 +278,14 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
             )}
             <button 
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="p-1 rounded-full hover:bg-gray-100 text-gray-500"
+                className="p-1 rounded-full hover:bg-indigo-50/60 text-slate-600"
                 title={isCollapsed ? "Expandir menu" : "Recolher menu"}
             >
                 {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
             </button>
+        </div>
+        <div className={`${isCollapsed ? 'px-3' : 'px-4'} mb-4`}>
+          <div className="h-1.5 w-full rounded-full bg-gradient-to-r from-indigo-600 via-blue-600 to-emerald-500" />
         </div>
 
         <nav className="flex-1 space-y-2 px-2 overflow-y-auto min-h-0 custom-scrollbar relative z-10 pointer-events-auto">
