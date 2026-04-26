@@ -89,12 +89,14 @@ export default function AdminDailySchedule() {
         }
     }
 
-    const filteredShifts = shifts.filter((shift: any) => {
-        const t = String(shift.shift_type || '')
-        if (filterMode === 'day') return ['day', 'mt', 'morning', 'afternoon', 'dn'].includes(t)
-        if (filterMode === 'night') return ['night', 'dn'].includes(t)
-        return true
-    })
+    const filteredShifts = useMemo(() => {
+        return shifts.filter((shift: any) => {
+            const t = String(shift.shift_type || '')
+            if (filterMode === 'day') return ['day', 'mt', 'morning', 'afternoon', 'dn'].includes(t)
+            if (filterMode === 'night') return ['night', 'dn'].includes(t)
+            return true
+        })
+    }, [shifts, filterMode])
 
     const sortedUnits = useMemo(() => {
         const list = [...units]
@@ -123,21 +125,23 @@ export default function AdminDailySchedule() {
         return num ? `${num} - ${title}` : title
     }
 
-    const filteredByUnit = selectedUnitId === ''
-        ? []
-        : selectedUnitId === '__all__'
-        ? filteredShifts
-        : filteredShifts.filter((s: any) => {
+    const filteredByUnit = useMemo(() => {
+        if (selectedUnitId === '') return []
+        if (selectedUnitId === '__all__') return filteredShifts
+        return filteredShifts.filter((s: any) => {
             const u = s.unit_id ? String(s.unit_id) : '__none__'
             return u === selectedUnitId
         })
+    }, [selectedUnitId, filteredShifts])
 
-    const groupedShifts = filteredByUnit.reduce((acc: any, shift: any) => {
-        const unitId = shift.unit_id ? String(shift.unit_id) : '__none__'
-        if (!acc[unitId]) acc[unitId] = []
-        acc[unitId].push(shift)
-        return acc
-    }, {})
+    const groupedShifts = useMemo(() => {
+        return filteredByUnit.reduce((acc: any, shift: any) => {
+            const unitId = shift.unit_id ? String(shift.unit_id) : '__none__'
+            if (!acc[unitId]) acc[unitId] = []
+            acc[unitId].push(shift)
+            return acc
+        }, {})
+    }, [filteredByUnit])
 
     const unitIdsToRender = useMemo(() => {
         if (selectedUnitId === '') return []
@@ -397,4 +401,3 @@ export default function AdminDailySchedule() {
         </div>
     )
 }
-
