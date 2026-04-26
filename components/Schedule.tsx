@@ -329,6 +329,7 @@ export default function Schedule({
   const [isEditingHeader, setIsEditingHeader] = useState(false)
   const [unitNumber, setUnitNumber] = useState<string>('')
   const [unitNumbersMap, setUnitNumbersMap] = useState<Record<string, string>>({})
+  const [hasLoadedUnitNumbers, setHasLoadedUnitNumbers] = useState(false)
   const [unitMonthStatuses, setUnitMonthStatuses] = useState<Record<string, { launched: boolean, released: boolean }>>({})
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'ENFERMEIRO' | 'TECNICO' | 'MEDICO' | 'MOTORISTA' | 'RECEPCAO' | 'AGENTE_DE_PORTARIA' | 'ASSISTENTE_SOCIAL'>('ALL')
   
@@ -536,6 +537,7 @@ export default function Schedule({
   // Cache to store fetched data by month-year key
   const scheduleCache = useRef<Record<string, ScheduleData>>({})
   const scheduleInFlight = useRef<Record<string, Promise<void>>>({})
+  const hasCalledOnLoadedRef = useRef(false)
 
   const clearCache = () => {
     scheduleCache.current = {}
@@ -593,8 +595,6 @@ export default function Schedule({
                 setDynamicField('coren')
                 setIsSetorHidden(false)
             }
-            
-            onLoaded?.()
             return
         }
 
@@ -621,7 +621,6 @@ export default function Schedule({
           console.error('Error fetching schedule:', error)
         } finally {
           if (showLoading) setLoading(false)
-          onLoaded?.()
         }
     })()
 
@@ -632,6 +631,22 @@ export default function Schedule({
         delete scheduleInFlight.current[cacheKey]
     }
   }, [selectedMonth, selectedYear, selectedUnitId, onLoaded, isSaving])
+
+  useEffect(() => {
+    hasCalledOnLoadedRef.current = false
+  }, [selectedMonth, selectedYear, selectedUnitId, printOnly, onLoaded])
+
+  useEffect(() => {
+    if (!onLoaded) return
+    if (!selectedUnitId) return
+    if (loading) return
+    if (hasCalledOnLoadedRef.current) return
+
+    if (printOnly && !hasLoadedUnitNumbers) return
+
+    hasCalledOnLoadedRef.current = true
+    onLoaded()
+  }, [onLoaded, selectedUnitId, loading, printOnly, hasLoadedUnitNumbers])
 
   const handleDirectSaveShifts = async (shiftsToSave: { nurseId: string, rosterId?: string, date: string, type: string }[]) => {
     if (shiftsToSave.length === 0) return
@@ -778,6 +793,7 @@ export default function Schedule({
     async function loadAllNumbers() {
       const map = await getAllUnitNumbers()
       setUnitNumbersMap(map || {})
+      setHasLoadedUnitNumbers(true)
     }
     loadAllNumbers()
   }, [])
