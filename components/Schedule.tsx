@@ -3019,12 +3019,7 @@ export default function Schedule({
                     <span className="text-xs font-medium">Salvando...</span>
                 </div>
            )}
-           {loading ? (
-               <button disabled className="bg-gray-300 text-gray-500 px-4 py-2 rounded flex items-center justify-center gap-2 text-sm h-[38px] min-w-[180px] cursor-not-allowed">
-                  <span className="animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></span>
-                  Carregando...
-               </button>
-           ) : (
+           {loading ? null : (
              (!isLaunched && !canEditSelectedUnit) ? (
                 <div className="flex items-center justify-center h-[38px] px-4 text-red-600 font-bold bg-red-50 border border-red-200 rounded whitespace-nowrap">
                     Escala ainda não liberada

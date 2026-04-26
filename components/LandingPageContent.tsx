@@ -95,7 +95,6 @@ export default function LandingPageContent() {
                     type="text"
                     required
                     className="appearance-none block w-full px-5 py-4 border border-slate-200/80 rounded-2xl text-slate-800 bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all duration-200 text-base font-bold"
-                    placeholder="02170025367"
                     autoComplete="username"
                   />
                 </div>
@@ -145,7 +144,7 @@ export default function LandingPageContent() {
         </div>
 
         <div className="text-center text-gray-400 text-sm font-bold uppercase tracking-widest print:hidden">
-          © {new Date().getFullYear()} Hospital Municipal de Açailândia • Gestão de Enfermagem
+          © {new Date().getFullYear()} Hospital Municipal de Açailândia • Gestão de Pessoas
         </div>
       </div>
     </div>
