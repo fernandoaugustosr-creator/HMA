@@ -2841,7 +2841,7 @@ export default function Schedule({
         </div>
         <div className="flex items-center gap-2">
           <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded leading-none text-sm print:w-24 print:h-24 print:text-[40px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-4 print:border-black print:-mt-3 print:mb-2">
-            {(unitNumber || headerPage) || '1'}
+            {((selectedUnitId && unitNumbersMap[selectedUnitId]) || unitNumber || headerPage) || '1'}
           </div>
           {isAdmin && !printOnly && !isScheduleReleased && (
             !isEditingHeader ? (
