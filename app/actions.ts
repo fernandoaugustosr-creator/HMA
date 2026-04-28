@@ -187,6 +187,112 @@ export async function deleteSystemRole(roleId: string) {
   return { success: true }
 }
 
+export async function getCouncilTypes() {
+  const defaultTypes = ['COREN', 'CRM', 'CRO', 'CRP', 'CRF', 'CRN', 'CREFITO', 'CRESS', 'CREA', 'CAU']
+
+  const mergeUnique = (base: string[], extra: string[]) => {
+    const set = new Set<string>()
+    base.forEach(v => {
+      const s = String(v || '').trim().toUpperCase()
+      if (s) set.add(s)
+    })
+    extra.forEach(v => {
+      const s = String(v || '').trim().toUpperCase()
+      if (s) set.add(s)
+    })
+    return Array.from(set)
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const list = (db.settings && Array.isArray(db.settings.council_types) ? db.settings.council_types : []) as any[]
+    return mergeUnique(defaultTypes, list.map(x => String(x || '').trim().toUpperCase()).filter(Boolean))
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .like('key', 'council_%')
+
+  if (error || !data || data.length === 0) {
+    return defaultTypes
+  }
+
+  const fromSettings = (data || []).map((row: any) => String(row.value || row.key.replace('council_', '')).trim().toUpperCase()).filter(Boolean)
+  return mergeUnique(defaultTypes, fromSettings)
+}
+
+export async function addCouncilType(type: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const id = String(type || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (!id) return { success: false, message: 'Conselho inválido.' }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.settings = db.settings || {}
+    db.settings.council_types = Array.isArray(db.settings.council_types) ? db.settings.council_types : []
+    const list = (db.settings.council_types as any[]).map(x => String(x || '').trim().toUpperCase()).filter(Boolean)
+    if (!list.includes(id)) {
+      list.push(id)
+      db.settings.council_types = list
+      writeDb(db)
+    }
+    revalidatePath('/servidores')
+    revalidatePath('/escala')
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: `council_${id}`, value: id, bool_value: true }, { onConflict: 'key' })
+
+  if (error) return { success: false, message: 'Erro ao adicionar conselho: ' + error.message }
+  revalidatePath('/servidores')
+  revalidatePath('/escala')
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function deleteCouncilType(type: string) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const id = String(type || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (!id) return { success: false, message: 'Conselho inválido.' }
+  if (id === 'CRM' || id === 'COREN') return { success: false, message: 'Este conselho é protegido e não pode ser removido.' }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.settings = db.settings || {}
+    const list = Array.isArray(db.settings.council_types) ? db.settings.council_types : []
+    db.settings.council_types = (list as any[]).map(x => String(x || '').trim().toUpperCase()).filter(Boolean).filter(x => x !== id)
+    writeDb(db)
+    revalidatePath('/servidores')
+    revalidatePath('/escala')
+    revalidatePath('/')
+    return { success: true }
+  }
+
+  const supabase = createClient()
+  const { error } = await supabase.from('app_settings').delete().eq('key', `council_${id}`)
+  if (error) return { success: false, message: 'Erro ao remover conselho: ' + error.message }
+  revalidatePath('/servidores')
+  revalidatePath('/escala')
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function getBirthdaysForMonth(month: number) {
   const session = cookies().get('session_user')
   if (!session) return []
@@ -929,11 +1035,11 @@ export const getNurses = cache(async () => {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('nurses')
-    .select('id,name,name_star,cpf,role,coren,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
+    .select('id,name,name_star,cpf,role,coren,crm,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
     .range(0, 9999)
     .order('name')
   if (error) {
-    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date') || error.message?.includes('name_star')) {
+    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date') || error.message?.includes('name_star') || error.message?.includes('crm')) {
       const { data: fallbackData } = await supabase
         .from('nurses')
         .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
@@ -955,12 +1061,12 @@ export async function getNursesBySection(sectionId: string) {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('nurses')
-    .select('id,name,name_star,cpf,role,coren,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
+    .select('id,name,name_star,cpf,role,coren,crm,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
     .eq('section_id', sectionId)
     .range(0, 9999)
     .order('name')
   if (error) {
-    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date') || error.message?.includes('name_star')) {
+    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date') || error.message?.includes('name_star') || error.message?.includes('crm')) {
       const { data: fallbackData } = await supabase
         .from('nurses')
         .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
@@ -984,8 +1090,10 @@ export async function createNurse(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   const cpf = formData.get('cpf') as string
   const password = formData.get('password') as string || '123456'
-  const coren = formData.get('coren') as string
-  const crm = formData.get('crm') as string
+  const corenRaw = formData.get('coren') as string
+  const crmRaw = formData.get('crm') as string
+  const councilTypeRaw = formData.get('council_type') as string
+  const councilNumberRaw = formData.get('council_number') as string
   const phone = formData.get('phone') as string
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string || ''
@@ -1008,6 +1116,12 @@ export async function createNurse(prevState: any, formData: FormData) {
 
   // Handle CPF: Use provided or generate temporary
   const finalCpf = cpf || `TEMP-${Date.now()}`
+  const councilType = String(councilTypeRaw || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const councilNumber = String(councilNumberRaw || '').trim()
+  const coren = councilType === 'COREN' ? councilNumber : String(corenRaw || '').trim()
+  const crm = (councilType || councilNumber)
+    ? (councilType === 'COREN' ? String(crmRaw || '').trim() : `${councilType || 'CRM'}${councilNumber ? ` ${councilNumber}` : ''}`.trim())
+    : String(crmRaw || '').trim()
 
   if (isLocalMode()) {
     const db = readDb()
@@ -5293,8 +5407,10 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
 
   const name = formData.get('name') as string
   const cpf = formData.get('cpf') as string
-  const coren = formData.get('coren') as string
-  const crm = formData.get('crm') as string
+  const corenRaw = formData.get('coren') as string
+  const crmRaw = formData.get('crm') as string
+  const councilTypeRaw = formData.get('council_type') as string
+  const councilNumberRaw = formData.get('council_number') as string
   const phone = formData.get('phone') as string
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string
@@ -5308,6 +5424,12 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const sector = formData.get('sector') as string
   const password = formData.get('password') as string
   const useDefaultPassword = formData.get('useDefaultPassword') === 'on'
+  const councilType = String(councilTypeRaw || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const councilNumber = String(councilNumberRaw || '').trim()
+  const coren = councilType === 'COREN' ? councilNumber : String(corenRaw || '').trim()
+  const crm = (councilType || councilNumber)
+    ? (councilType === 'COREN' ? undefined : (councilNumber ? `${councilType || 'CRM'} ${councilNumber}`.trim() : ''))
+    : String(crmRaw || '').trim()
 
   if (!name) return { success: false, message: 'Nome é obrigatório' }
 
@@ -5351,7 +5473,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     // Allow clearing CPF (will be replaced by a TEMP value if empty)
     nurse.cpf = cpf || `TEMP-${Date.now()}`
     nurse.coren = coren
-    nurse.crm = crm || nurse.crm || ''
+    if (crm !== undefined) nurse.crm = crm
     nurse.phone = phone || nurse.phone || ''
     nurse.vinculo = vinculo
     nurse.role = role
@@ -5428,12 +5550,12 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const updateData: any = {
       name,
       coren,
-      crm: crm || '',
       phone: phone || '',
       vinculo,
       role,
       cpf: cpf || `TEMP-${Date.now()}`
   }
+  if (crm !== undefined) updateData.crm = crm
   if (finalSectionId) updateData.section_id = finalSectionId
   if (unitId) updateData.unit_id = unitId
   if (sector) updateData.sector = sector

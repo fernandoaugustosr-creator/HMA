@@ -146,7 +146,9 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
           />
           <datalist id="vinculo-options">
             <option value="CONCURSO" />
+            <option value="CONTRATADO" />
             <option value="SELETIVO" />
+            <option value="CESSÃO" />
             <option value="TERCEIRIZADO" />
             <option value="ESCALA DUPLA" />
             <option value="ESCALA DESCOBERTA" />

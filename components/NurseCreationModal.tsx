@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { createNurse, getSystemRoles, updateNurse } from '@/app/actions'
+import { createNurse, getCouncilTypes, getSystemRoles, updateNurse } from '@/app/actions'
 import RoleManagerModal from './RoleManagerModal'
+import CouncilTypeManagerModal from './CouncilTypeManagerModal'
 import { formatRole } from '@/lib/utils'
 
 interface NurseCreationModalProps {
@@ -31,6 +32,10 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   const [roles, setRoles] = useState<{ id: string, label: string }[]>([])
   const [showRoleManager, setShowRoleManager] = useState(false)
   const [selectedRole, setSelectedRole] = useState<string>(nurseToEdit?.role || defaultRole || '')
+  const [councilTypes, setCouncilTypes] = useState<string[]>(['COREN', 'CRM'])
+  const [showCouncilManager, setShowCouncilManager] = useState(false)
+  const [councilType, setCouncilType] = useState<string>('CRM')
+  const [councilNumber, setCouncilNumber] = useState<string>('')
 
   useEffect(() => {
     if (nurseToEdit) {
@@ -60,6 +65,42 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
       })
       .catch(() => setRoles([]))
   }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    getCouncilTypes()
+      .then((data: any) => {
+        const list = (data || []).map((x: any) => String(x || '').trim().toUpperCase()).filter(Boolean)
+        setCouncilTypes(list.length ? list.sort((a: string, b: string) => a.localeCompare(b, 'pt-BR')) : ['COREN', 'CRM'])
+      })
+      .catch(() => setCouncilTypes(['COREN', 'CRM']))
+  }, [isOpen])
+
+  useEffect(() => {
+    const coren = String(nurseToEdit?.coren || '').trim()
+    if (coren) {
+      setCouncilType('COREN')
+      setCouncilNumber(coren)
+      return
+    }
+
+    const raw = String(nurseToEdit?.crm || '').trim()
+    if (!raw) {
+      setCouncilType('CRM')
+      setCouncilNumber('')
+      return
+    }
+    const first = raw.split(/\s+/)[0]?.toUpperCase().replace(/[^A-Z0-9]/g, '') || ''
+    const known = councilTypes.map(v => String(v || '').toUpperCase())
+    if (first && known.includes(first)) {
+      const rest = raw.slice(raw.toUpperCase().indexOf(first) + first.length).trim().replace(/^[-–—:]\s*/, '')
+      setCouncilType(first)
+      setCouncilNumber(rest)
+      return
+    }
+    setCouncilType('CRM')
+    setCouncilNumber(raw)
+  }, [nurseToEdit, councilTypes])
 
   const formatPhone = (val: string) => {
     const digits = val.replace(/\D/g, '')
@@ -202,6 +243,18 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
           .catch(() => setRoles([]))
       }}
     />
+    <CouncilTypeManagerModal
+      isOpen={showCouncilManager}
+      onClose={() => {
+        setShowCouncilManager(false)
+        getCouncilTypes()
+          .then((data: any) => {
+            const list = (data || []).map((x: any) => String(x || '').trim().toUpperCase()).filter(Boolean)
+            setCouncilTypes(list.length ? list.sort((a: string, b: string) => a.localeCompare(b, 'pt-BR')) : ['COREN', 'CRM'])
+          })
+          .catch(() => setCouncilTypes(['COREN', 'CRM']))
+      }}
+    />
     {showSqlModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
             <div className="bg-white p-6 rounded shadow-lg w-full max-w-2xl">
@@ -281,21 +334,35 @@ ADD COLUMN IF NOT EXISTS name_star BOOLEAN DEFAULT FALSE;
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-                <label className="block text-xs font-semibold text-gray-700">COREN</label>
-                <input 
-                  type="text" 
-                  name="coren" 
-                  defaultValue={nurseToEdit?.coren}
-                  className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
-                />
+                <label className="block text-xs font-semibold text-gray-700">Conselho</label>
+                <div className="mt-0.5 flex gap-2">
+                  <select
+                    name="council_type"
+                    value={councilType}
+                    onChange={(e) => setCouncilType(e.target.value)}
+                    className="block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
+                  >
+                    {councilTypes.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowCouncilManager(true)}
+                    className="px-2 py-1 text-xs border rounded text-black border-gray-300 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Conselhos
+                  </button>
+                </div>
             </div>
             <div>
-                <label className="block text-xs font-semibold text-gray-700">CRM</label>
-                <input 
-                  type="text" 
-                  name="crm" 
-                  defaultValue={nurseToEdit?.crm}
-                  placeholder="Apenas para Médicos"
+                <label className="block text-xs font-semibold text-gray-700">Número</label>
+                <input
+                  type="text"
+                  name="council_number"
+                  value={councilNumber}
+                  onChange={(e) => setCouncilNumber(e.target.value)}
+                  placeholder="Número"
                   className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-sm"
                 />
             </div>
@@ -326,6 +393,16 @@ ADD COLUMN IF NOT EXISTS name_star BOOLEAN DEFAULT FALSE;
                       className="h-3.5 w-3.5"
                     />
                     <span>CONCURSO</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      name="vinculo"
+                      value="CONTRATADO"
+                      defaultChecked={nurseToEdit?.vinculo?.includes('CONTRATADO')}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span>CONTRATADO</span>
                   </label>
                   <label className="inline-flex items-center gap-1.5">
                     <input
