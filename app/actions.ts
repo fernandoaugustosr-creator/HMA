@@ -2192,6 +2192,7 @@ export async function getMonthlyManagementReport(month: number, year: number) {
     nurses.forEach(n => nurseMap.set(String(n.id), n))
 
     // Processamento do relatório
+    const unitNumbersMap = await getAllUnitNumbers()
     const activeUnitIds = new Set(rosters.map(r => String(r.unit_id)))
     const sectorsWithSchedules = units.filter(u => activeUnitIds.has(String(u.id)))
     
@@ -2200,30 +2201,33 @@ export async function getMonthlyManagementReport(month: number, year: number) {
       releasedSchedules: releases.length,
       concursados: 0,
       seletivados: 0,
+      contratados: 0,
       escalaDupla: 0,
       descoberta: 0,
       totalEntries: rosters.length,
       professions: {
-        enfermeiros: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 },
-        tecnicos: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 },
-        auxiliares: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 },
-        medicos: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 },
-        outros: { total: 0, concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0 }
+        enfermeiros: { total: 0, concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0 },
+        tecnicos: { total: 0, concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0 },
+        auxiliares: { total: 0, concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0 },
+        medicos: { total: 0, concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0 },
+        outros: { total: 0, concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0 }
       },
       sectors: sectorsWithSchedules.map(s => {
         const sectorRosters = rosters.filter(r => String(r.unit_id) === String(s.id))
         const sectorNurseIds = sectorRosters.map(r => String(r.nurse_id))
         const sectorNurses = nurses.filter(n => sectorNurseIds.includes(String(n.id)))
         const sectorRoles = Array.from(new Set(sectorNurses.map(n => (n.role || '').toUpperCase())))
+        const unitNumber = unitNumbersMap[String(s.id)] || ''
+        const displayTitle = unitNumber ? `${unitNumber} - ${s.title}` : s.title
         
         // Detailed stats per sector and profession
         const sectorStats: any = {
-          total: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: sectorRosters.length },
-          ENFERMEIRO: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
-          TECNICO: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
-          AUXILIAR: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
-          MEDICO: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
-          OUTROS: { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 }
+          total: { concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0, total: sectorRosters.length },
+          ENFERMEIRO: { concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
+          TECNICO: { concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
+          AUXILIAR: { concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
+          MEDICO: { concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0, total: 0 },
+          OUTROS: { concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0, total: 0 }
         }
 
         sectorRosters.forEach(r => {
@@ -2248,6 +2252,9 @@ export async function getMonthlyManagementReport(month: number, year: number) {
             } else if (vin.includes('DUPLA') || obs.includes('DUPLA') || obs.includes('1ED') || name.includes('1ED')) {
               sectorStats.total.escalaDupla++
               sectorStats[pKey].escalaDupla++
+            } else if (vin.includes('CONTRAT') || vin.includes('CELETISTA') || vin.includes('TERCEIRIZ') || vin.includes('TERCERIZ')) {
+              sectorStats.total.contratados++
+              sectorStats[pKey].contratados++
             } else if (vin.includes('CONCURSO') || vin.includes('EFETIVO')) {
               sectorStats.total.concursados++
               sectorStats[pKey].concursados++
@@ -2260,7 +2267,7 @@ export async function getMonthlyManagementReport(month: number, year: number) {
 
         return {
           id: String(s.id),
-          title: s.title,
+          title: displayTitle,
           isReleased: releases.some(r => String(r.unit_id) === String(s.id)),
           professions: sectorRoles,
           stats: sectorStats
@@ -2290,6 +2297,7 @@ export async function getMonthlyManagementReport(month: number, year: number) {
         let isEscalaDupla = false
         let isConcursado = false
         let isSeletivado = false
+        let isContratado = false
 
         // Prioridade 1: Escala Descoberta (Identifica por nome parcial "DESCOBE" ou vínculo)
         if (
@@ -2310,6 +2318,11 @@ export async function getMonthlyManagementReport(month: number, year: number) {
           isEscalaDupla = true
           stats.escalaDupla++
           stats.professions[profKey].escalaDupla++
+        }
+        else if (vinculo.includes('CONTRAT') || vinculo.includes('CELETISTA') || vinculo.includes('TERCEIRIZ') || vinculo.includes('TERCERIZ')) {
+          isContratado = true
+          stats.contratados++
+          stats.professions[profKey].contratados++
         }
         else if (vinculo.includes('CONCURSO') || vinculo.includes('EFETIVO')) {
           isConcursado = true

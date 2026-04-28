@@ -300,8 +300,8 @@ export default function Schedule({
   const [copyTargetYear, setCopyTargetYear] = useState(selectedYear)
 
   // Dynamic Column Field State
-  const [dynamicField, setDynamicField] = useState<'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('coren')
-  const [displayDynamicField, setDisplayDynamicField] = useState<'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('coren')
+  const [dynamicField, setDynamicField] = useState<'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('council')
+  const [displayDynamicField, setDisplayDynamicField] = useState<'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('council')
   const [isSetorHidden, setIsSetorHidden] = useState(false)
 
   // Insertion State
@@ -455,7 +455,7 @@ export default function Schedule({
       await applyReplicationToTargets(targetsToUpdate)
   }
 
-  const handleDynamicFieldChange = async (field: 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+  const handleDynamicFieldChange = async (field: 'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
       if (isScheduleReleased) return
       setDynamicField(field)
       setLoading(true)
@@ -473,7 +473,7 @@ export default function Schedule({
       setLoading(false)
   }
 
-  const handleDisplayDynamicFieldChange = async (field: 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+  const handleDisplayDynamicFieldChange = async (field: 'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
     setDisplayDynamicField(field)
     if (typeof window !== 'undefined') {
       localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`, field)
@@ -588,11 +588,11 @@ export default function Schedule({
             const meta = cachedData.releases && cachedData.releases.length > 0 ? cachedData.releases[0] : null
             if (meta) {
                 setFooterText(meta.footer_text || '')
-                setDynamicField(meta.dynamic_field || 'coren')
+                setDynamicField((meta.dynamic_field as any) || 'council')
                 setIsSetorHidden(!!meta.is_setor_hidden)
             } else {
                 setFooterText('')
-                setDynamicField('coren')
+                setDynamicField('council')
                 setIsSetorHidden(false)
             }
             return
@@ -610,11 +610,11 @@ export default function Schedule({
           const meta = newData.releases && newData.releases.length > 0 ? newData.releases[0] : null
           if (meta) {
               setFooterText(meta.footer_text || '')
-              setDynamicField(meta.dynamic_field || 'coren')
+              setDynamicField((meta.dynamic_field as any) || 'council')
               setIsSetorHidden(!!meta.is_setor_hidden)
           } else {
               setFooterText('')
-              setDynamicField('coren')
+              setDynamicField('council')
               setIsSetorHidden(false)
           }
         } catch (error) {
@@ -765,7 +765,7 @@ export default function Schedule({
     if (typeof window === 'undefined') return
     const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`)
 
-    if (stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role') {
+    if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role') {
       setDisplayDynamicField(stored)
       return
     }
@@ -2520,6 +2520,15 @@ export default function Schedule({
                     // Try to find the nurse in the base data.nurses to get the most up-to-date fields
                     const baseNurse = data.nurses.find(n => n.id === nurse.id)
                     const source = baseNurse || nurse
+                    
+                    if (displayDynamicField === 'council') {
+                      return <span className="print:text-[8px] whitespace-nowrap font-bold print:font-normal">{getCouncilNumber(source)}</span>
+                    }
+
+                    if (displayDynamicField === 'crm') {
+                      return <span className="print:text-[8px] whitespace-nowrap font-bold print:font-normal">{getCouncilNumber({ coren: '', crm: source.crm })}</span>
+                    }
+
                     const val = source[displayDynamicField as keyof Nurse]
                     
                     if (displayDynamicField === 'role') {
@@ -2725,6 +2734,64 @@ export default function Schedule({
   }, [isAdmin, myScalePermissionUnitIds, selectedUnitId])
 
   const canManageSelectedUnit = canEditSelectedUnit && !isScheduleReleased
+
+  const getDynamicFieldLabel = useCallback((field: 'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+    if (field === 'council') return 'CONSELHO'
+    if (field === 'coren') return 'COREN'
+    if (field === 'crm') return 'CRM'
+    if (field === 'cpf') return 'CPF'
+    if (field === 'phone') return 'TELEFONE'
+    if (field === 'role') return 'CARGO'
+    if (field === 'vinculo') return 'VÍNCULO'
+    return String(field || '').toUpperCase()
+  }, [])
+
+  const parseCouncilFromCrm = useCallback((value: any) => {
+    const raw = String(value ?? '').trim()
+    if (!raw) return { type: '', number: '', raw: '' }
+
+    const normalized = raw.replace(/^[-–—:\s]+/, '').trim()
+    const m = normalized.match(/^([A-Za-z]{2,18})\s*[-–—:]*\s*(.+)$/)
+    if (m) {
+      const type = String(m[1] || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+      const number = String(m[2] || '').trim()
+      return { type, number, raw: normalized }
+    }
+
+    const numericOnly = normalized.replace(/[.\-\/\s]/g, '')
+    if (numericOnly && /^[0-9]+$/.test(numericOnly)) {
+      return { type: 'CRM', number: normalized, raw: normalized }
+    }
+
+    return { type: '', number: normalized, raw: normalized }
+  }, [])
+
+  const getCouncilType = useCallback((n: any) => {
+    const coren = String(n?.coren ?? '').trim()
+    if (coren) return 'COREN'
+    const parsed = parseCouncilFromCrm(n?.crm)
+    return parsed.type || ''
+  }, [parseCouncilFromCrm])
+
+  const getCouncilNumber = useCallback((n: any) => {
+    const coren = String(n?.coren ?? '').trim()
+    if (coren) return coren
+    const parsed = parseCouncilFromCrm(n?.crm)
+    return (parsed.number || parsed.raw || '').trim() || '-'
+  }, [parseCouncilFromCrm])
+
+  const detectedCouncilHeaderLabel = useMemo(() => {
+    const types = new Set<string>()
+    const rosters = (data.roster || [])
+    for (const r of rosters as any[]) {
+      const nurse = (data.nurses || []).find((n: any) => String(n.id) === String(r.nurse_id))
+      const t = getCouncilType(nurse)
+      if (t) types.add(t)
+      if (types.size > 1) return 'CONSELHO'
+    }
+    if (types.size === 1) return Array.from(types)[0]
+    return 'CONSELHO'
+  }, [data.roster, data.nurses, getCouncilType])
 
   const formatRolePrintShort = useCallback((role: string) => {
     const r = String(role || '').toUpperCase().trim()
@@ -3289,8 +3356,9 @@ export default function Schedule({
                                         value={displayDynamicField}
                                         onChange={(e) => handleDisplayDynamicFieldChange(e.target.value as any)}
                                         className="no-print bg-transparent w-full text-center uppercase font-bold outline-none"
-                                        title="Clique para escolher a coluna (COREN/CRM/CPF/Telefone)"
+                                        title="Clique para escolher a coluna (Conselho/COREN/CRM/CPF/Telefone)"
                                       >
+                                        <option value="council">{detectedCouncilHeaderLabel}</option>
                                         <option value="coren">COREN</option>
                                         <option value="crm">CRM</option>
                                         <option value="cpf">CPF</option>
@@ -3299,7 +3367,7 @@ export default function Schedule({
                                         <option value="vinculo">VÍNCULO</option>
                                       </select>
                                       <span className="hidden print:block uppercase">
-                                        {displayDynamicField === 'role' ? 'CARGO' : displayDynamicField}
+                                        {(displayDynamicField === 'council' || displayDynamicField === 'crm') ? detectedCouncilHeaderLabel : getDynamicFieldLabel(displayDynamicField)}
                                       </span>
                                     </>
                                 </th>

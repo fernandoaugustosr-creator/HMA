@@ -2,6 +2,9 @@
 
 import React, { useMemo, useState } from 'react'
 import { X, FileText, CheckCircle, AlertCircle, Users, Briefcase, UserPlus, Filter } from 'lucide-react'
+import Image from 'next/image'
+import logoHma from '@/public/logo-hma.png'
+import logoPrefeitura from '@/public/logo-prefeitura.png'
 
 interface ManagementReportProps {
   data: {
@@ -9,15 +12,16 @@ interface ManagementReportProps {
     releasedSchedules: number
     concursados: number
     seletivados: number
+    contratados: number
     escalaDupla: number
     descoberta: number
     totalEntries: number
     professions: {
-      enfermeiros: { total: number, concursados: number, seletivados: number, escalaDupla: number, descoberta: number }
-      tecnicos: { total: number, concursados: number, seletivados: number, escalaDupla: number, descoberta: number }
-      auxiliares: { total: number, concursados: number, seletivados: number, escalaDupla: number, descoberta: number }
-      medicos: { total: number, concursados: number, seletivados: number, escalaDupla: number, descoberta: number }
-      outros: { total: number, concursados: number, seletivados: number, escalaDupla: number, descoberta: number }
+      enfermeiros: { total: number, concursados: number, seletivados: number, contratados: number, escalaDupla: number, descoberta: number }
+      tecnicos: { total: number, concursados: number, seletivados: number, contratados: number, escalaDupla: number, descoberta: number }
+      auxiliares: { total: number, concursados: number, seletivados: number, contratados: number, escalaDupla: number, descoberta: number }
+      medicos: { total: number, concursados: number, seletivados: number, contratados: number, escalaDupla: number, descoberta: number }
+      outros: { total: number, concursados: number, seletivados: number, contratados: number, escalaDupla: number, descoberta: number }
     }
     sectors: { 
       id: string; 
@@ -25,7 +29,7 @@ interface ManagementReportProps {
       isReleased: boolean; 
       professions: string[];
       stats: {
-        [key: string]: { concursados: number, seletivados: number, escalaDupla: number, descoberta: number, total: number }
+        [key: string]: { concursados: number, seletivados: number, contratados: number, escalaDupla: number, descoberta: number, total: number }
       }
     }[]
   }
@@ -42,11 +46,12 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
     : data.sectors
 
   const tableTotals = useMemo(() => {
-    const acc = { concursados: 0, seletivados: 0, escalaDupla: 0, descoberta: 0, total: 0 }
+    const acc = { concursados: 0, seletivados: 0, contratados: 0, escalaDupla: 0, descoberta: 0, total: 0 }
     filteredSectors.forEach(sector => {
       const sData = selectedProf ? sector.stats[selectedProf] : sector.stats.total
       acc.concursados += sData.concursados || 0
       acc.seletivados += sData.seletivados || 0
+      acc.contratados += sData.contratados || 0
       acc.escalaDupla += sData.escalaDupla || 0
       acc.descoberta += sData.descoberta || 0
       acc.total += sData.total || 0
@@ -57,6 +62,7 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
   const handleGeneratePdf = () => {
     const profLabel = selectedProf ? `${selectedProf}s` : 'Todos'
     const title = `Relatório Gerencial Mensal - ${monthName} ${year}`
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
     const rowsHtml = filteredSectors.map(sector => {
       const sData = selectedProf ? sector.stats[selectedProf] : sector.stats.total
@@ -67,6 +73,7 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
           <td class="center">${status}</td>
           <td class="center">${sData.concursados ?? 0}</td>
           <td class="center">${sData.seletivados ?? 0}</td>
+          <td class="center">${sData.contratados ?? 0}</td>
           <td class="center red">${sData.escalaDupla ?? 0}</td>
           <td class="center amber">${sData.descoberta ?? 0}</td>
           <td class="center total">${sData.total ?? 0}</td>
@@ -80,6 +87,7 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
         <td class="center">-</td>
         <td class="center">${tableTotals.concursados}</td>
         <td class="center">${tableTotals.seletivados}</td>
+        <td class="center">${tableTotals.contratados}</td>
         <td class="center red">${tableTotals.escalaDupla}</td>
         <td class="center amber">${tableTotals.descoberta}</td>
         <td class="center total">${tableTotals.total}</td>
@@ -99,6 +107,10 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
             body { font-family: Arial, Helvetica, sans-serif; color: #111827; }
             h1 { font-size: 16px; margin: 0 0 6px 0; }
             .subtitle { font-size: 11px; color: #4b5563; margin-bottom: 10px; }
+            .brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+            .brand img { height: 44px; width: auto; object-fit: contain; }
+            .brand-center { flex: 1; text-align: center; }
+            .brand-title { font-size: 14px; font-weight: 800; margin: 0; }
             .meta { font-size: 10px; color: #374151; margin: 0 0 10px 0; display: flex; gap: 12px; flex-wrap: wrap; }
             table { width: 100%; border-collapse: collapse; font-size: 10px; }
             th, td { border: 1px solid #e5e7eb; padding: 6px; }
@@ -112,7 +124,13 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
           </style>
         </head>
         <body>
-          <h1>${escapeHtml(title)}</h1>
+          <div class="brand">
+            <img src="${escapeHtml(origin)}/logo-prefeitura.png" alt="Prefeitura de Açailândia" />
+            <div class="brand-center">
+              <div class="brand-title">${escapeHtml(title)}</div>
+            </div>
+            <img src="${escapeHtml(origin)}/logo-hma.png" alt="HMA" />
+          </div>
           <div class="subtitle">Relatório em formato A4</div>
           <div class="meta">
             <div><strong>Filtro:</strong> ${escapeHtml(profLabel)}</div>
@@ -125,13 +143,14 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
                 <th class="center">Status</th>
                 <th class="center">Concurso</th>
                 <th class="center">Seletivo</th>
+                <th class="center">Contrato</th>
                 <th class="center">Esc. Dupla</th>
                 <th class="center">Descoberta</th>
                 <th class="center">Total</th>
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || `<tr><td colspan="7" class="center">Nenhum setor encontrado.</td></tr>`}
+              ${rowsHtml || `<tr><td colspan="8" class="center">Nenhum setor encontrado.</td></tr>`}
               ${filteredSectors.length ? totalsHtml : ''}
             </tbody>
           </table>
@@ -168,8 +187,22 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
     iframe.contentWindow.onafterprint = cleanup
     setTimeout(cleanup, 30000)
 
-    iframe.contentWindow.focus()
-    iframe.contentWindow.print()
+    const win = iframe.contentWindow
+    const start = Date.now()
+    const maxWaitMs = 5000
+
+    const tryPrint = () => {
+      const images = Array.from(doc.images || [])
+      const allReady = images.every(img => img.complete && img.naturalWidth > 0)
+      if (allReady || Date.now() - start >= maxWaitMs) {
+        win.focus()
+        win.print()
+        return
+      }
+      setTimeout(tryPrint, 100)
+    }
+
+    tryPrint()
   }
 
   // Obter as estatísticas baseadas no filtro selecionado
@@ -207,14 +240,20 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
         
         {/* Header */}
         <div className="bg-indigo-600 p-6 text-white flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
-              <FileText size={28} />
-              Relatório Gerencial Mensal
-            </h2>
-            <p className="text-indigo-100 font-medium uppercase tracking-widest text-xs mt-1">
-              {monthName} {year} • Visão Geral do Sistema
-            </p>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <Image src={logoPrefeitura} alt="Prefeitura de Açailândia" width={120} height={44} className="h-10 w-auto object-contain" priority />
+              <Image src={logoHma} alt="HMA" width={120} height={44} className="h-10 w-auto object-contain" priority />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
+                <FileText size={28} />
+                Relatório Gerencial Mensal
+              </h2>
+              <p className="text-indigo-100 font-medium uppercase tracking-widest text-xs mt-1">
+                {monthName} {year} • Visão Geral do Sistema
+              </p>
+            </div>
           </div>
           <button 
             onClick={onClose}
@@ -327,6 +366,7 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
                         <th className="px-4 py-2 text-center">Status</th>
                         <th className="px-4 py-2 text-center">Concurso</th>
                         <th className="px-4 py-2 text-center">Seletivo</th>
+                        <th className="px-4 py-2 text-center">Contrato</th>
                         <th className="px-4 py-2 text-center text-red-500">Esc. Dupla</th>
                         <th className="px-4 py-2 text-center text-amber-600">Descoberta</th>
                         <th className="px-4 py-2 text-center font-bold text-indigo-600">Total</th>
@@ -349,6 +389,7 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
                             </td>
                             <td className="px-4 py-4 border-y border-gray-100 text-center font-bold text-gray-600">{sData.concursados}</td>
                             <td className="px-4 py-4 border-y border-gray-100 text-center font-bold text-gray-600">{sData.seletivados}</td>
+                            <td className="px-4 py-4 border-y border-gray-100 text-center font-bold text-gray-600">{sData.contratados}</td>
                             <td className="px-4 py-4 border-y border-gray-100 text-center font-bold text-red-600 bg-red-50/30">{sData.escalaDupla}</td>
                             <td className="px-4 py-4 border-y border-gray-100 text-center font-bold text-amber-600 bg-amber-50/30">{sData.descoberta}</td>
                             <td className="px-4 py-4 border-r border-y border-gray-100 rounded-r-3xl text-center font-black text-indigo-600 bg-indigo-50/50">
@@ -358,7 +399,7 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
                         )
                       }) : (
                         <tr>
-                          <td colSpan={7} className="py-12 text-center text-gray-400 font-medium italic text-sm bg-white rounded-3xl border border-gray-100">
+                          <td colSpan={8} className="py-12 text-center text-gray-400 font-medium italic text-sm bg-white rounded-3xl border border-gray-100">
                             Nenhum setor encontrado para os critérios selecionados.
                           </td>
                         </tr>
@@ -373,6 +414,7 @@ export default function ManagementReport({ data, monthName, year, onClose }: Man
                           </td>
                           <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-gray-700">{tableTotals.concursados}</td>
                           <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-gray-700">{tableTotals.seletivados}</td>
+                          <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-gray-700">{tableTotals.contratados}</td>
                           <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-red-700 bg-red-50/30">{tableTotals.escalaDupla}</td>
                           <td className="px-4 py-4 border-y border-indigo-100 text-center font-black text-amber-700 bg-amber-50/30">{tableTotals.descoberta}</td>
                           <td className="px-4 py-4 border-r border-y border-indigo-100 rounded-r-3xl text-center font-black text-indigo-700 bg-indigo-100/40">
