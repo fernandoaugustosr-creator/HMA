@@ -18,7 +18,9 @@ export default function SchedulePage({ searchParams }: { searchParams?: { tab?: 
           </p>
         </div>
       )}
-      <Schedule isAdmin={isAdmin} initialUnitId={searchParams?.unit} />
+      <div className="download-print-root">
+        <Schedule isAdmin={isAdmin} initialUnitId={searchParams?.unit} />
+      </div>
     </div>
   )
 }

@@ -218,6 +218,7 @@ export default function Schedule({
     initialMonth,
     initialYear,
     initialUnitId,
+    initialUnitName,
     onLoaded
 }: { 
     isAdmin?: boolean, 
@@ -225,6 +226,7 @@ export default function Schedule({
     initialMonth?: number,
     initialYear?: number,
     initialUnitId?: string,
+    initialUnitName?: string,
     onLoaded?: () => void
 }) {
   const [currentDate] = useState(new Date())
@@ -2950,7 +2952,7 @@ export default function Schedule({
                     <button onClick={saveUnitTitle} className="text-green-600 p-2 hover:bg-gray-100 rounded" title="Salvar">
                         <Save size={18} />
                     </button>
-                    <button onClick={() => setIsEditingUnit(false)} className="text-red-600 p-2 hover:bg-gray-100 rounded" title="Cancelar">
+                    <button onClick={() => setIsEditingUnit(false)} className="text-black p-2 hover:bg-gray-100 rounded" title="Cancelar">
                         <X size={18} />
                     </button>
                 </div>
@@ -3210,7 +3212,11 @@ export default function Schedule({
                                 {index === 0 && selectedUnitId && (
                                 <tr className="bg-[#1e3a5f] text-white">
                                     <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold print:font-normal uppercase text-base print:text-[14px] whitespace-nowrap overflow-hidden text-ellipsis">
-                                        {data.units.find(u => u.id === selectedUnitId)?.title || 'UNIDADE'}
+                                        {(() => {
+                                          const unit = data.units.find(u => String(u.id) === String(selectedUnitId))
+                                          const title = (unit?.title || initialUnitName || '').trim()
+                                          return title ? title : 'UNIDADE'
+                                        })()}
                                     </th>
                                 </tr>
                                 )}
@@ -3340,7 +3346,7 @@ export default function Schedule({
                                                 autoFocus
                                             />
                                             <button onClick={saveSectionTitle} className="text-green-600 p-1 hover:bg-gray-200 rounded"><Save size={14} /></button>
-                                            <button onClick={() => setEditingSectionId(null)} className="text-red-600 p-1 hover:bg-gray-200 rounded"><X size={14} /></button>
+                                            <button onClick={() => setEditingSectionId(null)} className="text-black p-1 hover:bg-gray-200 rounded"><X size={14} /></button>
                                         </div>
                                     ) : (
                                         <div className="flex justify-between items-center w-full">
@@ -3803,8 +3809,8 @@ export default function Schedule({
       <style jsx global>{`
         @media print {
           @page {
-            size: landscape;
-            margin: 5mm 15mm !important;
+            size: A4 landscape;
+            margin: 0mm 5mm 0mm 5mm !important;
           }
           .no-print {
             display: none !important;
@@ -3831,6 +3837,7 @@ export default function Schedule({
             zoom: 0.95; /* Increased for better legibility */
             text-rendering: optimizeLegibility !important;
             -webkit-print-color-adjust: exact !important;
+            color: black !important;
           }
           /* Fallback for browsers that don't support zoom (like Firefox) */
           @supports not (zoom: 1) {
@@ -3843,7 +3850,7 @@ export default function Schedule({
           }
           .schedule-root * {
             font-size: 13px !important;
-            color: inherit;
+            color: black !important;
             border-color: black !important;
           }
           .print-footer-legend {
@@ -3865,9 +3872,6 @@ export default function Schedule({
           .schedule-root td, .schedule-root th {
             color: black;
           }
-          .schedule-root thead tr, 
-          .schedule-root thead th,
-          .schedule-root thead td,
           .schedule-root .bg-\[\#1e3a5f\], 
           .schedule-root .bg-\[\#1e3a5f\] *,
           .schedule-root .bg-\[\#3b5998\],

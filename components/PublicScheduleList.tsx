@@ -282,6 +282,7 @@ export default function PublicScheduleList() {
                 initialMonth={selectedRelease.month - 1}
                 initialYear={selectedRelease.year}
                 initialUnitId={selectedRelease.unit_id}
+                initialUnitName={selectedRelease.unit_name}
                 onLoaded={handleScheduleLoaded}
               />
             </div>
