@@ -5,6 +5,7 @@ import MyShifts from './MyShifts'
 import AdminDailySchedule from './AdminDailySchedule'
 import PendingSwapsList from './PendingSwapsList'
 import ManagementReportButton from '@/components/ManagementReportButton'
+import ScheduledStaffReportButton from '@/components/ScheduledStaffReportButton'
 
 export default async function DashboardPage({
   searchParams,
@@ -257,6 +258,11 @@ export default async function DashboardPage({
               <ManagementReportButton 
                 selectedMonth={selectedMonth} 
                 selectedYear={selectedYear} 
+                monthLabel={currentMonthLabel}
+              />
+              <ScheduledStaffReportButton
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
                 monthLabel={currentMonthLabel}
               />
             </div>

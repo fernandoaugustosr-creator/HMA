@@ -2344,6 +2344,150 @@ export async function getMonthlyManagementReport(month: number, year: number) {
   }
 }
 
+export async function getMonthlyScheduledStaffReport(month: number, year: number) {
+  try {
+    await checkAdmin()
+
+    let nurses: any[] = []
+    let rosters: any[] = []
+    let units: any[] = []
+
+    if (isLocalMode()) {
+      const db = readDb()
+      nurses = db.nurses || []
+      rosters = (db.monthly_rosters || []).filter((r: any) => r.month === month && r.year === year)
+      units = db.units || []
+    } else {
+      const supabase = createClient()
+
+      const [
+        { data: unitsData, error: unitsError },
+        { data: rostersData, error: rostersError }
+      ] = await Promise.all([
+        supabase.from('units').select('id, title').range(0, 1000),
+        supabase.from('monthly_rosters').select('id, nurse_id, unit_id').eq('month', month).eq('year', year).range(0, 3000)
+      ])
+
+      if (unitsError || rostersError) {
+        throw new Error(`Erro ao buscar dados do relatório: ${unitsError?.message || rostersError?.message}`)
+      }
+
+      const rosterList = rostersData || []
+      const nurseIds = Array.from(new Set(rosterList.map((r: any) => String(r.nurse_id)).filter(Boolean)))
+      let nursesData: any[] = []
+
+      if (nurseIds.length > 0) {
+        const { data, error } = await supabase
+          .from('nurses')
+          .select('id, name, role, coren, crm, coren_expiry_date')
+          .in('id', nurseIds)
+          .range(0, 3000)
+
+        if (error) {
+          if (error.message?.includes('crm') || error.message?.includes('coren_expiry_date')) {
+            const { data: fallbackData, error: fallbackError } = await supabase
+              .from('nurses')
+              .select('id, name, role, coren')
+              .in('id', nurseIds)
+              .range(0, 3000)
+
+            if (fallbackError) throw new Error(`Erro ao buscar profissionais: ${fallbackError.message}`)
+            nursesData = fallbackData || []
+          } else {
+            throw new Error(`Erro ao buscar profissionais: ${error.message}`)
+          }
+        } else {
+          nursesData = data || []
+        }
+      }
+
+      nurses = nursesData
+      rosters = rosterList
+      units = unitsData || []
+    }
+
+    const nurseMap = new Map<string, any>()
+    nurses.forEach(n => nurseMap.set(String(n.id), n))
+
+    const unitMap = new Map<string, any>()
+    units.forEach(u => unitMap.set(String(u.id), u))
+
+    const formatCouncilNumber = (nurse: any) => {
+      const coren = String(nurse?.coren || '').trim()
+      if (coren) return coren
+
+      const crm = String(nurse?.crm || '').trim()
+      if (!crm) return ''
+
+      const match = crm.match(/^[A-Za-zÀ-ÿ]+(?:[\s./-]+)?(.+)$/)
+      return String(match?.[1] || crm).trim()
+    }
+
+    const formatDate = (value: any) => {
+      const raw = String(value || '').trim()
+      if (!raw) return '-'
+      const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (match) return `${match[3]}/${match[2]}/${match[1]}`
+      return raw
+    }
+
+    const rowMap = new Map<string, {
+      id: string
+      name: string
+      role: string
+      roleGroup: 'ENF' | 'TEC' | 'AUX' | 'MED' | 'OUTROS'
+      coren: string
+      sector: string
+      corenExpiryDate: string
+    }>()
+
+    const classifyRole = (value: any): 'ENF' | 'TEC' | 'AUX' | 'MED' | 'OUTROS' => {
+      const role = String(value || '').toUpperCase()
+      if (role.includes('ENFERMEIRO')) return 'ENF'
+      if (role.includes('TECNICO') || role.includes('TÉCNICO')) return 'TEC'
+      if (role.includes('AUXILIAR')) return 'AUX'
+      if (role.includes('MEDICO') || role.includes('MÉDICO')) return 'MED'
+      return 'OUTROS'
+    }
+
+    rosters.forEach((roster: any) => {
+      const nurse = nurseMap.get(String(roster.nurse_id))
+      const unit = unitMap.get(String(roster.unit_id))
+      if (!nurse || !unit) return
+
+      const key = `${String(roster.nurse_id)}::${String(roster.unit_id)}`
+      if (rowMap.has(key)) return
+
+      rowMap.set(key, {
+        id: key,
+        name: String(nurse.name || '').trim() || '-',
+        role: String(nurse.role || '').trim() || '-',
+        roleGroup: classifyRole(nurse.role),
+        coren: formatCouncilNumber(nurse) || '-',
+        sector: String(unit.title || '').trim() || '-',
+        corenExpiryDate: formatDate(nurse.coren_expiry_date)
+      })
+    })
+
+    const rows = Array.from(rowMap.values()).sort((a, b) => {
+      const sectorCompare = a.sector.localeCompare(b.sector, 'pt-BR', { sensitivity: 'base' })
+      if (sectorCompare !== 0) return sectorCompare
+      return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+    })
+
+    return {
+      success: true,
+      data: {
+        totalRows: rows.length,
+        rows
+      }
+    }
+  } catch (e: any) {
+    console.error('Error generating scheduled staff report:', e)
+    return { success: false, message: 'Erro ao gerar relatório de escalados: ' + e.message }
+  }
+}
+
 export async function getMonthlyNote(month: number, year: number, unitId?: string | null) {
   try {
     if (isLocalMode()) {
