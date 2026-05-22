@@ -2475,11 +2475,20 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
       return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
     })
 
+    const sectors = Array.from(
+      new Set(
+        units
+          .map((unit: any) => String(unit?.title || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+
     return {
       success: true,
       data: {
         totalRows: rows.length,
-        rows
+        rows,
+        sectors
       }
     }
   } catch (e: any) {

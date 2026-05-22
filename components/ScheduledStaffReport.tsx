@@ -9,6 +9,7 @@ import logoPrefeitura from '@/public/logo-prefeitura.png'
 interface ScheduledStaffReportProps {
   data: {
     totalRows: number
+    sectors?: string[]
     rows: {
       id: string
       name: string
@@ -32,9 +33,13 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
   const pageSize = 15
 
   const sectorOptions = useMemo(() => {
-    return Array.from(new Set(data.rows.map(row => row.sector).filter(Boolean)))
+    const source = data.sectors && data.sectors.length > 0
+      ? data.sectors
+      : data.rows.map(row => row.sector)
+
+    return Array.from(new Set(source.filter(Boolean)))
       .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
-  }, [data.rows])
+  }, [data.rows, data.sectors])
 
   const filteredRows = useMemo(() => {
     return data.rows
