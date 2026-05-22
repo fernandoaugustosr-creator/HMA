@@ -32,14 +32,32 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 15
 
+  const sectorCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    data.rows.forEach((row) => {
+      const sector = String(row.sector || '').trim()
+      if (!sector) return
+      counts.set(sector, (counts.get(sector) || 0) + 1)
+    })
+    return counts
+  }, [data.rows])
+
   const sectorOptions = useMemo(() => {
     const source = data.sectors && data.sectors.length > 0
       ? data.sectors
       : data.rows.map(row => row.sector)
 
     return Array.from(new Set(source.filter(Boolean)))
-      .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
-  }, [data.rows, data.sectors])
+      .map((sector) => ({
+        name: sector,
+        count: sectorCounts.get(sector) || 0
+      }))
+      .sort((a, b) => {
+        if (a.count === 0 && b.count > 0) return 1
+        if (a.count > 0 && b.count === 0) return -1
+        return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+      })
+  }, [data.rows, data.sectors, sectorCounts])
 
   const filteredRows = useMemo(() => {
     return data.rows
@@ -52,7 +70,7 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
     const query = sectorSearch.trim().toLocaleLowerCase('pt-BR')
     if (!query) return sectorOptions
     return sectorOptions.filter(sector =>
-      sector.toLocaleLowerCase('pt-BR').includes(query)
+      sector.name.toLocaleLowerCase('pt-BR').includes(query)
     )
   }, [sectorOptions, sectorSearch])
 
@@ -89,7 +107,7 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
   const selectAllVisibleSectors = () => {
     setSelectedSectors(prev => {
       const next = new Set(prev)
-      filteredSectorOptions.forEach(sector => next.add(sector))
+      filteredSectorOptions.forEach(sector => next.add(sector.name))
       return Array.from(next).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
     })
     setCurrentPage(1)
@@ -318,6 +336,9 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
                   <div className="mt-1 text-xs font-semibold text-slate-500">
                     {filteredSectorOptions.length} de {sectorOptions.length} escalas visiveis
                   </div>
+                  <div className="mt-1 text-[11px] font-semibold text-slate-400">
+                    Escalas com profissionais aparecem primeiro; vazias ficam no final.
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -346,23 +367,33 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
               <div className="mt-4 max-h-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
                 {filteredSectorOptions.map((sector) => {
-                  const checked = selectedSectors.includes(sector)
+                  const checked = selectedSectors.includes(sector.name)
+                  const isEmpty = sector.count === 0
                   return (
                     <label
-                      key={sector}
-                      className={`flex items-start gap-2 rounded-2xl border px-3 py-3 text-sm font-bold cursor-pointer transition-colors ${
+                      key={sector.name}
+                      className={`flex items-start gap-3 rounded-2xl border px-3 py-3 text-sm font-bold cursor-pointer transition-colors ${
                         checked
                           ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                          : isEmpty
+                            ? 'border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-50'
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => toggleSector(sector)}
+                        onChange={() => toggleSector(sector.name)}
                         className="mt-0.5 h-4 w-4 accent-indigo-600"
                       />
-                      <span className="leading-5 uppercase">{sector}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="leading-5 uppercase">{sector.name}</div>
+                        <div className={`mt-1 text-[11px] font-black uppercase tracking-wider ${
+                          isEmpty ? 'text-amber-700' : 'text-slate-400'
+                        }`}>
+                          {isEmpty ? 'Sem profissionais neste mes' : `${sector.count} profissional(is)`}
+                        </div>
+                      </div>
                     </label>
                   )
                 })}
