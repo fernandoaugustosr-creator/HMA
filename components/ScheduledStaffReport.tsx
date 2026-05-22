@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { X, FileText, Users } from 'lucide-react'
 import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
@@ -27,6 +27,7 @@ interface ScheduledStaffReportProps {
 export default function ScheduledStaffReport({ data, monthName, year, onClose }: ScheduledStaffReportProps) {
   const [selectedRoleGroups, setSelectedRoleGroups] = useState<Array<'ENF' | 'TEC' | 'AUX' | 'MED' | 'OUTROS'>>([])
   const [selectedSectors, setSelectedSectors] = useState<string[]>([])
+  const [sectorSearch, setSectorSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 15
 
@@ -42,6 +43,14 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
   }, [data.rows, selectedRoleGroups, selectedSectors])
 
+  const filteredSectorOptions = useMemo(() => {
+    const query = sectorSearch.trim().toLocaleLowerCase('pt-BR')
+    if (!query) return sectorOptions
+    return sectorOptions.filter(sector =>
+      sector.toLocaleLowerCase('pt-BR').includes(query)
+    )
+  }, [sectorOptions, sectorSearch])
+
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
 
   const paginatedRows = useMemo(() => {
@@ -55,6 +64,36 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
     AUX: 'Auxiliares',
     MED: 'Médicos',
     OUTROS: 'Outros'
+  }
+
+  useEffect(() => {
+    setCurrentPage(prev => Math.min(prev, totalPages))
+  }, [totalPages])
+
+  const toggleSector = (sector: string) => {
+    setSelectedSectors(prev => {
+      const next = prev.includes(sector)
+        ? prev.filter(item => item !== sector)
+        : [...prev, sector]
+
+      return next.sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+    })
+    setCurrentPage(1)
+  }
+
+  const selectAllVisibleSectors = () => {
+    setSelectedSectors(prev => {
+      const next = new Set(prev)
+      filteredSectorOptions.forEach(sector => next.add(sector))
+      return Array.from(next).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+    })
+    setCurrentPage(1)
+  }
+
+  const clearSectorFilters = () => {
+    setSelectedSectors([])
+    setSectorSearch('')
+    setCurrentPage(1)
   }
 
   const handleGeneratePdf = () => {
@@ -210,7 +249,7 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-6">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
             <div className="bg-indigo-50 border border-indigo-100 rounded-[2rem] p-6">
               <div className="flex items-center gap-3">
                 <div className="bg-white p-3 rounded-2xl shadow-sm">
@@ -267,10 +306,41 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
                   : `Selecionadas: ${selectedRoleGroups.map(role => roleLabelMap[role]).join(', ')}`}
               </div>
             </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-6">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Filtro por setor</div>
-              <div className="mt-3 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
-                {sectorOptions.map((sector) => {
+            <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-6 xl:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Filtro por setor</div>
+                  <div className="mt-1 text-xs font-semibold text-slate-500">
+                    {filteredSectorOptions.length} de {sectorOptions.length} escalas visiveis
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllVisibleSectors}
+                    className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-black uppercase tracking-widest text-indigo-700 hover:bg-indigo-100 transition-colors"
+                  >
+                    Marcar visiveis
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearSectorFilters}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-widest text-slate-700 hover:bg-slate-100 transition-colors"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              </div>
+              <input
+                type="text"
+                value={sectorSearch}
+                onChange={(e) => setSectorSearch(e.target.value)}
+                placeholder="Buscar escala ou setor"
+                className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+              <div className="mt-4 max-h-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                {filteredSectorOptions.map((sector) => {
                   const checked = selectedSectors.includes(sector)
                   return (
                     <label
@@ -284,26 +354,36 @@ export default function ScheduledStaffReport({ data, monthName, year, onClose }:
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => {
-                          setSelectedSectors(prev => {
-                            const next = prev.includes(sector)
-                              ? prev.filter(item => item !== sector)
-                              : [...prev, sector]
-                            return next.sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
-                          })
-                          setCurrentPage(1)
-                        }}
+                        onChange={() => toggleSector(sector)}
                         className="mt-0.5 h-4 w-4 accent-indigo-600"
                       />
                       <span className="leading-5 uppercase">{sector}</span>
                     </label>
                   )
                 })}
+                </div>
+                {filteredSectorOptions.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm font-semibold text-slate-400">
+                    Nenhuma escala encontrada com esse filtro.
+                  </div>
+                )}
               </div>
               <div className="mt-3 text-xs font-semibold text-slate-500">
                 {selectedSectors.length === 0
                   ? 'Nenhum setor marcado: mostra todos.'
-                  : `Setores: ${selectedSectors.join(', ')}`}
+                  : `${selectedSectors.length} setor(es) selecionado(s).`}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedSectors.map((sector) => (
+                  <button
+                    key={sector}
+                    type="button"
+                    onClick={() => toggleSector(sector)}
+                    className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase text-indigo-700 hover:bg-indigo-100 transition-colors"
+                  >
+                    {sector}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
