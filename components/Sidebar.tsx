@@ -40,6 +40,8 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
   const role = user?.role || ''
   const isAdmin = role === 'ADMIN' || role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
   const canSeeScaleMenu = isAdmin || editableUnits.length > 0
+  const canSeeSamuScaleMenu = isAdmin || editableUnits.some((unit) => String(unit.title || '').trim().toUpperCase() === 'SAMU')
+  const canSeeSamuServerMenu = isAdmin
 
   useEffect(() => {
     setEditableUnits(initialEditableUnits)
@@ -56,7 +58,17 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     )},
+    { name: 'Escala SAMU', href: '/samu/escala', icon: (
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    )},
     { name: 'Servidores', href: '/servidores', icon: (
+      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    )},
+    { name: 'Servidores SAMU', href: '/samu/servidores', icon: (
       <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
       </svg>
@@ -99,6 +111,8 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
   const downloadsIcon = allNavItems.find(item => item.name === 'Escalas Liberadas')?.icon
   const faltasIcon = allNavItems.find(item => item.name === 'Faltas')?.icon
   const escalaIcon = allNavItems.find(item => item.name === 'Escala')?.icon
+  const escalaSamuIcon = allNavItems.find(item => item.name === 'Escala SAMU')?.icon
+  const servidoresSamuIcon = allNavItems.find(item => item.name === 'Servidores SAMU')?.icon
 
   const coordSubmenuItems = useMemo(() => {
     if (isAdmin) {
@@ -132,17 +146,20 @@ export default function Sidebar({ user, initialEditableUnits = [] }: { user: any
     navItems = [
       dashboardIcon && { name: 'Dashboard', href: '/dashboard', icon: dashboardIcon },
       canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
+      canSeeSamuScaleMenu && escalaSamuIcon && { name: 'Escala SAMU', href: '/samu/escala', icon: escalaSamuIcon },
       faltasIcon && { name: 'Lançar Falta', href: '/coordenacao?tab=falta', icon: faltasIcon },
       faltasIcon && { name: 'Solicitar Pagamentos', href: '/coordenacao?tab=pagamento', icon: faltasIcon },
       faltasIcon && { name: 'Outras Solicitações', href: '/coordenacao?tab=outros', icon: faltasIcon },
       folgasIcon && { name: 'Folgas', href: '/folgas', icon: folgasIcon },
       trocasIcon && { name: 'Permultas', href: '/trocas', icon: trocasIcon },
       downloadsIcon && { name: 'Escalas Liberadas', href: '/downloads', icon: downloadsIcon },
+      canSeeSamuServerMenu && servidoresSamuIcon && { name: 'Servidores SAMU', href: '/samu/servidores', icon: servidoresSamuIcon },
     ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
   } else {
     navItems = [
       dashboardIcon && { name: 'Dashboard', href: '/dashboard', icon: dashboardIcon },
       canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
+      canSeeSamuScaleMenu && escalaSamuIcon && { name: 'Escala SAMU', href: '/samu/escala', icon: escalaSamuIcon },
       trocasIcon && { name: 'Permultas', href: '/trocas', icon: trocasIcon },
       faltasIcon && { name: 'Faltas', href: '/coordenacao', icon: faltasIcon },
       downloadsIcon && { name: 'Escalas Liberadas', href: '/downloads', icon: downloadsIcon },

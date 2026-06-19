@@ -64,7 +64,19 @@ function SectorHistoryCell({ nurseId, currentSector }: { nurseId: string, curren
   )
 }
 
-export default function NurseList({ nurses, sections }: { nurses: any[], sections: any[] }) {
+export default function NurseList({
+  nurses,
+  sections,
+  forcedUnitId,
+  scopeLabel,
+  emptyMessage = 'Nenhum servidor cadastrado.'
+}: {
+  nurses: any[]
+  sections: any[]
+  forcedUnitId?: string
+  scopeLabel?: string
+  emptyMessage?: string
+}) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [nurseToEdit, setNurseToEdit] = useState<any | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -386,7 +398,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
             ))}
             {filteredNurses.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">Nenhum servidor cadastrado.</td>
+                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">{emptyMessage}</td>
               </tr>
             )}
           </tbody>
@@ -422,6 +434,8 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
         }}
         nurseToEdit={nurseToEdit}
         sections={sections}
+        forcedUnitId={forcedUnitId}
+        scopeLabel={scopeLabel}
       />
     </>
   )

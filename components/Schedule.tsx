@@ -219,6 +219,7 @@ export default function Schedule({
     initialYear,
     initialUnitId,
     initialUnitName,
+    lockedUnitIds = [],
     onLoaded
 }: { 
     isAdmin?: boolean, 
@@ -227,6 +228,7 @@ export default function Schedule({
     initialYear?: number,
     initialUnitId?: string,
     initialUnitName?: string,
+    lockedUnitIds?: string[],
     onLoaded?: () => void
 }) {
   const [currentDate] = useState(new Date())
@@ -343,6 +345,12 @@ export default function Schedule({
   const [permissionSelectAllUnits, setPermissionSelectAllUnits] = useState(false)
   const [permissionUnitSearch, setPermissionUnitSearch] = useState('')
   const [myScalePermissionUnitIds, setMyScalePermissionUnitIds] = useState<string[]>([])
+  const normalizedLockedUnitIds = useMemo(
+    () => Array.from(new Set((lockedUnitIds || []).map((id) => String(id)).filter(Boolean))),
+    [lockedUnitIds]
+  )
+  const isUnitSelectionLocked = normalizedLockedUnitIds.length === 1
+  const lockedUnitId = isUnitSelectionLocked ? normalizedLockedUnitIds[0] : ''
 
   useEffect(() => {
     setHasHydrated(true)
@@ -369,6 +377,12 @@ export default function Schedule({
     }
 
   }, [initialMonth, initialYear, initialUnitId])
+
+  useEffect(() => {
+    if (isUnitSelectionLocked && lockedUnitId && selectedUnitId !== lockedUnitId) {
+      setSelectedUnitId(lockedUnitId)
+    }
+  }, [isUnitSelectionLocked, lockedUnitId, selectedUnitId])
 
   const selectedPermissionNurse = useMemo(() => {
     const source = allNurses.length > 0 ? allNurses : data.nurses
@@ -713,9 +727,16 @@ export default function Schedule({
       .then((units: any[]) => {
         if (cancelled) return
         const mapped = (units || []).map(u => ({ id: String(u.id), title: String(u.title || '') })) as any
-        setData(prev => ({ ...prev, units: mapped }))
-        if (selectedUnitId && mapped.length > 0) {
-          const stillAllowed = mapped.some((u: any) => String(u.id) === String(selectedUnitId))
+        const filteredUnits = normalizedLockedUnitIds.length > 0
+          ? mapped.filter((u: any) => normalizedLockedUnitIds.includes(String(u.id)))
+          : mapped
+        setData(prev => ({ ...prev, units: filteredUnits }))
+        if (isUnitSelectionLocked && lockedUnitId) {
+          setSelectedUnitId(lockedUnitId)
+          return
+        }
+        if (selectedUnitId && filteredUnits.length > 0) {
+          const stillAllowed = filteredUnits.some((u: any) => String(u.id) === String(selectedUnitId))
           if (!stillAllowed && !printOnly) setSelectedUnitId('')
         }
       })
@@ -726,7 +747,7 @@ export default function Schedule({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [selectedUnitId, printOnly, normalizedLockedUnitIds, isUnitSelectionLocked, lockedUnitId])
 
   // Fetch permissions if admin
   useEffect(() => {
@@ -749,8 +770,8 @@ export default function Schedule({
 
     if (!selectedUnitId) return
     const stillAllowed = availableUnits.some(u => String(u.id) === String(selectedUnitId))
-    if (!stillAllowed && !printOnly) setSelectedUnitId('')
-  }, [data.units, selectedUnitId, isAdmin, myScalePermissionUnitIds])
+    if (!stillAllowed && !printOnly) setSelectedUnitId(isUnitSelectionLocked ? lockedUnitId : '')
+  }, [data.units, selectedUnitId, isAdmin, myScalePermissionUnitIds, printOnly, isUnitSelectionLocked, lockedUnitId])
   
   useEffect(() => {
     const l1 = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_line_1') : null
@@ -884,6 +905,7 @@ export default function Schedule({
 
 
   const handleUnitChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (isUnitSelectionLocked) return
     const value = e.target.value
     if (value === 'new_unit_action') {
       setIsAddingUnit(true)
@@ -2836,9 +2858,17 @@ export default function Schedule({
 
   const visibleUnits = useMemo(() => {
       const allUnits = data.units || []
-      if (isAdmin || myScalePermissionUnitIds.includes('*')) return allUnits
-      return allUnits.filter(u => myScalePermissionUnitIds.some(id => String(id) === String(u.id)))
-  }, [data.units, isAdmin, myScalePermissionUnitIds])
+      const permittedUnits = (isAdmin || myScalePermissionUnitIds.includes('*'))
+        ? allUnits
+        : allUnits.filter(u => myScalePermissionUnitIds.some(id => String(id) === String(u.id)))
+
+      if (normalizedLockedUnitIds.length === 0) return permittedUnits
+      return permittedUnits.filter((u) => normalizedLockedUnitIds.includes(String(u.id)))
+  }, [data.units, isAdmin, myScalePermissionUnitIds, normalizedLockedUnitIds])
+
+  const selectedUnitLabel = useMemo(() => {
+    return data.units.find((unit) => String(unit.id) === String(selectedUnitId))?.title || initialUnitName || 'Setor'
+  }, [data.units, selectedUnitId, initialUnitName])
 
   // Sync Footer Text
   useEffect(() => {
@@ -2958,42 +2988,48 @@ export default function Schedule({
                 </div>
             ) : (
                 <div className="flex items-center gap-2 w-full">
-                    <select 
-                        value={selectedUnitId} 
-                        onChange={handleUnitChange}
-                        className="border border-gray-300 rounded px-3 py-2 text-sm flex-1 bg-white text-black"
-                    >
-                        {visibleUnits.length === 0 ? (
-                          <option value="">Sem permissões de escala</option>
-                        ) : (
-                          <option value="">Selecione um setor...</option>
-                        )}
-                        {[...visibleUnits].sort((a, b) => {
-                          const na = parseInt(unitNumbersMap[a.id] || '9999', 10)
-                          const nb = parseInt(unitNumbersMap[b.id] || '9999', 10)
-                          if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb
-                          return a.title.localeCompare(b.title)
-                        }).map(unit => {
-                          const num = unitNumbersMap[unit.id]
-                          
-                          let status = ''
-                          const s = unitMonthStatuses[String(unit.id)]
-                          if (s?.released) status = ' ✅ (LIBERADA)'
+                    {isUnitSelectionLocked ? (
+                      <div className="flex-1 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800">
+                        {selectedUnitLabel}
+                      </div>
+                    ) : (
+                      <select 
+                          value={selectedUnitId} 
+                          onChange={handleUnitChange}
+                          className="border border-gray-300 rounded px-3 py-2 text-sm flex-1 bg-white text-black"
+                      >
+                          {visibleUnits.length === 0 ? (
+                            <option value="">Sem permissões de escala</option>
+                          ) : (
+                            <option value="">Selecione um setor...</option>
+                          )}
+                          {[...visibleUnits].sort((a, b) => {
+                            const na = parseInt(unitNumbersMap[a.id] || '9999', 10)
+                            const nb = parseInt(unitNumbersMap[b.id] || '9999', 10)
+                            if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb
+                            return a.title.localeCompare(b.title)
+                          }).map(unit => {
+                            const num = unitNumbersMap[unit.id]
+                            
+                            let status = ''
+                            const s = unitMonthStatuses[String(unit.id)]
+                            if (s?.released) status = ' ✅ (LIBERADA)'
 
-                          return (
-                            <option key={unit.id} value={unit.id}>
-                                {num ? `${num} - ${unit.title}` : unit.title}{status}
-                            </option>
-                          )
-                        })}
-                        {isAdmin && (
-                        <>
-                        <option disabled>──────────</option>
-                        <option value="new_unit_action">+ Adicionar novo setor...</option>
-                        </>
-                        )}
-                    </select>
-                    {selectedUnitId && selectedUnitId !== 'new_unit_action' && isAdmin && !isScheduleReleased && (
+                            return (
+                              <option key={unit.id} value={unit.id}>
+                                  {num ? `${num} - ${unit.title}` : unit.title}{status}
+                              </option>
+                            )
+                          })}
+                          {isAdmin && (
+                          <>
+                          <option disabled>──────────</option>
+                          <option value="new_unit_action">+ Adicionar novo setor...</option>
+                          </>
+                          )}
+                      </select>
+                    )}
+                    {selectedUnitId && selectedUnitId !== 'new_unit_action' && isAdmin && !isScheduleReleased && !isUnitSelectionLocked && (
                         <div className="flex items-center">
                             <button 
                                 onClick={startEditingUnit}

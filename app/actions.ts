@@ -28,6 +28,113 @@ export interface ScalePermission {
   created_at?: string
 }
 
+const SAMU_UNIT_TITLE = 'SAMU'
+
+function normalizeUnitTitle(value: string) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+}
+
+async function findUnitByNormalizedTitle(title: string): Promise<Unit | null> {
+  const target = normalizeUnitTitle(title)
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const unit = (db.units || []).find((item: any) => normalizeUnitTitle(item.title) === target)
+    return unit ? { id: String(unit.id), title: String(unit.title || '') } : null
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase.from('units').select('id,title').range(0, 1000)
+  if (error) return null
+  const unit = (data || []).find((item: any) => normalizeUnitTitle(item.title) === target)
+  return unit ? { id: String(unit.id), title: String(unit.title || '') } : null
+}
+
+async function ensureScalePermissionRecord(nurseId?: string | null, unitId?: string | null) {
+  if (!nurseId || !unitId) return
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.scale_permissions = db.scale_permissions || []
+    const exists = (db.scale_permissions || []).some(
+      (permission: any) => String(permission.nurse_id) === String(nurseId) && String(permission.unit_id) === String(unitId)
+    )
+    if (!exists) {
+      db.scale_permissions.push({
+        id: randomUUID(),
+        nurse_id: String(nurseId),
+        unit_id: String(unitId),
+        created_at: new Date().toISOString()
+      })
+      writeDb(db)
+    }
+    return
+  }
+
+  const supabase = createClient()
+  await supabase
+    .from('scale_permissions')
+    .upsert({ nurse_id: String(nurseId), unit_id: String(unitId) }, { onConflict: 'nurse_id,unit_id' })
+}
+
+export async function getSamuUnit() {
+  return findUnitByNormalizedTitle(SAMU_UNIT_TITLE)
+}
+
+export async function ensureSamuUnit() {
+  const existing = await getSamuUnit()
+  if (existing) return existing
+
+  await checkAdmin()
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.units = db.units || []
+    const unit = {
+      id: randomUUID(),
+      title: SAMU_UNIT_TITLE
+    }
+    db.units.push(unit)
+    writeDb(db)
+    revalidatePath('/')
+    return unit
+  }
+
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('units')
+    .insert({ title: SAMU_UNIT_TITLE })
+    .select('id,title')
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/')
+  return { id: String(data.id), title: String(data.title || SAMU_UNIT_TITLE) }
+}
+
+export async function hasSamuScaleAccess() {
+  let user: any
+  try {
+    user = await checkUser()
+  } catch (e) {
+    return false
+  }
+
+  const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.role === 'COORDENADOR' || user.cpf === '02170025367'
+  if (isAdmin) return true
+
+  const samuUnit = await getSamuUnit()
+  if (!samuUnit) return false
+
+  const unitIds = await getMyScalePermissionUnitIds()
+  return unitIds.includes('*') || unitIds.some((unitId) => String(unitId) === String(samuUnit.id))
+}
+
 export async function getSystemRoles() {
   const defaultRoles = [
     { id: 'ADMIN', label: 'Administrador' },
@@ -1103,6 +1210,7 @@ export async function createNurse(prevState: any, formData: FormData) {
   const nameStar = formData.get('name_star') === 'on'
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
+  const syncScalePermissionUnitId = formData.get('syncScalePermissionUnitId') as string
   const sector = formData.get('sector') as string // Manual sector name if provided
 
   // Custom Month/Year for roster insertion
@@ -1158,6 +1266,10 @@ export async function createNurse(prevState: any, formData: FormData) {
 
     db.nurses.push(newNurse)
 
+    if (syncScalePermissionUnitId) {
+      await ensureScalePermissionRecord(newNurse.id, syncScalePermissionUnitId)
+    }
+
     let lastRosterId: string | undefined = undefined
 
     // Add to roster automatically
@@ -1186,7 +1298,9 @@ export async function createNurse(prevState: any, formData: FormData) {
     writeDb(db)
     
     revalidatePath('/servidores')
-    return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId }
+    revalidatePath('/samu/servidores')
+    revalidatePath('/samu/escala')
+    return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId, nurseId: newNurse.id }
   }
 
   const supabase = createClient()
@@ -1260,8 +1374,14 @@ export async function createNurse(prevState: any, formData: FormData) {
       if (insertedRoster) lastRosterId = insertedRoster.id
   }
 
+  if (insertedNurse && syncScalePermissionUnitId) {
+    await ensureScalePermissionRecord(insertedNurse.id, syncScalePermissionUnitId)
+  }
+
   revalidatePath('/servidores')
-  return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId }
+  revalidatePath('/samu/servidores')
+  revalidatePath('/samu/escala')
+  return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId, nurseId: insertedNurse?.id }
 }
 
 export const getSections = cache(async () => {
@@ -5587,6 +5707,7 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const nameStar = hasNameStar ? (formData.get('name_star') === 'on') : undefined
   const sectionId = formData.get('sectionId') as string
   const unitId = formData.get('unitId') as string
+  const syncScalePermissionUnitId = formData.get('syncScalePermissionUnitId') as string
   const sector = formData.get('sector') as string
   const password = formData.get('password') as string
   const useDefaultPassword = formData.get('useDefaultPassword') === 'on'
@@ -5659,6 +5780,10 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
       nurse.password = password
     }
 
+    if (syncScalePermissionUnitId) {
+      await ensureScalePermissionRecord(id, syncScalePermissionUnitId)
+    }
+
     // Update Roster Entries if section changed OR sector changed (current/future only)
     if (finalSectionId || sector !== undefined) {
         if (db.monthly_rosters) {
@@ -5682,6 +5807,8 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     writeDb(db)
     revalidatePath('/')
     revalidatePath('/servidores')
+    revalidatePath('/samu/servidores')
+    revalidatePath('/samu/escala')
     return { success: true, message: 'Servidor atualizado com sucesso (Local)' }
   }
 
@@ -5777,9 +5904,15 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
           await supabase.from('monthly_rosters').update({ section_id: finalSectionId }).eq('nurse_id', id)
       }
   }
+
+  if (syncScalePermissionUnitId) {
+    await ensureScalePermissionRecord(id, syncScalePermissionUnitId)
+  }
   
   revalidatePath('/')
   revalidatePath('/servidores')
+  revalidatePath('/samu/servidores')
+  revalidatePath('/samu/escala')
   return { success: true, message: 'Servidor atualizado com sucesso' }
 }
 
