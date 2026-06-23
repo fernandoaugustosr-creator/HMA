@@ -13,15 +13,13 @@ interface NurseCreationModalProps {
   defaultRole?: string
   defaultSectionId?: string
   defaultUnitId?: string
-  forcedUnitId?: string
-  scopeLabel?: string
   selectedMonth?: number
   selectedYear?: number
   nurseToEdit?: any
   sections?: any[]
 }
 
-export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId, defaultUnitId, forcedUnitId, scopeLabel, selectedMonth, selectedYear, nurseToEdit, sections = [] }: NurseCreationModalProps) {
+export default function NurseCreationModal({ isOpen, onClose, onSuccess, defaultRole = 'ENFERMEIRO', defaultSectionId, defaultUnitId, selectedMonth, selectedYear, nurseToEdit, sections = [] }: NurseCreationModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [useDefaultPassword, setUseDefaultPassword] = useState(false)
@@ -148,10 +146,6 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     }
     if (defaultUnitId) {
         formData.set('unitId', defaultUnitId)
-    }
-    if (forcedUnitId) {
-        formData.set('unitId', forcedUnitId)
-        formData.set('syncScalePermissionUnitId', forcedUnitId)
     }
     if (selectedMonth !== undefined) {
         formData.set('month', String(selectedMonth + 1))
@@ -319,11 +313,6 @@ ADD COLUMN IF NOT EXISTS name_star BOOLEAN DEFAULT FALSE;
         <h2 className="text-lg font-bold mb-3 text-black border-b pb-2">
             {nurseToEdit ? 'Editar Profissional' : 'Adicionar Novo Profissional'}
         </h2>
-        {scopeLabel && (
-          <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700">
-            Cadastro vinculado ao {scopeLabel}, com acesso automatico a esta escala.
-          </div>
-        )}
         
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-3 text-xs">
