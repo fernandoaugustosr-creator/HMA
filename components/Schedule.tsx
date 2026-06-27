@@ -305,9 +305,8 @@ export default function Schedule({
 
   // Dynamic Column Field State
   const [dynamicField, setDynamicField] = useState<DynamicField>('council')
-  const [displayDynamicField, setDisplayDynamicField] = useState<DynamicField>('council')
+  const [displayDynamicFieldBySection, setDisplayDynamicFieldBySection] = useState<Record<string, DynamicField>>({})
   const [isSetorHidden, setIsSetorHidden] = useState(false)
-  const isDynamicColumnHidden = displayDynamicField === 'hidden'
 
   // Insertion State
   const [isNurseModalOpen, setIsNurseModalOpen] = useState(false)
@@ -478,14 +477,10 @@ export default function Schedule({
       setLoading(false)
   }
 
-  const handleDisplayDynamicFieldChange = async (field: DynamicField) => {
-    setDisplayDynamicField(field)
+  const handleDisplayDynamicFieldChange = async (sectionId: string, field: DynamicField) => {
+    setDisplayDynamicFieldBySection(prev => ({ ...prev, [sectionId]: field }))
     if (typeof window !== 'undefined') {
-      localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`, field)
-    }
-
-    if (isAdmin && !isScheduleReleased) {
-      await handleDynamicFieldChange(field)
+      localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${sectionId}`, field)
     }
   }
 
@@ -768,15 +763,19 @@ export default function Schedule({
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`)
 
-    if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role' || stored === 'hidden') {
-      setDisplayDynamicField(stored as DynamicField)
-      return
+    const nextMap: Record<string, DynamicField> = {}
+    for (const section of data.sections || []) {
+      const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${section.id}`)
+      if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role' || stored === 'hidden') {
+        nextMap[section.id] = stored as DynamicField
+      } else {
+        nextMap[section.id] = dynamicField
+      }
     }
 
-    setDisplayDynamicField(dynamicField)
-  }, [dynamicField, selectedUnitId, selectedMonth, selectedYear])
+    setDisplayDynamicFieldBySection(nextMap)
+  }, [data.sections, dynamicField, selectedUnitId])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -2230,6 +2229,9 @@ export default function Schedule({
   }, [data.roster, selectedMonth, selectedYear]);
 
   const renderGrid = (professionals: Nurse[], section: Section) => {
+    const displayDynamicField = getDisplayDynamicFieldForSection(section.id)
+    const isDynamicColumnHidden = displayDynamicField === 'hidden'
+
     const getFirstShiftDay = (nurseId: string) => {
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -2754,6 +2756,10 @@ export default function Schedule({
     return String(field || '').toUpperCase()
   }, [])
 
+  const getDisplayDynamicFieldForSection = useCallback((sectionId: string) => {
+    return displayDynamicFieldBySection[sectionId] || dynamicField
+  }, [displayDynamicFieldBySection, dynamicField])
+
   const parseCouncilFromCrm = useCallback((value: any) => {
     const raw = String(value ?? '').trim()
     if (!raw) return { type: '', number: '', raw: '' }
@@ -3200,7 +3206,10 @@ export default function Schedule({
                      Nenhum profissional lançado para {MONTHS[selectedMonth]} / {selectedYear} neste setor. Se você já lançou em outro mês, selecione o Mês/Ano no topo.
                    </div>
                  )}
-                 {visibleSections.map((section, index) => (
+                 {visibleSections.map((section, index) => {
+                    const sectionDisplayDynamicField = getDisplayDynamicFieldForSection(section.id)
+                    const isSectionDynamicColumnHidden = sectionDisplayDynamicField === 'hidden'
+                    return (
                     <div key={section.id} className="mb-8 last:mb-0 w-full">
                       <table className="table-fixed border-collapse border border-black text-black text-[8px] print:text-[10px] w-full">
                              <colgroup>
@@ -3208,7 +3217,7 @@ export default function Schedule({
                                 <col className="w-[320px] print:w-[200px]" />
                                 <col className="w-20 print:w-[92px]" />
                                 <col className="w-20 print:w-[66px]" />
-                                <col className="w-16 print:w-[56px]" />
+                                <col className={`w-16 print:w-[56px] ${isSectionDynamicColumnHidden ? 'print:hidden' : ''}`} />
                                 {!isSetorHidden && <col className="w-20 print:w-[78px]" />}
                                 {daysArray.map(d => <col key={d.day} className="w-4 print:w-4" />)}
                                 <col className="w-10 print:w-10" />
@@ -3217,7 +3226,7 @@ export default function Schedule({
                                 {/* Header Row 1: Unit Title - Only for first section */}
                                 {index === 0 && selectedUnitId && (
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold print:font-normal uppercase text-base print:text-[14px] whitespace-nowrap overflow-hidden text-ellipsis">
+                                    <th colSpan={(isSetorHidden ? 4 : 5) + (isSectionDynamicColumnHidden ? 0 : 1) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold print:font-normal uppercase text-base print:text-[14px] whitespace-nowrap overflow-hidden text-ellipsis">
                                         {(() => {
                                           const unit = data.units.find(u => String(u.id) === String(selectedUnitId))
                                           const title = (unit?.title || initialUnitName || '').trim()
@@ -3228,7 +3237,7 @@ export default function Schedule({
                                 )}
                                 {/* Header Row 2: Section Title + Month/Year */}
                                 <tr className="bg-[#1e3a5f] text-white">
-                                    <th colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold print:font-normal uppercase text-base print:text-[15px] relative group whitespace-nowrap overflow-hidden text-ellipsis">
+                                    <th colSpan={(isSetorHidden ? 4 : 5) + (isSectionDynamicColumnHidden ? 0 : 1) + daysInMonth + 1} className="border border-black px-0.5 py-0.5 text-center font-bold print:font-normal uppercase text-base print:text-[15px] relative group whitespace-nowrap overflow-hidden text-ellipsis">
                                         {editingSectionId === section.id ? (
                                           <span className="no-print inline-flex items-center justify-center gap-2 w-full px-2">
                                             <span className="shrink-0">ESCALA</span>
@@ -3362,13 +3371,13 @@ export default function Schedule({
                                 </th>
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[92px] font-bold text-sm print:text-[13px] bg-[#85b1e2]" rowSpan={2}>CATEGORIA</th>
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[66px] font-bold text-sm print:text-[13px] bg-[#85b1e2]" rowSpan={2}>VÍNCULO</th>
-                                <th className={`border border-black px-0.5 py-0.5 text-center w-16 print:w-[56px] font-bold text-sm print:text-[13px] bg-[#85b1e2] ${isDynamicColumnHidden ? 'print:hidden' : ''}`} rowSpan={2}>
+                                <th className={`border border-black px-0.5 py-0.5 text-center w-16 print:w-[56px] font-bold text-sm print:text-[13px] bg-[#85b1e2] ${isSectionDynamicColumnHidden ? 'print:hidden' : ''}`} rowSpan={2}>
                                     <>
                                       <select
-                                        value={displayDynamicField}
-                                        onChange={(e) => handleDisplayDynamicFieldChange(e.target.value as any)}
+                                        value={sectionDisplayDynamicField}
+                                        onChange={(e) => handleDisplayDynamicFieldChange(section.id, e.target.value as DynamicField)}
                                         className="no-print bg-transparent w-full text-center uppercase font-bold outline-none"
-                                        title="Clique para escolher a coluna ou ocultar esta coluna na impressao"
+                                        title="Clique para escolher a coluna desta escala ou ocultar esta coluna na impressao"
                                       >
                                         <option value="council">{detectedCouncilHeaderLabel}</option>
                                         <option value="coren">COREN</option>
@@ -3379,8 +3388,8 @@ export default function Schedule({
                                         <option value="vinculo">VÍNCULO</option>
                                         <option value="hidden">OCULTAR NA IMP.</option>
                                       </select>
-                                      <span className={`uppercase ${isDynamicColumnHidden ? 'hidden' : 'hidden print:block'}`}>
-                                        {(displayDynamicField === 'council' || displayDynamicField === 'crm') ? detectedCouncilHeaderLabel : getDynamicFieldLabel(displayDynamicField)}
+                                      <span className={`uppercase ${isSectionDynamicColumnHidden ? 'hidden' : 'hidden print:block'}`}>
+                                        {(sectionDisplayDynamicField === 'council' || sectionDisplayDynamicField === 'crm') ? detectedCouncilHeaderLabel : getDynamicFieldLabel(sectionDisplayDynamicField)}
                                       </span>
                                     </>
                                 </th>
@@ -3451,7 +3460,7 @@ export default function Schedule({
                                 return (
                                     <tr className="bg-white text-black no-print-background">
                                         <td 
-                                            colSpan={(isSetorHidden ? 5 : 6) + daysInMonth + 1} 
+                                            colSpan={(isSetorHidden ? 4 : 5) + (isSectionDynamicColumnHidden ? 0 : 1) + daysInMonth + 1} 
                                             className="border-x border-black px-1 py-1"
                                         >
                                             <div className="flex flex-col gap-0.5 min-h-[1px]">
@@ -3475,7 +3484,7 @@ export default function Schedule({
                         </tfoot>
                     </table>
                  </div>
-             ))}
+             )})}
              
              {canManageSelectedUnit && (
              <div className="mb-8 p-4 border border-dashed border-gray-400 rounded bg-gray-50 text-center no-print">
