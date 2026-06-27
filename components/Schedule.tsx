@@ -91,6 +91,8 @@ const MONTHS = [
 
 const YEARS = [2024, 2025, 2026, 2027]
 
+type DynamicField = 'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role' | 'hidden'
+
 const ObservationCell = ({ 
   initialValue, 
   onSave,
@@ -302,9 +304,10 @@ export default function Schedule({
   const [copyTargetYear, setCopyTargetYear] = useState(selectedYear)
 
   // Dynamic Column Field State
-  const [dynamicField, setDynamicField] = useState<'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('council')
-  const [displayDynamicField, setDisplayDynamicField] = useState<'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role'>('council')
+  const [dynamicField, setDynamicField] = useState<DynamicField>('council')
+  const [displayDynamicField, setDisplayDynamicField] = useState<DynamicField>('council')
   const [isSetorHidden, setIsSetorHidden] = useState(false)
+  const isDynamicColumnHidden = displayDynamicField === 'hidden'
 
   // Insertion State
   const [isNurseModalOpen, setIsNurseModalOpen] = useState(false)
@@ -457,7 +460,7 @@ export default function Schedule({
       await applyReplicationToTargets(targetsToUpdate)
   }
 
-  const handleDynamicFieldChange = async (field: 'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+  const handleDynamicFieldChange = async (field: DynamicField) => {
       if (isScheduleReleased) return
       setDynamicField(field)
       setLoading(true)
@@ -475,7 +478,7 @@ export default function Schedule({
       setLoading(false)
   }
 
-  const handleDisplayDynamicFieldChange = async (field: 'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+  const handleDisplayDynamicFieldChange = async (field: DynamicField) => {
     setDisplayDynamicField(field)
     if (typeof window !== 'undefined') {
       localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`, field)
@@ -767,8 +770,8 @@ export default function Schedule({
     if (typeof window === 'undefined') return
     const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}`)
 
-    if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role') {
-      setDisplayDynamicField(stored)
+    if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role' || stored === 'hidden') {
+      setDisplayDynamicField(stored as DynamicField)
       return
     }
 
@@ -2490,8 +2493,10 @@ export default function Schedule({
                   )
                 })()}
               </td>
-              <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[8px] uppercase h-5 print:h-5 leading-none overflow-hidden">
-                {canEditSelectedUnit && !isScheduleReleased && displayDynamicField === 'coren' ? (
+              <td className={`border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[8px] uppercase h-5 print:h-5 leading-none overflow-hidden ${isDynamicColumnHidden ? 'print:hidden' : ''}`}>
+                {isDynamicColumnHidden ? (
+                  <span className="text-[9px] text-slate-500 normal-case print:hidden">oculta na impressao</span>
+                ) : canEditSelectedUnit && !isScheduleReleased && displayDynamicField === 'coren' ? (
                   <select
                     value={nurse.coren || ''}
                     onChange={async (e) => {
@@ -2737,7 +2742,7 @@ export default function Schedule({
 
   const canManageSelectedUnit = canEditSelectedUnit && !isScheduleReleased
 
-  const getDynamicFieldLabel = useCallback((field: 'council' | 'coren' | 'crm' | 'phone' | 'cpf' | 'vinculo' | 'role') => {
+  const getDynamicFieldLabel = useCallback((field: DynamicField) => {
     if (field === 'council') return 'CONSELHO'
     if (field === 'coren') return 'COREN'
     if (field === 'crm') return 'CRM'
@@ -2745,6 +2750,7 @@ export default function Schedule({
     if (field === 'phone') return 'TELEFONE'
     if (field === 'role') return 'CARGO'
     if (field === 'vinculo') return 'VÍNCULO'
+    if (field === 'hidden') return 'OCULTA'
     return String(field || '').toUpperCase()
   }, [])
 
@@ -3356,13 +3362,13 @@ export default function Schedule({
                                 </th>
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[92px] font-bold text-sm print:text-[13px] bg-[#85b1e2]" rowSpan={2}>CATEGORIA</th>
                                 <th className="border border-black px-0.5 py-0.5 text-center w-20 print:w-[66px] font-bold text-sm print:text-[13px] bg-[#85b1e2]" rowSpan={2}>VÍNCULO</th>
-                                <th className="border border-black px-0.5 py-0.5 text-center w-16 print:w-[56px] font-bold text-sm print:text-[13px] bg-[#85b1e2]" rowSpan={2}>
+                                <th className={`border border-black px-0.5 py-0.5 text-center w-16 print:w-[56px] font-bold text-sm print:text-[13px] bg-[#85b1e2] ${isDynamicColumnHidden ? 'print:hidden' : ''}`} rowSpan={2}>
                                     <>
                                       <select
                                         value={displayDynamicField}
                                         onChange={(e) => handleDisplayDynamicFieldChange(e.target.value as any)}
                                         className="no-print bg-transparent w-full text-center uppercase font-bold outline-none"
-                                        title="Clique para escolher a coluna (Conselho/COREN/CRM/CPF/Telefone)"
+                                        title="Clique para escolher a coluna ou ocultar esta coluna na impressao"
                                       >
                                         <option value="council">{detectedCouncilHeaderLabel}</option>
                                         <option value="coren">COREN</option>
@@ -3371,8 +3377,9 @@ export default function Schedule({
                                         <option value="phone">TELEFONE</option>
                                         <option value="role">CARGO</option>
                                         <option value="vinculo">VÍNCULO</option>
+                                        <option value="hidden">OCULTAR NA IMP.</option>
                                       </select>
-                                      <span className="hidden print:block uppercase">
+                                      <span className={`uppercase ${isDynamicColumnHidden ? 'hidden' : 'hidden print:block'}`}>
                                         {(displayDynamicField === 'council' || displayDynamicField === 'crm') ? detectedCouncilHeaderLabel : getDynamicFieldLabel(displayDynamicField)}
                                       </span>
                                     </>
