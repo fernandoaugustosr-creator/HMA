@@ -5,7 +5,7 @@ import Image from 'next/image'
 import logoHma from '@/public/logo-hma.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { QRCodeSVG } from 'qrcode.react'
-import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission, getUnitMonthStatuses, getEditableUnits, setRosterNameStar } from '@/app/actions'
+import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission, getUnitMonthStatuses, getEditableUnits, setRosterNameStar, getScheduleSectionDisplayFields, saveScheduleSectionDisplayField } from '@/app/actions'
 import { addUnit, updateUnit, deleteUnit } from '@/app/unit-actions'
 import { Trash2, Plus, Pencil, Save, X, Check, Copy, ArrowDown, Printer, Eraser, UserPlus, ArrowUpCircle, ArrowDownCircle, PlusCircle, EyeOff } from 'lucide-react'
 import { formatRole } from '@/lib/utils'
@@ -482,6 +482,12 @@ export default function Schedule({
     if (typeof window !== 'undefined') {
       localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${sectionId}`, field)
     }
+    if (selectedUnitId) {
+      const res = await saveScheduleSectionDisplayField(selectedUnitId, sectionId, field)
+      if (!res.success) {
+        console.error('Nao foi possivel salvar a configuracao da coluna:', res.message)
+      }
+    }
   }
 
   const handleToggleSetorVisibility = async (isHidden: boolean) => {
@@ -776,6 +782,47 @@ export default function Schedule({
 
     setDisplayDynamicFieldBySection(nextMap)
   }, [data.sections, dynamicField, selectedUnitId])
+
+  useEffect(() => {
+    if (!selectedUnitId) return
+    if (!data.sections || data.sections.length === 0) return
+
+    let cancelled = false
+
+    const loadSavedDisplayFields = async () => {
+      const savedMap = await getScheduleSectionDisplayFields(selectedUnitId)
+      if (cancelled || !savedMap) return
+
+      setDisplayDynamicFieldBySection(prev => {
+        const next = { ...prev }
+        for (const section of data.sections || []) {
+          const savedField = savedMap[section.id]
+          if (
+            savedField === 'council' ||
+            savedField === 'coren' ||
+            savedField === 'crm' ||
+            savedField === 'phone' ||
+            savedField === 'cpf' ||
+            savedField === 'vinculo' ||
+            savedField === 'role' ||
+            savedField === 'hidden'
+          ) {
+            next[section.id] = savedField as DynamicField
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`enf_hma_display_field_${selectedUnitId}_${section.id}`, savedField)
+            }
+          }
+        }
+        return next
+      })
+    }
+
+    loadSavedDisplayFields()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedUnitId, data.sections])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

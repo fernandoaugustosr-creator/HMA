@@ -1026,6 +1026,97 @@ export async function toggleSameDaySwapSetting() {
   }
 }
 
+export async function getScheduleSectionDisplayFields(unitId: string): Promise<Record<string, string>> {
+  const safeUnitId = String(unitId || '').trim()
+  if (!safeUnitId) return {}
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const store = (db.settings?.schedule_section_display_fields || {}) as Record<string, string>
+    const prefix = `${safeUnitId}_`
+    return Object.entries(store).reduce((acc, [key, value]) => {
+      if (key.startsWith(prefix) && value) {
+        acc[key.slice(prefix.length)] = String(value)
+      }
+      return acc
+    }, {} as Record<string, string>)
+  }
+
+  try {
+    const supabase = createClient()
+    const prefix = `schedule_section_display_field_${safeUnitId}_`
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .like('key', `${prefix}%`)
+
+    if (error) {
+      console.error('Error fetching section display fields:', error)
+      return {}
+    }
+
+    return (data || []).reduce((acc: Record<string, string>, row: any) => {
+      const key = String(row?.key || '')
+      const value = String(row?.value || '')
+      if (!key.startsWith(prefix) || !value) return acc
+      acc[key.slice(prefix.length)] = value
+      return acc
+    }, {})
+  } catch (e) {
+    console.error('Unexpected error fetching section display fields:', e)
+    return {}
+  }
+}
+
+export async function saveScheduleSectionDisplayField(unitId: string, sectionId: string, field: string) {
+  const safeUnitId = String(unitId || '').trim()
+  const safeSectionId = String(sectionId || '').trim()
+  const safeField = String(field || '').trim().toLowerCase()
+
+  if (!safeUnitId || !safeSectionId || !safeField) {
+    return { success: false, message: 'Configuração inválida.' }
+  }
+
+  const session = cookies().get('session_user')
+  if (!session) return { success: false, message: 'Sessão inválida.' }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.settings = db.settings || {}
+    const store = (db.settings.schedule_section_display_fields || {}) as Record<string, string>
+    store[`${safeUnitId}_${safeSectionId}`] = safeField
+    db.settings.schedule_section_display_fields = store
+    writeDb(db)
+    return { success: true }
+  }
+
+  try {
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert(
+        {
+          key: `schedule_section_display_field_${safeUnitId}_${safeSectionId}`,
+          value: safeField,
+          bool_value: true
+        },
+        { onConflict: 'key' }
+      )
+
+    if (error) {
+      console.error('Error saving section display field:', error)
+      return { success: false, message: 'Erro ao salvar configuração da escala.' }
+    }
+
+    revalidatePath('/escala')
+    revalidatePath('/')
+    return { success: true }
+  } catch (e) {
+    console.error('Unexpected error saving section display field:', e)
+    return { success: false, message: 'Erro inesperado ao salvar configuração da escala.' }
+  }
+}
+
 export const getNurses = cache(async () => {
   if (isLocalMode()) {
     const db = readDb()
