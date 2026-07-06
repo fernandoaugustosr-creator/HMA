@@ -480,10 +480,10 @@ export default function Schedule({
   const handleDisplayDynamicFieldChange = async (sectionId: string, field: DynamicField) => {
     setDisplayDynamicFieldBySection(prev => ({ ...prev, [sectionId]: field }))
     if (typeof window !== 'undefined') {
-      localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${sectionId}`, field)
+      localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${sectionId}`, field)
     }
     if (selectedUnitId) {
-      const res = await saveScheduleSectionDisplayField(selectedUnitId, sectionId, field)
+      const res = await saveScheduleSectionDisplayField(selectedUnitId, sectionId, selectedMonth + 1, selectedYear, field)
       if (!res.success) {
         console.error('Nao foi possivel salvar a configuracao da coluna:', res.message)
       }
@@ -772,7 +772,7 @@ export default function Schedule({
 
     const nextMap: Record<string, DynamicField> = {}
     for (const section of data.sections || []) {
-      const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${section.id}`)
+      const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${section.id}`)
       if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role' || stored === 'hidden') {
         nextMap[section.id] = stored as DynamicField
       } else {
@@ -781,7 +781,7 @@ export default function Schedule({
     }
 
     setDisplayDynamicFieldBySection(nextMap)
-  }, [data.sections, dynamicField, selectedUnitId])
+  }, [data.sections, dynamicField, selectedUnitId, selectedMonth, selectedYear])
 
   useEffect(() => {
     if (!selectedUnitId) return
@@ -790,7 +790,7 @@ export default function Schedule({
     let cancelled = false
 
     const loadSavedDisplayFields = async () => {
-      const savedMap = await getScheduleSectionDisplayFields(selectedUnitId)
+      const savedMap = await getScheduleSectionDisplayFields(selectedUnitId, selectedMonth + 1, selectedYear)
       if (cancelled || !savedMap) return
 
       setDisplayDynamicFieldBySection(prev => {
@@ -809,7 +809,7 @@ export default function Schedule({
           ) {
             next[section.id] = savedField as DynamicField
             if (typeof window !== 'undefined') {
-              localStorage.setItem(`enf_hma_display_field_${selectedUnitId}_${section.id}`, savedField)
+              localStorage.setItem(`enf_hma_display_field_${selectedUnitId}_${selectedMonth}_${selectedYear}_${section.id}`, savedField)
             }
           }
         }
@@ -822,7 +822,7 @@ export default function Schedule({
     return () => {
       cancelled = true
     }
-  }, [selectedUnitId, data.sections])
+  }, [selectedUnitId, data.sections, selectedMonth, selectedYear])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

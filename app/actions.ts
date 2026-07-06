@@ -1026,14 +1026,16 @@ export async function toggleSameDaySwapSetting() {
   }
 }
 
-export async function getScheduleSectionDisplayFields(unitId: string): Promise<Record<string, string>> {
+export async function getScheduleSectionDisplayFields(unitId: string, month: number, year: number): Promise<Record<string, string>> {
   const safeUnitId = String(unitId || '').trim()
-  if (!safeUnitId) return {}
+  const safeMonth = Number(month)
+  const safeYear = Number(year)
+  if (!safeUnitId || !safeMonth || !safeYear) return {}
 
   if (isLocalMode()) {
     const db = readDb()
     const store = (db.settings?.schedule_section_display_fields || {}) as Record<string, string>
-    const prefix = `${safeUnitId}_`
+    const prefix = `${safeUnitId}_${safeMonth}_${safeYear}_`
     return Object.entries(store).reduce((acc, [key, value]) => {
       if (key.startsWith(prefix) && value) {
         acc[key.slice(prefix.length)] = String(value)
@@ -1044,7 +1046,7 @@ export async function getScheduleSectionDisplayFields(unitId: string): Promise<R
 
   try {
     const supabase = createClient()
-    const prefix = `schedule_section_display_field_${safeUnitId}_`
+    const prefix = `schedule_section_display_field_${safeUnitId}_${safeMonth}_${safeYear}_`
     const { data, error } = await supabase
       .from('app_settings')
       .select('key, value')
@@ -1068,12 +1070,14 @@ export async function getScheduleSectionDisplayFields(unitId: string): Promise<R
   }
 }
 
-export async function saveScheduleSectionDisplayField(unitId: string, sectionId: string, field: string) {
+export async function saveScheduleSectionDisplayField(unitId: string, sectionId: string, month: number, year: number, field: string) {
   const safeUnitId = String(unitId || '').trim()
   const safeSectionId = String(sectionId || '').trim()
+  const safeMonth = Number(month)
+  const safeYear = Number(year)
   const safeField = String(field || '').trim().toLowerCase()
 
-  if (!safeUnitId || !safeSectionId || !safeField) {
+  if (!safeUnitId || !safeSectionId || !safeMonth || !safeYear || !safeField) {
     return { success: false, message: 'Configuração inválida.' }
   }
 
@@ -1084,7 +1088,7 @@ export async function saveScheduleSectionDisplayField(unitId: string, sectionId:
     const db = readDb()
     db.settings = db.settings || {}
     const store = (db.settings.schedule_section_display_fields || {}) as Record<string, string>
-    store[`${safeUnitId}_${safeSectionId}`] = safeField
+    store[`${safeUnitId}_${safeMonth}_${safeYear}_${safeSectionId}`] = safeField
     db.settings.schedule_section_display_fields = store
     writeDb(db)
     return { success: true }
@@ -1096,7 +1100,7 @@ export async function saveScheduleSectionDisplayField(unitId: string, sectionId:
       .from('app_settings')
       .upsert(
         {
-          key: `schedule_section_display_field_${safeUnitId}_${safeSectionId}`,
+          key: `schedule_section_display_field_${safeUnitId}_${safeMonth}_${safeYear}_${safeSectionId}`,
           value: safeField,
           bool_value: true
         },
