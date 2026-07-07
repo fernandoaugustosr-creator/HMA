@@ -478,14 +478,19 @@ export default function Schedule({
   }
 
   const handleDisplayDynamicFieldChange = async (sectionId: string, field: DynamicField) => {
+    if (isScheduleReleased) return
     setDisplayDynamicFieldBySection(prev => ({ ...prev, [sectionId]: field }))
     if (typeof window !== 'undefined') {
       localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${sectionId}`, field)
     }
     if (selectedUnitId) {
-      const res = await saveScheduleSectionDisplayField(selectedUnitId, sectionId, selectedMonth + 1, selectedYear, field)
-      if (!res.success) {
-        console.error('Nao foi possivel salvar a configuracao da coluna:', res.message)
+      try {
+        const res = await saveScheduleSectionDisplayField(selectedUnitId, sectionId, selectedMonth + 1, selectedYear, field)
+        if (!res.success) {
+          alert(res.message || 'Erro ao salvar a configuração da coluna.')
+        }
+      } catch {
+        alert('Erro ao salvar a configuração da coluna.')
       }
     }
   }
@@ -770,17 +775,24 @@ export default function Schedule({
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const nextMap: Record<string, DynamicField> = {}
-    for (const section of data.sections || []) {
-      const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${section.id}`)
-      if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role' || stored === 'hidden') {
-        nextMap[section.id] = stored as DynamicField
-      } else {
-        nextMap[section.id] = dynamicField
-      }
-    }
+    setDisplayDynamicFieldBySection(prev => {
+      const nextMap: Record<string, DynamicField> = {}
+      for (const section of data.sections || []) {
+        const prevValue = prev?.[section.id]
+        if (prevValue) {
+          nextMap[section.id] = prevValue
+          continue
+        }
 
-    setDisplayDynamicFieldBySection(nextMap)
+        const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${section.id}`)
+        if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role' || stored === 'hidden') {
+          nextMap[section.id] = stored as DynamicField
+        } else {
+          nextMap[section.id] = dynamicField
+        }
+      }
+      return nextMap
+    })
   }, [data.sections, dynamicField, selectedUnitId, selectedMonth, selectedYear])
 
   useEffect(() => {
@@ -809,7 +821,7 @@ export default function Schedule({
           ) {
             next[section.id] = savedField as DynamicField
             if (typeof window !== 'undefined') {
-              localStorage.setItem(`enf_hma_display_field_${selectedUnitId}_${selectedMonth}_${selectedYear}_${section.id}`, savedField)
+              localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${section.id}`, savedField)
             }
           }
         }
@@ -2968,7 +2980,7 @@ export default function Schedule({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded leading-none text-sm print:w-24 print:h-24 print:text-[40px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-4 print:border-black print:-mt-3 print:mb-2">
+          <div className="print-header-number flex items-center justify-center w-10 h-10 bg-gray-800 text-white font-bold rounded leading-none text-sm print:w-[72px] print:h-[72px] print:text-[30px] print:rounded-xl print:bg-[#1f2933] print:text-white print:border-4 print:border-black print:mt-1 print:mb-2">
             {((selectedUnitId && unitNumbersMap[selectedUnitId]) || unitNumber || headerPage) || '1'}
           </div>
           {isAdmin && !printOnly && !isScheduleReleased && (
@@ -3426,7 +3438,7 @@ export default function Schedule({
                                         className="no-print bg-transparent w-full text-center uppercase font-bold outline-none"
                                         title="Clique para escolher a coluna desta escala ou ocultar esta coluna na impressao"
                                       >
-                                        <option value="council">{detectedCouncilHeaderLabel}</option>
+                                        <option value="council">AUTO ({detectedCouncilHeaderLabel})</option>
                                         <option value="coren">COREN</option>
                                         <option value="crm">CRM</option>
                                         <option value="cpf">CPF</option>
@@ -3436,7 +3448,11 @@ export default function Schedule({
                                         <option value="hidden">OCULTAR NA IMP.</option>
                                       </select>
                                       <span className={`uppercase ${isSectionDynamicColumnHidden ? 'hidden' : 'hidden print:block'}`}>
-                                        {(sectionDisplayDynamicField === 'council' || sectionDisplayDynamicField === 'crm') ? detectedCouncilHeaderLabel : getDynamicFieldLabel(sectionDisplayDynamicField)}
+                                        {sectionDisplayDynamicField === 'council'
+                                          ? detectedCouncilHeaderLabel
+                                          : sectionDisplayDynamicField === 'crm'
+                                            ? 'CRM'
+                                            : getDynamicFieldLabel(sectionDisplayDynamicField)}
                                       </span>
                                     </>
                                 </th>
