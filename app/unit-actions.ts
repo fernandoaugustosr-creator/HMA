@@ -1,10 +1,17 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { readDb, writeDb, isLocalMode } from '@/lib/local-db'
-import { createClient } from '@/lib/supabase'
+import { readDbForPortal, writeDbForPortal, isLocalModeForPortal } from '@/lib/local-db'
+import { createClientForPortal } from '@/lib/supabase'
 import { randomUUID } from 'crypto'
 import { checkAdmin } from '@/app/actions'
+import { getCurrentPortalConfig } from '@/lib/portal-session'
+
+const getPortalKey = () => getCurrentPortalConfig().key
+const readDb = () => readDbForPortal(getPortalKey())
+const writeDb = (data: any) => writeDbForPortal(data, getPortalKey())
+const isLocalMode = () => isLocalModeForPortal(getPortalKey())
+const createClient = () => createClientForPortal(getPortalKey())
 
 export async function addUnit(title: string, unitNumber?: string) {
   try {

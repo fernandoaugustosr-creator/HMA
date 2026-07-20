@@ -1,13 +1,15 @@
 import { getUserDashboardData, getNurses } from '@/app/actions'
 import { getSwapRequests } from '@/app/swap-actions'
 import { redirect } from 'next/navigation'
+import { getCurrentPortalConfig } from '@/lib/portal-session'
 import SwapSection from '@/components/SwapSection'
 
 export default async function TrocasPage() {
+  const portalConfig = getCurrentPortalConfig()
   const data = await getUserDashboardData()
 
   if (!data) {
-    redirect('/login')
+    redirect(portalConfig.loginPath)
   }
 
   const { shifts, user } = data

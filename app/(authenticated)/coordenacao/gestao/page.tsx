@@ -1,14 +1,16 @@
 import { getSections, getNurses, checkAdmin } from '@/app/actions'
 import GestaoClient from './GestaoClient'
 import { redirect } from 'next/navigation'
+import { getCurrentPortalConfig } from '@/lib/portal-session'
 
 export const dynamic = 'force-dynamic'
 
 export default async function GestaoPage() {
+  const portalConfig = getCurrentPortalConfig()
   try {
     await checkAdmin()
   } catch (e) {
-    redirect('/')
+    redirect(portalConfig.loginPath)
   }
 
   const [sections, nurses] = await Promise.all([getSections(), getNurses()])

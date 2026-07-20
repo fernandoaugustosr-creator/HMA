@@ -12,7 +12,7 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-export default function PublicScheduleList() {
+export default function PublicScheduleList({ portalVariant = 'hma' }: { portalVariant?: 'hma' | 'samu' }) {
   const searchParams = useSearchParams()
   const [releases, setReleases] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -284,6 +284,7 @@ export default function PublicScheduleList() {
                 initialUnitId={selectedRelease.unit_id}
                 initialUnitName={selectedRelease.unit_name}
                 onLoaded={handleScheduleLoaded}
+                portalVariant={portalVariant}
               />
             </div>
           </div>

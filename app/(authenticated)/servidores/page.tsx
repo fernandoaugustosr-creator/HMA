@@ -1,17 +1,17 @@
 import { getNurses, getSections } from '@/app/actions'
 import NurseList from '@/components/NurseList'
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { getCurrentPortalConfig, getCurrentSessionUser } from '@/lib/portal-session'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ServidoresPage() {
-  const session = cookies().get('session_user')
-  const user = session ? JSON.parse(session.value) : null
+  const portalConfig = getCurrentPortalConfig()
+  const user = getCurrentSessionUser()
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
 
   if (!isAdmin) {
-    redirect('/')
+    redirect(portalConfig.loginPath)
   }
 
   const [nurses, sections] = await Promise.all([getNurses(), getSections()])

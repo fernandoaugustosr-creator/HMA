@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import Image from 'next/image'
+import type { StaticImageData } from 'next/image'
 import logoHma from '@/public/logo-hma.png'
+import logoSamu from '@/public/logo_samu.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { QRCodeSVG } from 'qrcode.react'
 import { getMonthlyScheduleData, deleteNurse, reassignNurse, assignNurseToSection, assignNurseToRoster, removeNurseFromRoster, removeRosterEntry, copyMonthlyRoster, addSection, updateSection, deleteSection, saveShifts, updateRosterObservation, updateRosterSector, updateRosterCoren, uploadLogo, uploadCityLogo, getMonthlyNote, saveMonthlyNote, releaseSchedule, unreleaseSchedule, updateScheduleFooter, updateScheduleDynamicField, updateScheduleSetorVisibility, Section, Unit, resetSectionOrder, clearMonthlySchedule, clearSectionRoster, clearAllUnitRosters, updateRosterListOrders, saveUnitNumber, getAllUnitNumbers, getAllNurses, updateRosterOrder, exportMonthlySchedule, importMonthlySchedule, clearAllDatabaseShifts, getScalePermissions, getMyScalePermissionUnitIds, addScalePermission, addScalePermissions, removeScalePermission, getUnitMonthStatuses, getEditableUnits, setRosterNameStar, getScheduleSectionDisplayFields, saveScheduleSectionDisplayField } from '@/app/actions'
@@ -221,7 +223,8 @@ export default function Schedule({
     initialYear,
     initialUnitId,
     initialUnitName,
-    onLoaded
+    onLoaded,
+    portalVariant = 'hma',
 }: { 
     isAdmin?: boolean, 
     printOnly?: boolean,
@@ -229,8 +232,26 @@ export default function Schedule({
     initialYear?: number,
     initialUnitId?: string,
     initialUnitName?: string,
-    onLoaded?: () => void
+    onLoaded?: () => void,
+    portalVariant?: 'hma' | 'samu'
 }) {
+  const portalBrand = portalVariant === 'samu'
+    ? {
+        secondaryLogo: logoSamu as StaticImageData,
+        secondaryLogoAlt: 'SAMU',
+        headerLine1Default: 'Prefeitura Municipal de Açailândia',
+        headerLine2Default: 'Secretaria Municipal de Saúde / SEMUS',
+        headerLine3Default: 'SAMU AÇAILÂNDIA-MA',
+        headerStoragePrefix: 'enf_samu',
+      }
+    : {
+        secondaryLogo: logoHma as StaticImageData,
+        secondaryLogoAlt: 'HMA',
+        headerLine1Default: 'Prefeitura Municipal de Açailândia',
+        headerLine2Default: 'Secretaria Municipal de Saúde / SEMUS',
+        headerLine3Default: 'Hospital Municipal de Açailândia - HMA',
+        headerStoragePrefix: 'enf_hma',
+      }
   const [currentDate] = useState(new Date())
   const [selectedMonth, setSelectedMonth] = useState(() => {
     if (initialMonth !== undefined) return initialMonth
@@ -326,9 +347,9 @@ export default function Schedule({
   // SQL Instruction Modal
   const [showSqlModal, setShowSqlModal] = useState(false)
   const [sqlModalType, setSqlModalType] = useState<'V11' | 'V14' | 'V15' | 'V16' | 'V17'>('V11')
-  const [headerLine1, setHeaderLine1] = useState('Prefeitura Municipal de Açailândia')
-  const [headerLine2, setHeaderLine2] = useState('Secretaria Municipal de Saúde / SEMUS')
-  const [headerLine3, setHeaderLine3] = useState('Hospital Municipal de Açailândia - HMA')
+  const [headerLine1, setHeaderLine1] = useState(portalBrand.headerLine1Default)
+  const [headerLine2, setHeaderLine2] = useState(portalBrand.headerLine2Default)
+  const [headerLine3, setHeaderLine3] = useState(portalBrand.headerLine3Default)
   const [headerPage, setHeaderPage] = useState('1')
   const [isEditingHeader, setIsEditingHeader] = useState(false)
   const [unitNumber, setUnitNumber] = useState<string>('')
@@ -762,15 +783,15 @@ export default function Schedule({
   }, [data.units, selectedUnitId, isAdmin, myScalePermissionUnitIds])
   
   useEffect(() => {
-    const l1 = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_line_1') : null
-    const l2 = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_line_2') : null
-    const l3 = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_line_3') : null
-    const pg = typeof window !== 'undefined' ? localStorage.getItem('enf_hma_header_page') : null
+    const l1 = typeof window !== 'undefined' ? localStorage.getItem(`${portalBrand.headerStoragePrefix}_header_line_1`) : null
+    const l2 = typeof window !== 'undefined' ? localStorage.getItem(`${portalBrand.headerStoragePrefix}_header_line_2`) : null
+    const l3 = typeof window !== 'undefined' ? localStorage.getItem(`${portalBrand.headerStoragePrefix}_header_line_3`) : null
+    const pg = typeof window !== 'undefined' ? localStorage.getItem(`${portalBrand.headerStoragePrefix}_header_page`) : null
     if (l1) setHeaderLine1(l1)
     if (l2) setHeaderLine2(l2)
     if (l3) setHeaderLine3(l3)
     if (pg) setHeaderPage(pg)
-  }, [])
+  }, [portalBrand.headerStoragePrefix])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -871,10 +892,10 @@ export default function Schedule({
   const handleSaveHeader = () => {
     if (isScheduleReleased) return
     if (typeof window !== 'undefined') {
-      localStorage.setItem('enf_hma_header_line_1', headerLine1)
-      localStorage.setItem('enf_hma_header_line_2', headerLine2)
-      localStorage.setItem('enf_hma_header_line_3', headerLine3)
-      localStorage.setItem('enf_hma_header_page', headerPage)
+      localStorage.setItem(`${portalBrand.headerStoragePrefix}_header_line_1`, headerLine1)
+      localStorage.setItem(`${portalBrand.headerStoragePrefix}_header_line_2`, headerLine2)
+      localStorage.setItem(`${portalBrand.headerStoragePrefix}_header_line_3`, headerLine3)
+      localStorage.setItem(`${portalBrand.headerStoragePrefix}_header_page`, headerPage)
     }
     setIsEditingHeader(false)
   }
@@ -2956,8 +2977,8 @@ export default function Schedule({
             priority
           />
           <Image 
-            src={logoHma} 
-            alt="HMA" 
+            src={portalBrand.secondaryLogo} 
+            alt={portalBrand.secondaryLogoAlt} 
             width={140} 
             height={48} 
             className="h-12 w-auto object-contain print:h-16" 

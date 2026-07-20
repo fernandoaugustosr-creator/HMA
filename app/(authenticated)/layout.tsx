@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import Sidebar from '@/components/Sidebar'
 import SupabaseStatus from '@/components/SupabaseStatus'
 import { redirect } from 'next/navigation'
-import { getEditableUnits } from '@/app/actions'
+import { getEditableUnits, logout } from '@/app/actions'
 
 export default async function AuthenticatedLayout({
   children,
@@ -22,7 +22,7 @@ export default async function AuthenticatedLayout({
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-white">
       <div className="no-print md:h-screen md:sticky md:top-0">
-        <Sidebar user={user} initialEditableUnits={editableUnits || []} />
+        <Sidebar user={user} initialEditableUnits={editableUnits || []} basePath="" portalLabel="HMA" logoutAction={logout} />
       </div>
       <main className="flex-1 flex flex-col w-full overflow-x-hidden">
         <div className="flex-1 w-full relative bg-gradient-to-b from-slate-50 via-indigo-50/40 to-slate-100">

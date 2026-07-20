@@ -1,16 +1,21 @@
 'use server'
 
-import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase'
-import { readDb, writeDb, isLocalMode } from '@/lib/local-db'
+import { createClientForPortal } from '@/lib/supabase'
+import { readDbForPortal, writeDbForPortal, isLocalModeForPortal } from '@/lib/local-db'
 import { getSameDaySwapEnabled } from '@/app/actions'
+import { getCurrentPortalConfig, getCurrentSessionUser } from '@/lib/portal-session'
 import { randomUUID } from 'crypto'
 
+const getPortalKey = () => getCurrentPortalConfig().key
+const createClient = () => createClientForPortal(getPortalKey())
+const readDb = () => readDbForPortal(getPortalKey())
+const writeDb = (data: any) => writeDbForPortal(data, getPortalKey())
+const isLocalMode = () => isLocalModeForPortal(getPortalKey())
+
 export async function getSwapRequests() {
-  const session = cookies().get('session_user')
-  if (!session) return []
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return []
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
@@ -60,8 +65,8 @@ export async function getSwapRequests() {
 }
 
 export async function getAvailableShiftsForNurse(nurseId: string) {
-  const session = cookies().get('session_user')
-  if (!session) return []
+  const user = getCurrentSessionUser()
+  if (!user) return []
   
   const today = new Date()
   const cutoffDate = new Date(today)
@@ -99,9 +104,8 @@ export async function getAvailableShiftsForNurse(nurseId: string) {
 }
 
 export async function createSwapRequest(formData: FormData) {
-  const session = cookies().get('session_user')
-  if (!session) return { success: false, message: 'Não autorizado' }
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return { success: false, message: 'Não autorizado' }
 
   const requested_id = formData.get('requested_id') as string
   const requester_shift_date = formData.get('requester_shift_date') as string
@@ -238,9 +242,8 @@ export async function createSwapRequest(formData: FormData) {
 }
 
 export async function approveSwapRequest(swapId: string) {
-  const session = cookies().get('session_user')
-  if (!session) return { success: false, message: 'Não autorizado' }
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return { success: false, message: 'Não autorizado' }
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
@@ -332,9 +335,8 @@ export async function approveSwapRequest(swapId: string) {
 }
 
 export async function rejectSwapRequest(swapId: string) {
-  const session = cookies().get('session_user')
-  if (!session) return { success: false, message: 'Não autorizado' }
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return { success: false, message: 'Não autorizado' }
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
@@ -375,9 +377,8 @@ export async function rejectSwapRequest(swapId: string) {
 }
 
 export async function cancelSwapRequest(id: string) {
-  const session = cookies().get('session_user')
-  if (!session) return { success: false, message: 'Não autorizado' }
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return { success: false, message: 'Não autorizado' }
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
@@ -424,9 +425,8 @@ export async function cancelSwapRequest(id: string) {
 }
 
 export async function deleteAllHistorySwaps() {
-  const session = cookies().get('session_user')
-  if (!session) return { success: false, message: 'Não autorizado' }
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return { success: false, message: 'Não autorizado' }
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   if (!isAdmin) {

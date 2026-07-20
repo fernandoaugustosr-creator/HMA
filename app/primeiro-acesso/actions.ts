@@ -1,8 +1,15 @@
 'use server'
 
-import { createClient } from '@/lib/supabase'
-import { isLocalMode, readDb, writeDb } from '@/lib/local-db'
+import { createClientForPortal } from '@/lib/supabase'
+import { isLocalModeForPortal, readDbForPortal, writeDbForPortal } from '@/lib/local-db'
 import { revalidatePath } from 'next/cache'
+import { getCurrentPortalConfig } from '@/lib/portal-session'
+
+const getPortalKey = () => getCurrentPortalConfig().key
+const createClient = () => createClientForPortal(getPortalKey())
+const isLocalMode = () => isLocalModeForPortal(getPortalKey())
+const readDb = () => readDbForPortal(getPortalKey())
+const writeDb = (data: any) => writeDbForPortal(data, getPortalKey())
 
 export async function checkCpf(prevState: any, formData: FormData) {
   const rawCpf = formData.get('cpf') as string

@@ -1,6 +1,7 @@
 import { getUserDashboardData, getCoordinationRequests, getTimeOffRequests, getRecentAbsences, getAbsenceSettings, getBirthdaysForMonth } from '@/app/actions'
 import { getSwapRequests } from '@/app/swap-actions'
 import { redirect } from 'next/navigation'
+import { getCurrentPortalConfig } from '@/lib/portal-session'
 import MyShifts from './MyShifts'
 import AdminDailySchedule from './AdminDailySchedule'
 import PendingSwapsList from './PendingSwapsList'
@@ -12,6 +13,7 @@ export default async function DashboardPage({
 }: {
   searchParams?: { month?: string; year?: string; birthdayMonth?: string }
 }) {
+  const portalConfig = getCurrentPortalConfig()
   const [data, recentAbsences, absenceSettings, swaps] = await Promise.all([
     getUserDashboardData(),
     getRecentAbsences(),
@@ -20,7 +22,7 @@ export default async function DashboardPage({
   ])
 
   if (!data) {
-    redirect('/')
+    redirect(portalConfig.loginPath)
   }
 
   const { shifts, timeOffs, user } = data

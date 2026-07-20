@@ -1,0 +1,101 @@
+{
+  "nurses": [
+    {
+      "id": "5fef0c2a-7f40-4d5c-a112-4b5b0f90b6df",
+      "name": "Vitor Pachelle Lima Abreu",
+      "cpf": "00401354202",
+      "password": "2026samu",
+      "coren": "529569",
+      "vinculo": null,
+      "role": "COORDENACAO_GERAL",
+      "section_id": null,
+      "unit_id": null,
+      "created_at": "2026-07-13T00:00:00.000Z",
+      "crm": "",
+      "phone": "",
+      "birth_date": "1992-07-25",
+      "certidao_negativa_date": "",
+      "coren_expiry_date": ""
+    }
+  ],
+  "shifts": [],
+  "time_off_requests": [],
+  "schedule_sections": [
+    {
+      "id": "2bc1c1ff-2ac6-4005-a189-db43758242e6",
+      "title": "MÉDICOS",
+      "position": 1,
+      "created_at": "2026-07-20T22:17:14.844Z"
+    }
+  ],
+  "units": [
+    {
+      "id": "19eed1bb-47bc-4ded-bb6d-2f82ec7c7073",
+      "title": "MÉDICOS"
+    },
+    {
+      "id": "9078eb10-fe05-45ce-a52d-c4caa039a4e9",
+      "title": "CONDUTORES "
+    }
+  ],
+  "monthly_rosters": [
+    {
+      "id": "c07f9ce1-2125-4e9d-b2bc-51053c504f7b",
+      "nurse_id": "5fef0c2a-7f40-4d5c-a112-4b5b0f90b6df",
+      "section_id": "2bc1c1ff-2ac6-4005-a189-db43758242e6",
+      "unit_id": "19eed1bb-47bc-4ded-bb6d-2f82ec7c7073",
+      "month": 7,
+      "year": 2026,
+      "observation": "",
+      "created_at": "2026-07-20T22:17:28.739Z",
+      "list_order": 10001,
+      "sector": ""
+    }
+  ],
+  "monthly_notes": [],
+  "monthly_schedule_metadata": [
+    {
+      "id": "7d806cec-2881-4edc-a8fa-6379835dc046",
+      "month": 7,
+      "year": 2026,
+      "unit_id": "19eed1bb-47bc-4ded-bb6d-2f82ec7c7073",
+      "is_released": true,
+      "released_at": "2026-07-20T22:18:03.161Z",
+      "updated_at": "2026-07-20T22:18:03.161Z",
+      "released_by": "5fef0c2a-7f40-4d5c-a112-4b5b0f90b6df",
+      "release_signature": "LIBERADO ELETRONICAMENTE POR VITOR PACHELLE LIMA ABREU COREN 529569"
+    }
+  ],
+  "shift_swaps": [],
+  "users": [],
+  "audit_logs": [],
+  "settings": {
+    "unit_numbers": {
+      "19eed1bb-47bc-4ded-bb6d-2f82ec7c7073": "1",
+      "9078eb10-fe05-45ce-a52d-c4caa039a4e9": "02"
+    }
+  },
+  "login_logs": [
+    {
+      "id": "027663e6-a81c-41e4-a3a9-33adaf867cef",
+      "user_id": "5fef0c2a-7f40-4d5c-a112-4b5b0f90b6df",
+      "user_name": "Vitor Pachelle Lima Abreu",
+      "user_role": "COORDENACAO_GERAL",
+      "login_at": "2026-07-20T21:58:35.916Z"
+    },
+    {
+      "id": "15e78bcb-9ce5-44e9-ae30-b56bde88cd25",
+      "user_id": "5fef0c2a-7f40-4d5c-a112-4b5b0f90b6df",
+      "user_name": "Vitor Pachelle Lima Abreu",
+      "user_role": "COORDENACAO_GERAL",
+      "login_at": "2026-07-20T21:58:37.827Z"
+    },
+    {
+      "id": "f98a803a-74e4-4b31-af7d-ace92bf7d2fb",
+      "user_id": "5fef0c2a-7f40-4d5c-a112-4b5b0f90b6df",
+      "user_name": "Vitor Pachelle Lima Abreu",
+      "user_role": "COORDENACAO_GERAL",
+      "login_at": "2026-07-20T22:07:13.125Z"
+    }
+  ]
+}

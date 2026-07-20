@@ -1,13 +1,12 @@
 import { getTimeOffRequests, getNurses } from '@/app/actions'
 import RequestForm from './RequestForm'
 import RequestList from './RequestList'
-import { cookies } from 'next/headers'
+import { getCurrentSessionUser } from '@/lib/portal-session'
 
 export const dynamic = 'force-dynamic'
 
 export default async function FolgasPage() {
-  const session = cookies().get('session_user')
-  const user = session ? JSON.parse(session.value) : null
+  const user = getCurrentSessionUser()
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
 
   const [requests, nurses] = await Promise.all([

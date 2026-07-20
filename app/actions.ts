@@ -3,10 +3,17 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase'
-import { readDb, writeDb, isLocalMode } from '@/lib/local-db'
+import { createClientForPortal } from '@/lib/supabase'
+import { readDbForPortal, writeDbForPortal, isLocalModeForPortal } from '@/lib/local-db'
+import { getCurrentPortalConfig, getCurrentSessionCookie, getCurrentSessionUser, HMA_PORTAL, SAMU_PORTAL, type PortalConfig, type PortalKey } from '@/lib/portal-session'
 import { randomUUID } from 'crypto'
 import { cache } from 'react'
+
+const resolvePortalKey = (portalKey?: PortalKey): PortalKey => portalKey || getCurrentPortalConfig().key
+const createClient = (portalKey?: PortalKey) => createClientForPortal(resolvePortalKey(portalKey))
+const readDb = (portalKey?: PortalKey) => readDbForPortal(resolvePortalKey(portalKey))
+const writeDb = (data: any, portalKey?: PortalKey) => writeDbForPortal(data, resolvePortalKey(portalKey))
+const isLocalMode = (portalKey?: PortalKey) => isLocalModeForPortal(resolvePortalKey(portalKey))
 
 // Types
 export interface Section {
@@ -294,8 +301,8 @@ export async function deleteCouncilType(type: string) {
 }
 
 export async function getBirthdaysForMonth(month: number) {
-  const session = cookies().get('session_user')
-  if (!session) return []
+  const user = getCurrentSessionUser()
+  if (!user) return []
 
   const parseBirthDate = (raw: any) => {
     if (!raw) return null
@@ -515,9 +522,8 @@ export async function getAllUnitNumbers(): Promise<Record<string, string>> {
 }
 
 export async function checkAdmin() {
-  const session = cookies().get('session_user')
-  if (!session) throw new Error('Unauthorized')
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) throw new Error('Unauthorized')
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
   if (!isAdmin) throw new Error('Forbidden: Admin access required')
   return user
@@ -528,9 +534,8 @@ export async function checkAdmin() {
  * for a given unit.
  */
 export async function checkScaleEditor(unitId?: string | null) {
-  const session = cookies().get('session_user')
-  if (!session) throw new Error('Unauthorized')
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) throw new Error('Unauthorized')
   
   // ADMIN, COORDENACAO_GERAL e COORDENADOR têm acesso de edição de escala
   if (user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.role === 'COORDENADOR' || user.cpf === '02170025367') {
@@ -583,23 +588,22 @@ async function getUnitIdByRosterId(rosterId: string): Promise<string | null> {
 }
 
 export async function checkUser() {
-  const session = cookies().get('session_user')
-  if (!session) throw new Error('Unauthorized')
-  return JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) throw new Error('Unauthorized')
+  return user
 }
 
 export async function checkGeneralAdmin() {
-  const session = cookies().get('session_user')
-  if (!session) throw new Error('Unauthorized')
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) throw new Error('Unauthorized')
   const isDirector = user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
   if (!isDirector) throw new Error('Forbidden: General admin access required')
   return user
 }
 
-export async function logLogin(userId: string, userName: string, userRole: string) {
-  if (isLocalMode()) {
-    const db = readDb()
+export async function logLogin(userId: string, userName: string, userRole: string, portalKey?: PortalKey) {
+  if (isLocalMode(portalKey)) {
+    const db = readDb(portalKey)
     db.login_logs = db.login_logs || []
     db.login_logs.push({
       id: randomUUID(),
@@ -608,10 +612,10 @@ export async function logLogin(userId: string, userName: string, userRole: strin
       user_role: userRole,
       login_at: new Date().toISOString()
     })
-    writeDb(db)
+    writeDb(db, portalKey)
     return { success: true }
   }
-  const supabase = createClient()
+  const supabase = createClient(portalKey)
   const { error } = await supabase.from('login_logs').insert({
     user_id: userId,
     user_name: userName,
@@ -944,9 +948,8 @@ export async function getLoginLogs() {
 }
 
 export async function logCurrentSessionLogin() {
-  const session = cookies().get('session_user')
-  if (!session) return { success: false, message: 'Sessão inválida' }
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return { success: false, message: 'Sessão inválida' }
   return await logLogin(user.id, user.name, user.role)
 }
 
@@ -977,9 +980,8 @@ export async function getSameDaySwapEnabled(): Promise<boolean> {
 }
 
 export async function toggleSameDaySwapSetting() {
-  const session = cookies().get('session_user')
-  if (!session) return { success: false, message: 'Não autorizado' }
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return { success: false, message: 'Não autorizado' }
 
   const isDirector = user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
   if (!isDirector) {
@@ -1081,7 +1083,7 @@ export async function saveScheduleSectionDisplayField(unitId: string, sectionId:
     return { success: false, message: 'Configuração inválida.' }
   }
 
-  const session = cookies().get('session_user')
+  const session = getCurrentSessionCookie()
   if (!session) return { success: false, message: 'Sessão inválida.' }
 
   if (isLocalMode()) {
@@ -1960,14 +1962,14 @@ export async function createGeneralRequest(prevState: any, formData: FormData) {
   return { success: true, message: 'Solicitação enviada com sucesso' }
 }
 
-export async function login(prevState: any, formData: FormData) {
+async function loginWithPortal(prevState: any, formData: FormData, portalConfig: PortalConfig = HMA_PORTAL) {
   const rawCpf = formData.get('cpf') as string
   const password = formData.get('password') as string
   const selectedProfileId = formData.get('selectedProfileId') as string
 
   // Handling profile selection from multi-profile step
   if (selectedProfileId) {
-      const selectionCookie = cookies().get('login_selection_options')
+      const selectionCookie = cookies().get(portalConfig.selectionCookieName)
       if (!selectionCookie) {
           return { message: 'Sessão de seleção expirada. Tente novamente.' }
       }
@@ -1991,14 +1993,14 @@ export async function login(prevState: any, formData: FormData) {
       let nurse = null
       let sectionTitle = ''
 
-      if (isLocalMode()) {
-          const db = readDb()
+      if (isLocalMode(portalConfig.key)) {
+          const db = readDb(portalConfig.key)
           nurse = db.nurses.find(n => n.id === selectedProfileId)
           if (nurse && nurse.section_id) {
              sectionTitle = db.schedule_sections.find(s => s.id === nurse.section_id)?.title || ''
           }
       } else {
-          const supabase = createClient()
+          const supabase = createClient(portalConfig.key)
           const { data } = await supabase.from('nurses').select('*').eq('id', selectedProfileId).single()
           nurse = data
           if (nurse && nurse.section_id) {
@@ -2010,39 +2012,41 @@ export async function login(prevState: any, formData: FormData) {
       if (!nurse) return { message: 'Erro ao recuperar perfil selecionado.' }
 
       // Clear selection cookie
-      cookies().delete('login_selection_options')
+      try { cookies().delete(portalConfig.selectionCookieName) } catch {}
+      try { cookies().delete({ name: portalConfig.selectionCookieName, path: portalConfig.basePath || '/' }) } catch {}
 
       // Proceed to set session cookie
       const mustChangePassword = nurse.password === '123456'
       
       // Auto-promote to COORDENACAO_GERAL if specific CPF (legacy check)
       const cleanCpfForRole = (nurse.cpf || '').replace(/\D/g, '')
-      if (cleanCpfForRole === '02170025367' && nurse.role !== 'COORDENACAO_GERAL' && !isLocalMode()) {
-        const supabase = createClient()
+      if (cleanCpfForRole === '02170025367' && nurse.role !== 'COORDENACAO_GERAL' && !isLocalMode(portalConfig.key)) {
+        const supabase = createClient(portalConfig.key)
         await supabase.from('nurses').update({ role: 'COORDENACAO_GERAL' }).eq('id', nurse.id)
         nurse.role = 'COORDENACAO_GERAL'
       }
 
-      cookies().set('session_user', JSON.stringify({ 
+      cookies().set(portalConfig.sessionCookieName, JSON.stringify({ 
         name: nurse.name, 
         id: nurse.id, 
         cpf: nurse.cpf,
         role: nurse.role,
         section_id: nurse.section_id,
         section_title: sectionTitle,
-        mustChangePassword
+        mustChangePassword,
+        portal: portalConfig.key
       }), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: 60 * 60 * 24 * 7,
-        path: '/',
+        path: portalConfig.basePath || '/',
       })
-      await logLogin(nurse.id, nurse.name, nurse.role)
+      await logLogin(nurse.id, nurse.name, nurse.role, portalConfig.key)
 
       if (mustChangePassword) {
-        redirect('/alterar-senha')
+        redirect(portalConfig.changePasswordPath)
       }
-      redirect('/')
+      redirect(portalConfig.dashboardPath)
   }
 
   if (!rawCpf || !password) {
@@ -2051,8 +2055,8 @@ export async function login(prevState: any, formData: FormData) {
 
   const cleanCpf = rawCpf.replace(/\D/g, '')
 
-  if (isLocalMode()) {
-    const db = readDb()
+  if (isLocalMode(portalConfig.key)) {
+    const db = readDb(portalConfig.key)
     // Find ALL nurses with this CPF
     const nurses = db.nurses.filter(n => n.cpf.replace(/\D/g, '') === cleanCpf)
 
@@ -2077,11 +2081,11 @@ export async function login(prevState: any, formData: FormData) {
             unit_id: n.unit_id
         }))
         
-        cookies().set('login_selection_options', JSON.stringify(options), {
+        cookies().set(portalConfig.selectionCookieName, JSON.stringify(options), {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             maxAge: 60 * 5, // 5 minutes
-            path: '/',
+            path: portalConfig.basePath || '/',
         })
         
         return { 
@@ -2099,29 +2103,30 @@ export async function login(prevState: any, formData: FormData) {
        sectionTitle = db.schedule_sections.find(s => s.id === nurse.section_id)?.title || ''
     }
 
-    cookies().set('session_user', JSON.stringify({ 
+    cookies().set(portalConfig.sessionCookieName, JSON.stringify({ 
       name: nurse.name, 
       id: nurse.id, 
       cpf: nurse.cpf,
       role: nurse.role,
       section_id: nurse.section_id,
       section_title: sectionTitle,
-      mustChangePassword
+      mustChangePassword,
+      portal: portalConfig.key
     }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 7,
-      path: '/',
+      path: portalConfig.basePath || '/',
     })
-    await logLogin(nurse.id, nurse.name, nurse.role)
+    await logLogin(nurse.id, nurse.name, nurse.role, portalConfig.key)
 
     if (mustChangePassword) {
-      redirect('/alterar-senha')
+      redirect(portalConfig.changePasswordPath)
     }
-    redirect('/')
+    redirect(portalConfig.dashboardPath)
   }
 
-  const supabase = createClient()
+  const supabase = createClient(portalConfig.key)
   
   // Strategy: Fetch from all 3 potential CPF formats and merge
   const queries = [
@@ -2167,11 +2172,11 @@ export async function login(prevState: any, formData: FormData) {
           unit_id: n.unit_id
       }))
       
-      cookies().set('login_selection_options', JSON.stringify(options), {
+      cookies().set(portalConfig.selectionCookieName, JSON.stringify(options), {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           maxAge: 60 * 5, // 5 minutes
-          path: '/',
+          path: portalConfig.basePath || '/',
       })
       
       return { 
@@ -2196,27 +2201,36 @@ export async function login(prevState: any, formData: FormData) {
     nurse.role = 'COORDENACAO_GERAL'
   }
 
-  cookies().set('session_user', JSON.stringify({ 
+  cookies().set(portalConfig.sessionCookieName, JSON.stringify({ 
     name: nurse.name, 
     id: nurse.id, 
     cpf: nurse.cpf,
     role: nurse.role,
     section_id: nurse.section_id,
     section_title: sectionTitle,
-    mustChangePassword
+    mustChangePassword,
+    portal: portalConfig.key
   }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 24 * 7,
-    path: '/',
+    path: portalConfig.basePath || '/',
   })
-  await logLogin(nurse.id, nurse.name, nurse.role)
+  await logLogin(nurse.id, nurse.name, nurse.role, portalConfig.key)
 
   if (mustChangePassword) {
-    redirect('/alterar-senha')
+    redirect(portalConfig.changePasswordPath)
   }
 
-  redirect('/')
+  redirect(portalConfig.dashboardPath)
+}
+
+export async function login(prevState: any, formData: FormData) {
+  return loginWithPortal(prevState, formData, HMA_PORTAL)
+}
+
+export async function loginSamu(prevState: any, formData: FormData) {
+  return loginWithPortal(prevState, formData, SAMU_PORTAL)
 }
 
 export async function getMonthlyManagementReport(month: number, year: number) {
@@ -2682,9 +2696,8 @@ export async function saveMonthlyNote(month: number, year: number, note: string,
 }
 
 export async function getUserDashboardData() {
-  const session = cookies().get('session_user')
-  if (!session) return null
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return null
   const userId = user.id
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
@@ -3450,8 +3463,8 @@ export async function releaseSchedule(month: number, year: number, unitId: strin
       } else {
         await checkAdmin()
       }
-      const session = cookies().get('session_user')
-      const user = JSON.parse(session!.value)
+      const user = getCurrentSessionUser()
+      if (!user) throw new Error('Sessão inválida')
       
       // Get current nurse info for the signature
       let nurseName = user.name
@@ -5366,7 +5379,18 @@ export async function logout() {
   const c = cookies()
   try { c.delete('session_user') } catch {}
   try { c.delete({ name: 'session_user', path: '/' }) } catch {}
-  redirect('/login')
+  try { c.delete('login_selection_options') } catch {}
+  try { c.delete({ name: 'login_selection_options', path: '/' }) } catch {}
+  redirect('/')
+}
+
+export async function logoutSamu() {
+  const c = cookies()
+  try { c.delete('session_user_samu') } catch {}
+  try { c.delete({ name: 'session_user_samu', path: '/samu' }) } catch {}
+  try { c.delete('login_selection_options_samu') } catch {}
+  try { c.delete({ name: 'login_selection_options_samu', path: '/samu' }) } catch {}
+  redirect('/samu')
 }
 
 export async function requestTimeOff(prevState: any, formData: FormData) {
@@ -5378,9 +5402,8 @@ export async function requestTimeOff(prevState: any, formData: FormData) {
   if (!startDate) return { message: 'Data da folga é obrigatória' }
   if (!endDate) endDate = startDate
 
-  const session = cookies().get('session_user')
-  if (!session) return { success: false, message: 'Usuário não autenticado' }
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return { success: false, message: 'Usuário não autenticado' }
   const isAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
 
   const targetNurseId = (isAdmin && nurseIdFromForm) ? nurseIdFromForm : user.id
@@ -5940,9 +5963,8 @@ export async function assignNurseToSection(nurseId: string, sectionId: string, u
 }
 
 export async function getTimeOffRequests() {
-  const session = cookies().get('session_user')
-  if (!session) return []
-  const user = JSON.parse(session.value)
+  const user = getCurrentSessionUser()
+  if (!user) return []
   const isAdmin = user.role === 'ADMIN' || user.cpf === '02170025367'
 
   if (isLocalMode()) {
@@ -6365,7 +6387,8 @@ export async function changePassword(prevState: any, formData: FormData) {
     return { success: false, message: 'A senha deve ter pelo menos 6 caracteres' }
   }
 
-  const sessionCookie = cookies().get('session_user')
+  const portalConfig = getCurrentPortalConfig()
+  const sessionCookie = getCurrentSessionCookie()
   if (!sessionCookie) {
     return { success: false, message: 'Sessão inválida' }
   }
@@ -6387,12 +6410,12 @@ export async function changePassword(prevState: any, formData: FormData) {
 
   // Update session cookie to remove mustChangePassword
   const updatedUser = { ...user, mustChangePassword: false }
-  cookies().set('session_user', JSON.stringify(updatedUser), {
+  cookies().set(portalConfig.sessionCookieName, JSON.stringify(updatedUser), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 24 * 7,
-    path: '/',
+    path: portalConfig.basePath || '/',
   })
 
-  redirect('/')
+  redirect(portalConfig.dashboardPath)
 }
