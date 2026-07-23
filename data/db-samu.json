@@ -511,23 +511,6 @@
       "coren_expiry_date": ""
     },
     {
-      "id": "ebc5c45d-8a0a-43fa-bb7b-362ba27f1e44",
-      "name": "Fernando Augusto Silva Rodrigues",
-      "cpf": "02170025367",
-      "password": "123456",
-      "coren": "",
-      "vinculo": "",
-      "role": "DIRETOR",
-      "section_id": null,
-      "unit_id": null,
-      "created_at": "2026-07-20T22:42:49.859Z",
-      "crm": "",
-      "phone": "",
-      "birth_date": "",
-      "certidao_negativa_date": "",
-      "coren_expiry_date": ""
-    },
-    {
       "id": "2ac2da61-3ade-4124-82a5-3f1be302bb07",
       "name": "Francisco Jose Pompeu da Silva",
       "cpf": "36360180359",
