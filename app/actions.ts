@@ -3360,9 +3360,10 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         units: units || [],
         releases: releasesData || []
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Critical error in getMonthlyScheduleData:', error)
-    // Return empty structure to prevent page crash
+    const errMsg = error?.message || String(error) || 'Erro desconhecido'
+    const isConnError = errMsg.includes('fetch') || errMsg.includes('ENOTFOUND') || errMsg.includes('DNS') || errMsg.includes('network') || errMsg.includes('ECONNREFUSED') || errMsg.includes('timeout') || errMsg.includes('Socket')
     return {
       nurses: [],
       roster: [],
@@ -3371,8 +3372,16 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       absences: [],
       sections: [],
       units: [],
-      releases: []
-    }
+      releases: [],
+      __error: {
+        message: errMsg,
+        isConnectionError: isConnError,
+        timestamp: new Date().toISOString(),
+        hint: isConnError
+          ? 'Falha de conexao com o Supabase. Verifique sua internet ou o painel do Supabase (projeto pode estar pausado ou excluido).'
+          : 'Erro ao carregar dados. Verifique o console para mais detalhes.'
+      }
+    } as any
   }
 }
 

@@ -270,6 +270,7 @@ export default function Schedule({
   const [isFetchingAllNurses, setIsFetchingAllNurses] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [connError, setConnError] = useState<{ message: string; hint: string; isConnectionError: boolean; timestamp: string } | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId || '')
   const [hasHydrated, setHasHydrated] = useState(false)
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false)
@@ -499,14 +500,14 @@ export default function Schedule({
   }
 
   const handleDisplayDynamicFieldChange = async (sectionId: string, field: DynamicField) => {
-    if (isScheduleReleased) return
-    setDisplayDynamicFieldBySection(prev => ({ ...prev, [sectionId]: field }))
+    const normalizedField: DynamicField = field === 'hidden' ? 'hidden' : 'council'
+    setDisplayDynamicFieldBySection(prev => ({ ...prev, [sectionId]: normalizedField }))
     if (typeof window !== 'undefined') {
-      localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${sectionId}`, field)
+      localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${sectionId}`, normalizedField)
     }
     if (selectedUnitId) {
       try {
-        const res = await saveScheduleSectionDisplayField(selectedUnitId, sectionId, selectedMonth + 1, selectedYear, field)
+        const res = await saveScheduleSectionDisplayField(selectedUnitId, sectionId, selectedMonth + 1, selectedYear, normalizedField)
         if (!res.success) {
           alert(res.message || 'Erro ao salvar a configuração da coluna.')
         }
@@ -634,23 +635,36 @@ export default function Schedule({
 
         try {
           const result = await getMonthlyScheduleData(selectedMonth + 1, selectedYear, selectedUnitId)
-          const newData = result as ScheduleData
-          
-          scheduleCache.current[cacheKey] = newData
-          setData(newData)
+          const newData = result as any
 
-          const meta = newData.releases && newData.releases.length > 0 ? newData.releases[0] : null
-          if (meta) {
-              setFooterText(meta.footer_text || '')
-              setDynamicField((meta.dynamic_field as any) || 'council')
-              setIsSetorHidden(!!meta.is_setor_hidden)
+          if (newData.__error) {
+            setConnError(newData.__error)
+            setData({ nurses: [], roster: [], shifts: [], timeOffs: [], absences: [], sections: [], units: [], releases: [] })
           } else {
-              setFooterText('')
-              setDynamicField('council')
-              setIsSetorHidden(false)
+            setConnError(null)
+            setData(newData)
+            scheduleCache.current[cacheKey] = newData
+
+            const meta = newData.releases && newData.releases.length > 0 ? newData.releases[0] : null
+            if (meta) {
+                setFooterText(meta.footer_text || '')
+                setDynamicField(meta.dynamic_field === 'hidden' ? 'hidden' : 'council')
+                setIsSetorHidden(!!meta.is_setor_hidden)
+            } else {
+                setFooterText('')
+                setDynamicField('council')
+                setIsSetorHidden(false)
+            }
+            return
           }
         } catch (error) {
           console.error('Error fetching schedule:', error)
+          setConnError({
+            message: error instanceof Error ? error.message : String(error),
+            isConnectionError: true,
+            timestamp: new Date().toISOString(),
+            hint: 'Falha ao carregar dados. Verifique sua conexão.'
+          })
         } finally {
           if (showLoading) setLoading(false)
         }
@@ -806,10 +820,10 @@ export default function Schedule({
         }
 
         const stored = localStorage.getItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${section.id}`)
-        if (stored === 'council' || stored === 'coren' || stored === 'crm' || stored === 'phone' || stored === 'cpf' || stored === 'vinculo' || stored === 'role' || stored === 'hidden') {
-          nextMap[section.id] = stored as DynamicField
+        if (stored === 'hidden') {
+          nextMap[section.id] = 'hidden'
         } else {
-          nextMap[section.id] = dynamicField
+          nextMap[section.id] = 'council'
         }
       }
       return nextMap
@@ -830,19 +844,11 @@ export default function Schedule({
         const next = { ...prev }
         for (const section of data.sections || []) {
           const savedField = savedMap[section.id]
-          if (
-            savedField === 'council' ||
-            savedField === 'coren' ||
-            savedField === 'crm' ||
-            savedField === 'phone' ||
-            savedField === 'cpf' ||
-            savedField === 'vinculo' ||
-            savedField === 'role' ||
-            savedField === 'hidden'
-          ) {
-            next[section.id] = savedField as DynamicField
+          if (savedField) {
+            const normalized: DynamicField = savedField === 'hidden' ? 'hidden' : 'council'
+            next[section.id] = normalized
             if (typeof window !== 'undefined') {
-              localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${section.id}`, savedField)
+              localStorage.setItem(`enf_hma_display_field_${selectedUnitId || 'ALL'}_${selectedMonth}_${selectedYear}_${section.id}`, normalized)
             }
           }
         }
@@ -2607,11 +2613,14 @@ export default function Schedule({
                 ) : (
                   (() => {
                     // Try to find the nurse in the base data.nurses to get the most up-to-date fields
-                    const baseNurse = data.nurses.find(n => n.id === nurse.id)
+                    const baseNurse = data.nurses.find(n => String(n.id) === String((nurse as any).id || '') || String(n.id) === String((nurse as any).nurse_id || ''))
                     const source = baseNurse || nurse
                     
                     if (displayDynamicField === 'council') {
-                      return <span className="print:text-[8px] whitespace-nowrap font-bold print:font-normal">{getCouncilNumber(source)}</span>
+                      const parsedCrm = parseCouncilFromCrm((source as any)?.crm)
+                      const doctorCouncilValue = (parsedCrm.number || parsedCrm.raw || String((source as any)?.crm || (source as any)?.coren || '').trim() || '-')
+                      const councilValue = isDoctorRole((source as any)?.role) ? doctorCouncilValue : getCouncilNumber(source)
+                      return <span className="print:text-[8px] whitespace-nowrap font-bold print:font-normal">{councilValue}</span>
                     }
 
                     if (displayDynamicField === 'crm') {
@@ -2837,7 +2846,8 @@ export default function Schedule({
   }, [])
 
   const getDisplayDynamicFieldForSection = useCallback((sectionId: string) => {
-    return displayDynamicFieldBySection[sectionId] || dynamicField
+    const current = displayDynamicFieldBySection[sectionId] || dynamicField
+    return current === 'hidden' ? 'hidden' : 'council'
   }, [displayDynamicFieldBySection, dynamicField])
 
   const parseCouncilFromCrm = useCallback((value: any) => {
@@ -2860,19 +2870,36 @@ export default function Schedule({
     return { type: '', number: normalized, raw: normalized }
   }, [])
 
+  const isDoctorRole = useCallback((role: unknown) => {
+    const normalized = String(role || '').toUpperCase().trim()
+    return normalized.includes('MEDICO') || normalized.includes('MÉDICO')
+  }, [])
+
   const getCouncilType = useCallback((n: any) => {
     const coren = String(n?.coren ?? '').trim()
-    if (coren) return 'COREN'
     const parsed = parseCouncilFromCrm(n?.crm)
+
+    if (isDoctorRole(n?.role)) {
+      if (parsed.type) return parsed.type
+      if (parsed.raw || coren) return 'CRM'
+      return ''
+    }
+
+    if (coren) return 'COREN'
     return parsed.type || ''
-  }, [parseCouncilFromCrm])
+  }, [isDoctorRole, parseCouncilFromCrm])
 
   const getCouncilNumber = useCallback((n: any) => {
     const coren = String(n?.coren ?? '').trim()
-    if (coren) return coren
     const parsed = parseCouncilFromCrm(n?.crm)
+
+    if (isDoctorRole(n?.role)) {
+      return (parsed.number || parsed.raw || coren || '').trim() || '-'
+    }
+
+    if (coren) return coren
     return (parsed.number || parsed.raw || '').trim() || '-'
-  }, [parseCouncilFromCrm])
+  }, [isDoctorRole, parseCouncilFromCrm])
 
   const detectedCouncilHeaderLabel = useMemo(() => {
     const types = new Set<string>()
@@ -2966,6 +2993,46 @@ export default function Schedule({
 
   return (
     <div className="min-h-screen bg-white">
+      {connError && !printOnly && (
+        <div className="no-print w-full border-b-4 px-4 py-3 text-white shadow-md"
+             style={{ backgroundColor: connError.isConnectionError ? '#b91c1c' : '#7c2d12' }}>
+          <div className="max-w-[1400px] mx-auto flex items-start gap-3">
+            <div className="mt-0.5 flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-lg leading-tight">
+                {connError.isConnectionError
+                  ? 'ERRO DE CONEXÃO COM O BANCO DE DADOS'
+                  : 'ERRO AO CARREGAR A ESCALA'}
+              </h3>
+              <p className="text-sm opacity-95 mt-1">{connError.hint}</p>
+              <p className="text-xs opacity-80 mt-1 font-mono">Detalhe: {connError.message.substring(0, 180)}</p>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <button
+                  onClick={() => { clearCache(); fetchData(true, true); }}
+                  className="bg-white/20 hover:bg-white/30 border border-white/40 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors"
+                >🔄 Tentar Novamente</button>
+                {connError.isConnectionError && (
+                  <a
+                    href="https://supabase.com/dashboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-white/20 hover:bg-white/30 border border-white/40 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors inline-block"
+                  >🛠 Abrir Painel do Supabase</a>
+                )}
+              </div>
+              <p className="text-[10px] opacity-70 mt-1">
+                Hora: {new Date(connError.timestamp).toLocaleString('pt-BR')}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="w-full flex items-center justify-between mb-2 px-2 print:mb-4 print:px-0">
         <div className="flex items-center gap-4">
           <Image 
@@ -3457,16 +3524,10 @@ export default function Schedule({
                                         value={sectionDisplayDynamicField}
                                         onChange={(e) => handleDisplayDynamicFieldChange(section.id, e.target.value as DynamicField)}
                                         className="no-print bg-transparent w-full text-center uppercase font-bold outline-none"
-                                        title="Clique para escolher a coluna desta escala ou ocultar esta coluna na impressao"
+                                        title="Clique para manter automatico ou ocultar toda a coluna na impressao"
                                       >
                                         <option value="council">AUTO ({detectedCouncilHeaderLabel})</option>
-                                        <option value="coren">COREN</option>
-                                        <option value="crm">CRM</option>
-                                        <option value="cpf">CPF</option>
-                                        <option value="phone">TELEFONE</option>
-                                        <option value="role">CARGO</option>
-                                        <option value="vinculo">VÍNCULO</option>
-                                        <option value="hidden">OCULTAR NA IMP.</option>
+                                        <option value="hidden">OCULTAR COLUNA</option>
                                       </select>
                                       <span className={`uppercase ${isSectionDynamicColumnHidden ? 'hidden' : 'hidden print:block'}`}>
                                         {sectionDisplayDynamicField === 'council'
@@ -4042,34 +4103,6 @@ export default function Schedule({
                             Dia (D)
                         </button>
                         <button 
-                            onClick={() => handleSaveShifts('night', 'daily', false)}
-                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
-                            title="Preencher todo o mês com Noite (N)"
-                        >
-                            Noite (N)
-                        </button>
-                        <button 
-                            onClick={() => handleSaveShifts('morning', 'daily', false)}
-                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
-                            title="Preencher todo o mês com Manhã (M)"
-                        >
-                            Manhã (M)
-                        </button>
-                        <button 
-                            onClick={() => handleSaveShifts('afternoon', 'daily', false)}
-                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
-                            title="Preencher todo o mês com Tarde (T)"
-                        >
-                            Tarde (T)
-                        </button>
-                        <button 
-                            onClick={() => handleSaveShifts('mt', 'daily', false)}
-                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
-                            title="Preencher todo o mês com MT"
-                        >
-                            MT
-                        </button>
-                        <button 
                             onClick={() => handleSaveShifts('morning', 'mon_fri', false)}
                             className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
                             title="Preencher Segunda a Sexta - Manhã (M)"
@@ -4083,12 +4116,12 @@ export default function Schedule({
                         >
                             Seg a Sexta T
                         </button>
-                        <button 
-                            onClick={() => handleSaveShifts('dn', 'daily', false)}
-                            className="flex-1 min-w-[60px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
-                            title="Preencher todo o mês com DN"
+                        <button
+                            onClick={() => handleSaveShifts('dn', 'dn_off3', false)}
+                            className="flex-1 min-w-[80px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="DN Folga 3 (Repetir até o fim do mês)"
                         >
-                            DN
+                            DN Folga 3
                         </button>
                         <button 
                             onClick={() => handleSaveShifts('dn', 'dn_off4', false)}
@@ -4103,6 +4136,13 @@ export default function Schedule({
                             title="D Folga 2 (Repetir até o fim do mês)"
                         >
                             D Folga 2
+                        </button>
+                        <button
+                            onClick={() => handleSaveShifts('day', '12x36', false)}
+                            className="flex-1 min-w-[90px] py-2 px-2 rounded border bg-white text-black border-gray-300 hover:bg-blue-600 hover:text-white transition-colors font-bold"
+                            title="D Dia Sim / Dia Não (Repetir até o fim do mês)"
+                        >
+                            D 12x36
                         </button>
                         <button 
                             onClick={() => handleSaveShifts('nd', 'nd_off4', false)}
