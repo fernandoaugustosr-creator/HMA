@@ -327,10 +327,8 @@ export default function Sidebar({
       <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-full ${isSamuPortal ? 'bg-white/95' : 'bg-white/85'} backdrop-blur border-r border-slate-200/70 sticky top-0 z-40 pointer-events-auto transition-all duration-300`}>
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
             {!isCollapsed && (
-              <div className="flex items-center gap-3">
-                <Image src={logoPrefeitura} alt="Logo Prefeitura" width={180} height={50} className="h-10 w-auto object-contain" />
+              <div className="flex items-center">
                 <Image src={portalLogo} alt={`${portalLabel} Logo`} width={120} height={40} className="h-10 w-auto object-contain" />
-                {showPortalBadge && <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-widest ${theme.badge}`}>{portalLabel}</span>}
               </div>
             )}
             <button 
