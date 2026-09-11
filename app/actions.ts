@@ -6,8 +6,16 @@ import { revalidatePath } from 'next/cache'
 import { createClientForPortal } from '@/lib/supabase'
 import { readDbForPortal, writeDbForPortal, isLocalModeForPortal } from '@/lib/local-db'
 import { getCurrentPortalConfig, getCurrentSessionCookie, getCurrentSessionUser, HMA_PORTAL, SAMU_PORTAL, type PortalConfig, type PortalKey } from '@/lib/portal-session'
+import type { MenuAccessLevel, SidebarMenuItemId } from '@/lib/sidebar-menu-items'
+import { SIDEBAR_MENU_ITEMS, DEFAULT_REPORTS_PERMISSIONS } from '@/lib/sidebar-menu-items'
+import { SESSION_IDLE_TIMEOUT_SECONDS } from '@/lib/constants'
 import { randomUUID } from 'crypto'
 import { cache } from 'react'
+import {
+  checkIsReleasedLocal, checkIsReleasedSupabase,
+  checkIsAnyReleasedSupabase, checkAnyReleasedLocal,
+  validateClearMonthly, appendAuditLocal, appendAuditSupabase
+} from '@/app/security'
 
 const resolvePortalKey = (portalKey?: PortalKey): PortalKey => portalKey || getCurrentPortalConfig().key
 const createClient = (portalKey?: PortalKey) => createClientForPortal(resolvePortalKey(portalKey))
@@ -16,24 +24,26 @@ const writeDb = (data: any, portalKey?: PortalKey) => writeDbForPortal(data, res
 const isLocalMode = (portalKey?: PortalKey) => isLocalModeForPortal(resolvePortalKey(portalKey))
 
 // Types
-export interface Section {
+interface Section {
   id: string
   title: string
   position: number
   sector_title?: string
 }
 
-export interface Unit {
+interface Unit {
   id: string
   title: string
 }
 
-export interface ScalePermission {
+interface ScalePermission {
   id: string
   nurse_id: string
   unit_id: string
   created_at?: string
 }
+
+export type { Section, Unit, ScalePermission }
 
 export async function getSystemRoles() {
   const defaultRoles = [
@@ -1123,31 +1133,298 @@ export async function saveScheduleSectionDisplayField(unitId: string, sectionId:
   }
 }
 
-export const getNurses = cache(async () => {
+let _nursesColumnsCache: Set<string> | null = null
+async function _detectNursesColumns(supabase: any): Promise<Set<string>> {
+  if (_nursesColumnsCache) return _nursesColumnsCache
+  try {
+    const allCols = [
+      'id','name','name_star','cpf','role','coren','crm','vinculo','section_id','unit_id',
+      'birth_date','certidao_negativa_date','coren_expiry_date','phone','address','house_number','city','email',
+      'password','sector','created_at'
+    ]
+    const existing = new Set<string>()
+    for (const col of allCols) {
+      try {
+        const { error } = await supabase.from('nurses').select(col).limit(1)
+        if (!error) existing.add(col)
+      } catch {}
+    }
+    _nursesColumnsCache = existing
+    return existing
+  } catch {
+    _nursesColumnsCache = new Set(['id','name','cpf','role','coren','crm','vinculo','section_id','unit_id','birth_date','certidao_negativa_date','coren_expiry_date','password','created_at'])
+    return _nursesColumnsCache
+  }
+}
+
+const _tableColumnsCache: Record<string, Set<string>> = {}
+async function _detectColumns(supabase: any, tableName: string, columnsToCheck: string[]): Promise<Set<string>> {
+  const key = String(tableName || '').trim()
+  if (key && _tableColumnsCache[key]) return _tableColumnsCache[key]
+  const set = new Set<string>()
+  try {
+    for (const col of columnsToCheck) {
+      try {
+        const { error } = await supabase.from(tableName).select(col).limit(1)
+        if (!error) set.add(col)
+      } catch {}
+    }
+  } catch {}
+  if (key) _tableColumnsCache[key] = set
+  return set
+}
+
+const _formatPtDate = (iso: any) => {
+  if (!iso) return ''
+  const s = String(iso).slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return String(iso || '')
+  const [y, m, d] = s.split('-')
+  return `${d}/${m}/${y}`
+}
+
+const NURSE_VINCULO_TYPES = [
+  'CONCURSO',
+  'CONTRATADO',
+  'SELETIVO',
+  'CESSÃO',
+  'TERCEIRIZADO',
+  'ESCALA DESCOBERTA',
+  'ESTÁGIO',
+  'OUTRO',
+]
+
+interface NurseVinculo {
+  id: string
+  nurse_id: string
+  tipo_vinculo: string
+  data_admissao: string
+  data_baixa: string
+  created_at: string
+  updated_at: string
+}
+
+async function _ensureNurseVinculosTable(supabase: any): Promise<{ ok: boolean; error?: any }> {
+  try {
+    const { data, error } = await supabase.raw(`
+      CREATE TABLE IF NOT EXISTS nurse_vinculos (
+        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        nurse_id UUID NOT NULL REFERENCES nurses(id) ON DELETE CASCADE,
+        tipo_vinculo TEXT NOT NULL DEFAULT '',
+        data_admissao TEXT DEFAULT '',
+        data_baixa TEXT DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_nurse_vinculos_nurse_id ON nurse_vinculos(nurse_id);
+    `)
+    if (error && !String(error.message || '').includes('already exists') && !String(error.message || '').includes('42P07')) {
+      return { ok: false, error }
+    }
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e }
+  }
+}
+
+export async function migrateNurseVinculosTable() {
+  try { await checkAdmin() } catch { return { ok: false, message: 'Acesso negado.' } }
   if (isLocalMode()) {
     const db = readDb()
-    return db.nurses.sort((a, b) => a.name.localeCompare(b.name))
+    if (!db.nurse_vinculos) db.nurse_vinculos = []
+    writeDb(db)
+    return { ok: true }
   }
-  
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from('nurses')
-    .select('id,name,name_star,cpf,role,coren,crm,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,created_at')
-    .range(0, 9999)
-    .order('name')
+  const sb = createClient()
+  const r = await _ensureNurseVinculosTable(sb)
+  if (r.error) return { ok: false, message: String(r.error.message || r.error || '') }
+  return { ok: true }
+}
+
+function _hydrateNurseVinculos(nurses: any[], vinculos: NurseVinculo[]): any[] {
+  const byNurse = new Map<string, NurseVinculo[]>()
+  for (const v of vinculos) {
+    const arr = byNurse.get(v.nurse_id) || []
+    arr.push(v)
+    byNurse.set(v.nurse_id, arr)
+  }
+  return nurses.map((n: any) => {
+    const arr = byNurse.get(n.id) || []
+    const sorted = [...arr].sort((a, b) => {
+      if (a.data_baixa && !b.data_baixa) return 1
+      if (!a.data_baixa && b.data_baixa) return -1
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+    })
+    const tiposAtivos = sorted.filter(v => !v.data_baixa).map(v => v.tipo_vinculo).filter(Boolean)
+    const joinedAtivos = tiposAtivos.length ? tiposAtivos.join(' / ') : (n.vinculo || '')
+    return { ...n, vinculos: sorted, vinculo: joinedAtivos || n.vinculo || '' }
+  })
+}
+
+export async function getNurseVinculos(nurseId?: string): Promise<NurseVinculo[]> {
+  if (isLocalMode()) {
+    const db = readDb()
+    if (!db.nurse_vinculos) return []
+    let all = db.nurse_vinculos as NurseVinculo[]
+    if (nurseId) all = all.filter(v => v.nurse_id === nurseId)
+    return all
+  }
+  const sb = createClient()
+  let q = sb.from('nurse_vinculos').select('*')
+  if (nurseId) q = q.eq('nurse_id', nurseId)
+  const { data, error } = await q
   if (error) {
-    if (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date') || error.message?.includes('name_star') || error.message?.includes('crm')) {
-      const { data: fallbackData } = await supabase
-        .from('nurses')
-        .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
-        .range(0, 9999)
-        .order('name')
-      return fallbackData || []
-    }
+    if (String(error.message || '').includes('does not exist') || String(error.code || '') === '42P01') return []
     return []
   }
-  return data || []
+  return (data || []) as NurseVinculo[]
+}
+
+export async function createNurseVinculo(
+  nurseId: string,
+  payload: { tipo_vinculo: string; data_admissao?: string; data_baixa?: string }
+) {
+  try { await checkAdmin() } catch { return { success: false, message: 'Acesso negado.' } }
+  if (!nurseId) return { success: false, message: 'Servidor não informado.' }
+  const tipo = String(payload.tipo_vinculo || '').trim().toUpperCase()
+  if (!tipo) return { success: false, message: 'Informe o tipo de vínculo.' }
+
+  const row = {
+    nurse_id: nurseId,
+    tipo_vinculo: tipo,
+    data_admissao: String(payload.data_admissao || '').slice(0, 10),
+    data_baixa: String(payload.data_baixa || '').slice(0, 10),
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    if (!db.nurse_vinculos) db.nurse_vinculos = []
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    db.nurse_vinculos.push({ id, created_at: now, updated_at: now, ...row } as NurseVinculo)
+    writeDb(db)
+    revalidatePath('/servidores')
+    revalidatePath('/')
+    return { success: true, id, message: 'Vínculo adicionado.' }
+  }
+  const sb = createClient()
+  await _ensureNurseVinculosTable(sb)
+  const { data, error } = await sb.from('nurse_vinculos').insert([row]).select('id').single()
+  if (error) return { success: false, message: error.message || 'Erro ao criar vínculo.' }
+  revalidatePath('/servidores')
+  revalidatePath('/')
+  return { success: true, id: data?.id, message: 'Vínculo adicionado.' }
+}
+
+export async function updateNurseVinculo(
+  vinculoId: string,
+  payload: { tipo_vinculo?: string; data_admissao?: string; data_baixa?: string }
+) {
+  try { await checkAdmin() } catch { return { success: false, message: 'Acesso negado.' } }
+  if (!vinculoId) return { success: false, message: 'Vínculo não informado.' }
+  const patch: any = { updated_at: new Date().toISOString() }
+  if (payload.tipo_vinculo !== undefined) patch.tipo_vinculo = String(payload.tipo_vinculo).trim().toUpperCase()
+  if (payload.data_admissao !== undefined) patch.data_admissao = String(payload.data_admissao || '').slice(0, 10)
+  if (payload.data_baixa !== undefined) patch.data_baixa = String(payload.data_baixa || '').slice(0, 10)
+
+  if (isLocalMode()) {
+    const db = readDb()
+    if (!db.nurse_vinculos) db.nurse_vinculos = []
+    const i = db.nurse_vinculos.findIndex((v: NurseVinculo) => v.id === vinculoId)
+    if (i < 0) return { success: false, message: 'Vínculo não encontrado.' }
+    db.nurse_vinculos[i] = { ...db.nurse_vinculos[i], ...patch, updated_at: new Date().toISOString() }
+    writeDb(db)
+    revalidatePath('/servidores')
+    revalidatePath('/')
+    return { success: true, message: 'Vínculo atualizado.' }
+  }
+  const sb = createClient()
+  const { error } = await sb.from('nurse_vinculos').update(patch).eq('id', vinculoId)
+  if (error) return { success: false, message: error.message || 'Erro ao atualizar vínculo.' }
+  revalidatePath('/servidores')
+  revalidatePath('/')
+  return { success: true, message: 'Vínculo atualizado.' }
+}
+
+export async function deleteNurseVinculo(vinculoId: string) {
+  try { await checkAdmin() } catch { return { success: false, message: 'Acesso negado.' } }
+  if (!vinculoId) return { success: false, message: 'Vínculo não informado.' }
+  if (isLocalMode()) {
+    const db = readDb()
+    if (!db.nurse_vinculos) db.nurse_vinculos = []
+    db.nurse_vinculos = db.nurse_vinculos.filter((v: NurseVinculo) => v.id !== vinculoId)
+    writeDb(db)
+    revalidatePath('/servidores')
+    revalidatePath('/')
+    return { success: true, message: 'Vínculo excluído.' }
+  }
+  const sb = createClient()
+  const { error } = await sb.from('nurse_vinculos').delete().eq('id', vinculoId)
+  if (error) return { success: false, message: error.message || 'Erro ao excluir vínculo.' }
+  revalidatePath('/servidores')
+  revalidatePath('/')
+  return { success: true, message: 'Vínculo excluído.' }
+}
+
+const _getNursesCached = cache(async () => {
+  let nurses: any[] = []
+  if (isLocalMode()) {
+    const db = readDb()
+    nurses = db.nurses.sort((a, b) => a.name.localeCompare(b.name))
+  } else {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('nurses')
+      .select('id,name,name_star,cpf,role,coren,crm,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,phone,address,house_number,city,email,created_at')
+      .range(0, 9999)
+      .order('name')
+    if (error) {
+      if (error.message?.includes('city')) {
+        const { data: fbCity } = await supabase
+          .from('nurses')
+          .select('id,name,name_star,cpf,role,coren,crm,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,phone,address,house_number,email,created_at')
+          .range(0, 9999)
+          .order('name')
+        if (fbCity) nurses = fbCity || []
+      }
+      if (!nurses.length && error.message?.includes('email')) {
+        const { data: fbEmail } = await supabase
+          .from('nurses')
+          .select('id,name,name_star,cpf,role,coren,crm,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,phone,address,house_number,created_at')
+          .range(0, 9999)
+          .order('name')
+        if (fbEmail) nurses = fbEmail || []
+      }
+      if (!nurses.length && (error.message?.includes('address') || error.message?.includes('house_number'))) {
+        const { data: fb1 } = await supabase
+          .from('nurses')
+          .select('id,name,name_star,cpf,role,coren,crm,vinculo,section_id,unit_id,birth_date,certidao_negativa_date,coren_expiry_date,phone,created_at')
+          .range(0, 9999)
+          .order('name')
+        if (fb1) nurses = fb1 || []
+      }
+      if (!nurses.length && (error.message?.includes('birth_date') || error.message?.includes('certidao_negativa_date') || error.message?.includes('coren_expiry_date') || error.message?.includes('name_star') || error.message?.includes('crm') || error.message?.includes('phone'))) {
+        const { data: fallbackData } = await supabase
+          .from('nurses')
+          .select('id,name,cpf,role,coren,vinculo,section_id,unit_id,created_at')
+          .range(0, 9999)
+          .order('name')
+        nurses = fallbackData || []
+      }
+    } else {
+      nurses = data || []
+    }
+  }
+  try {
+    const vinculos = await getNurseVinculos()
+    return _hydrateNurseVinculos(nurses, vinculos as any)
+  } catch {
+    return nurses
+  }
 })
+
+export async function getNurses() {
+  return _getNursesCached()
+}
 
 export async function getNursesBySection(sectionId: string) {
   if (isLocalMode()) {
@@ -1192,6 +1469,10 @@ export async function createNurse(prevState: any, formData: FormData) {
   const councilTypeRaw = formData.get('council_type') as string
   const councilNumberRaw = formData.get('council_number') as string
   const phone = formData.get('phone') as string
+  const address = (formData.get('address') as string) || ''
+  const houseNumber = (formData.get('house_number') as string) || ''
+  const city = (formData.get('city') as string) || ''
+  const email = (formData.get('email') as string) || ''
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string || ''
   const birthDate = (formData.get('birth_date') as string) || ''
@@ -1243,6 +1524,10 @@ export async function createNurse(prevState: any, formData: FormData) {
       coren,
       crm: crm || '',
       phone: phone || '',
+      address: address || '',
+      house_number: houseNumber || '',
+      city: city || '',
+      email: email || '',
       vinculo,
       role,
       section_id: finalSectionId,
@@ -1267,6 +1552,18 @@ export async function createNurse(prevState: any, formData: FormData) {
         if (!db.monthly_rosters) db.monthly_rosters = []
 
         const newRosterId = randomUUID()
+        const vinculosAtivosAuto: any[] = []
+        if (vinculo) {
+          for (const parte of String(vinculo).split(/[\/,;]+|\s+E\s+|\s+OU\s+/gi).map(s => s.trim()).filter(Boolean)) {
+            vinculosAtivosAuto.push({ tipo_vinculo: parte.toUpperCase(), data_admissao: '', data_baixa: '' })
+          }
+        }
+        const snapshotAuto: any = {
+          snapshot_name: name,
+          snapshot_role: role,
+          snapshot_vinculo: vinculo || '',
+          snapshot_vinculos_json: vinculosAtivosAuto.length > 0 ? JSON.stringify(vinculosAtivosAuto) : ''
+        }
         db.monthly_rosters.push({
             id: newRosterId,
             nurse_id: newNurse.id,
@@ -1275,7 +1572,8 @@ export async function createNurse(prevState: any, formData: FormData) {
             month: rosterMonth,
             year: rosterYear,
             sector: sector || '', // History for this month
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            ...snapshotAuto
         })
         lastRosterId = newRosterId
     }
@@ -1283,7 +1581,7 @@ export async function createNurse(prevState: any, formData: FormData) {
     writeDb(db)
     
     revalidatePath('/servidores')
-    return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId }
+    return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId, id: newNurse.id, nurseId: newNurse.id }
   }
 
   const supabase = createClient()
@@ -1298,7 +1596,7 @@ export async function createNurse(prevState: any, formData: FormData) {
       }
   }
 
-  const { data: insertedNurse, error } = await supabase.from('nurses').insert({
+  const insertDataFull: any = {
     name,
     name_star: !!nameStar,
     cpf: finalCpf,
@@ -1306,6 +1604,10 @@ export async function createNurse(prevState: any, formData: FormData) {
     coren,
     crm: crm || '',
     phone: phone || '',
+    address: address || '',
+    house_number: houseNumber || '',
+    city: city || '',
+    email: email || '',
     vinculo,
     role,
     birth_date: birthDate || null,
@@ -1313,10 +1615,55 @@ export async function createNurse(prevState: any, formData: FormData) {
     coren_expiry_date: corenExpiryDate || null,
     section_id: finalSectionId || null,
     unit_id: unitId || null
-  }).select().single()
+  }
+
+  const existingCols = await _detectNursesColumns(supabase)
+  const filteredInsert: any = {}
+  for (const k of Object.keys(insertDataFull)) {
+    if (existingCols.has(k)) filteredInsert[k] = insertDataFull[k]
+  }
+
+  const { data: insertedNurse, error } = await supabase.from('nurses').insert(filteredInsert).select().single()
 
   if (error) {
-    console.error('Error creating nurse:', error)
+    console.error('[createNurse] Supabase error:', JSON.stringify({ code: error.code, message: error.message, details: (error as any).details, hint: (error as any).hint }))
+    if (error.code === '42703') {
+      const missingColMatch = (error.message || '').match(/column\s+[`"']?([a-zA-Z0-9_]+)[`"']?\s+of/i) || (error.message || '').match(/([a-zA-Z0-9_]+)\s+does\s+not\s+exist/i)
+      const missingCol = missingColMatch ? missingColMatch[1] : ''
+      if (missingCol === 'city') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V24). Solicite ao suporte para rodar o script de Cidade.' }
+      }
+      if (missingCol === 'email') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V23). Solicite ao suporte para rodar o script de E-mail.' }
+      }
+      if (missingCol === 'address' || missingCol === 'house_number') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V22). Solicite ao suporte para rodar o script de Endereço e Número da Casa.' }
+      }
+      if (missingCol === 'crm' || missingCol === 'phone') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V15). Solicite ao suporte para rodar o script de CRM e Telefone.' }
+      }
+      if (missingCol === 'birth_date') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V18). Solicite ao suporte para rodar o script de Data de Nascimento.' }
+      }
+      if (missingCol === 'certidao_negativa_date' || missingCol === 'coren_expiry_date') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V19). Solicite ao suporte para rodar o script de Certidão Negativa e Vencimento do COREN.' }
+      }
+      if (missingCol === 'name_star') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V21). Solicite ao suporte para rodar o script de Marcação com * no Nome.' }
+      }
+      if (missingCol) {
+        return { success: false, message: `Erro: Coluna "${missingCol}" não existe no Supabase. Por favor, abra o SQL HELP (botão vermelho no modal) e rode o script completo V15/V18/V19/V21/V22/V23/V24.` }
+      }
+    }
+    if (error.message?.includes('city')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V24). Solicite ao suporte para rodar o script de Cidade.' }
+    }
+    if (error.message?.includes('email')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V23). Solicite ao suporte para rodar o script de E-mail.' }
+    }
+    if (error.message?.includes('address') || error.message?.includes('house_number')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V22). Solicite ao suporte para rodar o script de Endereço e Número da Casa.' }
+    }
     if (error.message?.includes('crm') || error.message?.includes('phone')) {
         return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V15). Solicite ao suporte para rodar o script de CRM e Telefone.' }
     }
@@ -1345,23 +1692,38 @@ export async function createNurse(prevState: any, formData: FormData) {
       const rosterMonth = customMonth || (now.getMonth() + 1)
       const rosterYear = customYear || now.getFullYear()
       
-      const { data: insertedRoster } = await supabase.from('monthly_rosters').insert({
+      const rosterCols = await _detectColumns(supabase, 'monthly_rosters', [
+        'id','nurse_id','section_id','unit_id','month','year','sector','created_at','list_order','observation',
+        'snapshot_name','snapshot_role','snapshot_vinculo','snapshot_vinculos_json'
+      ])
+      const rosterSnapshot = await _buildNurseSnapshot(insertedNurse.id)
+      const rosterPayload: any = {
           nurse_id: insertedNurse.id,
           section_id: finalSectionId,
           unit_id: unitId,
           month: rosterMonth,
           year: rosterYear,
           sector: sector || '' // History for this month
-      }).select('id').single()
+      }
+      if (rosterCols.has('snapshot_name')) rosterPayload.snapshot_name = rosterSnapshot.snapshot_name
+      if (rosterCols.has('snapshot_role')) rosterPayload.snapshot_role = rosterSnapshot.snapshot_role
+      if (rosterCols.has('snapshot_vinculo')) rosterPayload.snapshot_vinculo = rosterSnapshot.snapshot_vinculo
+      if (rosterCols.has('snapshot_vinculos_json')) rosterPayload.snapshot_vinculos_json = rosterSnapshot.snapshot_vinculos_json
+      const filteredRoster: any = {}
+      for (const k of Object.keys(rosterPayload)) {
+        if (rosterCols.has(k)) filteredRoster[k] = rosterPayload[k]
+      }
+
+      const { data: insertedRoster } = await supabase.from('monthly_rosters').insert(filteredRoster).select('id').single()
       
       if (insertedRoster) lastRosterId = insertedRoster.id
   }
 
   revalidatePath('/servidores')
-  return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId }
+  return { success: true, message: 'Servidor cadastrado com sucesso!', rosterId: lastRosterId, id: insertedNurse?.id, nurseId: insertedNurse?.id }
 }
 
-export const getSections = cache(async () => {
+const _getSectionsCached = cache(async () => {
   if (isLocalMode()) {
     const db = readDb()
     return db.schedule_sections || []
@@ -1371,6 +1733,10 @@ export const getSections = cache(async () => {
   const { data } = await supabase.from('schedule_sections').select('*').order('position', { ascending: true, nullsFirst: true }).order('title', { ascending: true })
   return data || []
 })
+
+export async function getSections() {
+  return _getSectionsCached()
+}
 
 export async function createSection(prevState: any, formData: FormData) {
   try {
@@ -2034,11 +2400,12 @@ async function loginWithPortal(prevState: any, formData: FormData, portalConfig:
         section_id: nurse.section_id,
         section_title: sectionTitle,
         mustChangePassword,
-        portal: portalConfig.key
+        portal: portalConfig.key,
+        login_nonce: randomUUID(),
       }), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 24 * 7,
+        maxAge: SESSION_IDLE_TIMEOUT_SECONDS,
         path: portalConfig.basePath || '/',
       })
       await logLogin(nurse.id, nurse.name, nurse.role, portalConfig.key)
@@ -2111,11 +2478,12 @@ async function loginWithPortal(prevState: any, formData: FormData, portalConfig:
       section_id: nurse.section_id,
       section_title: sectionTitle,
       mustChangePassword,
-      portal: portalConfig.key
+      portal: portalConfig.key,
+      login_nonce: randomUUID(),
     }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: SESSION_IDLE_TIMEOUT_SECONDS,
       path: portalConfig.basePath || '/',
     })
     await logLogin(nurse.id, nurse.name, nurse.role, portalConfig.key)
@@ -2209,11 +2577,12 @@ async function loginWithPortal(prevState: any, formData: FormData, portalConfig:
     section_id: nurse.section_id,
     section_title: sectionTitle,
     mustChangePassword,
-    portal: portalConfig.key
+    portal: portalConfig.key,
+    login_nonce: randomUUID(),
   }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: SESSION_IDLE_TIMEOUT_SECONDS,
     path: portalConfig.basePath || '/',
   })
   await logLogin(nurse.id, nurse.name, nurse.role, portalConfig.key)
@@ -2262,17 +2631,33 @@ export async function getMonthlyManagementReport(month: number, year: number) {
 
       if (e3 || e4) throw new Error(`Erro ao buscar setores: ${e3?.message || e4?.message}`)
 
-      // 2. Busca os registros da escala (rosters)
-      const { data: rostersData, error: e2 } = await supabase
-        .from('monthly_rosters')
-        .select('id, nurse_id, unit_id, observation')
-        .eq('month', month)
-        .eq('year', year)
-        .range(0, 1000) // Pega os primeiros 1000 registros do mês
-
-      if (e2) throw new Error(`Erro ao buscar registros da escala: ${e2.message}`)
-
-      const rosterList = rostersData || []
+      // 2. Busca os registros da escala (rosters) INCLUINDO SNAPSHOTS V26 (com fallback se V26 não aplicada)
+      let rosterList: any[] = []
+      try {
+        const rosterCols = ['id', 'nurse_id', 'unit_id', 'observation']
+        const availSnapCols = await _detectColumns(supabase, 'monthly_rosters', [
+          'snapshot_name', 'snapshot_role', 'snapshot_vinculo', 'snapshot_vinculos_json'
+        ])
+        availSnapCols.forEach(c => rosterCols.push(c))
+        const { data: rostersData, error: e2 } = await supabase
+          .from('monthly_rosters')
+          .select(rosterCols.join(', '))
+          .eq('month', month)
+          .eq('year', year)
+          .range(0, 10000)
+        if (!e2) rosterList = rostersData || []
+        else throw e2
+      } catch (e2: any) {
+        console.warn('Erro ao buscar monthly_rosters (talvez sem V26), fallback sem snapshot:', e2?.message || String(e2))
+        const { data: rostersData, error: e2b } = await supabase
+          .from('monthly_rosters')
+          .select('id, nurse_id, unit_id, observation')
+          .eq('month', month)
+          .eq('year', year)
+          .range(0, 10000)
+        if (e2b) throw new Error(`Erro ao buscar registros da escala: ${e2b.message}`)
+        rosterList = rostersData || []
+      }
       
       // 3. Busca APENAS os enfermeiros que estão na escala do mês para ganhar performance
       const nurseIds = Array.from(new Set(rosterList.map(r => r.nurse_id)))
@@ -2296,9 +2681,32 @@ export async function getMonthlyManagementReport(month: number, year: number) {
       releases = releasesData || []
     }
 
-    // Otimização: Criar um mapa de enfermeiros para busca O(1)
+    // APLICAR SNAPSHOTS V26 (PATCH): para cada roster, se tiver snapshot, cria um nurse "congelado" no lugar do atual
     const nurseMap = new Map()
-    nurses.forEach(n => nurseMap.set(String(n.id), n))
+    nurses.forEach(n => nurseMap.set(String(n.id), { ...n }))
+    // Para cada roster, verificamos se há snapshot e atualizamos (ou criamos) a entrada no nurseMap
+    const rosterPatchedNurses = new Map<string, any>()
+    for (const r of rosters) {
+      const nid = String((r as any).nurse_id || '')
+      if (!nid) continue
+      const snapNome = String((r as any).snapshot_name || '').trim()
+      const snapCargo = String((r as any).snapshot_role || '').trim()
+      const snapVinculo = String((r as any).snapshot_vinculo || '').trim()
+      if (!snapNome && !snapCargo && !snapVinculo) continue
+      // Guardamos por (nurseId + rosterId) pois o mesmo nurse pode estar em múltiplos setores com snapshots diferentes no mesmo mês?
+      // Para relatório gerencial, usamos uma chave (nid) única — snapshots válidos para o mês prevalecem
+      const base = nurseMap.get(nid) || { id: nid, name: '', role: '', vinculo: '' }
+      const patched = {
+        ...base,
+        id: base.id,
+        name: snapNome || base.name,
+        role: snapCargo || base.role,
+        vinculo: snapVinculo || base.vinculo || ''
+      }
+      rosterPatchedNurses.set(nid, patched)
+    }
+    // Sobrepõe o nurseMap com versões com snapshot
+    for (const [k, v] of rosterPatchedNurses) nurseMap.set(k, v)
 
     // Processamento do relatório
     const unitNumbersMap = await getAllUnitNumbers()
@@ -2460,63 +2868,116 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
     let nurses: any[] = []
     let rosters: any[] = []
     let units: any[] = []
+    let sections: any[] = []
 
-    if (isLocalMode()) {
+    const loadLocal = () => {
       const db = readDb()
       nurses = db.nurses || []
       rosters = (db.monthly_rosters || []).filter((r: any) => r.month === month && r.year === year)
       units = db.units || []
-    } else {
-      const supabase = createClient()
-
-      const [
-        { data: unitsData, error: unitsError },
-        { data: rostersData, error: rostersError }
-      ] = await Promise.all([
-        supabase.from('units').select('id, title').range(0, 1000),
-        supabase.from('monthly_rosters').select('id, nurse_id, unit_id').eq('month', month).eq('year', year).range(0, 3000)
-      ])
-
-      if (unitsError || rostersError) {
-        throw new Error(`Erro ao buscar dados do relatório: ${unitsError?.message || rostersError?.message}`)
-      }
-
-      const rosterList = rostersData || []
-      const nurseIds = Array.from(new Set(rosterList.map((r: any) => String(r.nurse_id)).filter(Boolean)))
-      let nursesData: any[] = []
-
-      if (nurseIds.length > 0) {
-        const { data, error } = await supabase
-          .from('nurses')
-          .select('id, name, role, coren, crm, coren_expiry_date')
-          .in('id', nurseIds)
-          .range(0, 3000)
-
-        if (error) {
-          if (error.message?.includes('crm') || error.message?.includes('coren_expiry_date')) {
-            const { data: fallbackData, error: fallbackError } = await supabase
-              .from('nurses')
-              .select('id, name, role, coren')
-              .in('id', nurseIds)
-              .range(0, 3000)
-
-            if (fallbackError) throw new Error(`Erro ao buscar profissionais: ${fallbackError.message}`)
-            nursesData = fallbackData || []
-          } else {
-            throw new Error(`Erro ao buscar profissionais: ${error.message}`)
-          }
-        } else {
-          nursesData = data || []
-        }
-      }
-
-      nurses = nursesData
-      rosters = rosterList
-      units = unitsData || []
+      sections = db.schedule_sections || []
     }
 
+    if (isLocalMode()) {
+      loadLocal()
+    } else {
+      try {
+        nurses = (await getNurses()) || []
+        sections = (await getSections()) || []
+
+        const supabase = createClient()
+
+        const { data: unitsData, error: unitsError } = await supabase
+          .from('units')
+          .select('id, title')
+          .range(0, 9999)
+
+        if (unitsError) {
+          console.warn('Erro ao buscar units:', unitsError.message)
+        }
+        units = unitsData || []
+
+        let rostersData: any[] | null = null
+        let rosterError: any = null
+        try {
+          const rosterCols = ['id', 'nurse_id', 'unit_id']
+          const availSnapCols = await _detectColumns(supabase, 'monthly_rosters', [
+            'snapshot_name', 'snapshot_role', 'snapshot_vinculo', 'snapshot_vinculos_json'
+          ])
+          availSnapCols.forEach(c => rosterCols.push(c))
+          const { data, error } = await supabase
+            .from('monthly_rosters')
+            .select(rosterCols.join(', '))
+            .eq('month', month)
+            .eq('year', year)
+            .range(0, 9999)
+          if (!error) rostersData = data || []
+          else rosterError = error
+        } catch (e: any) {
+          rosterError = e
+        }
+        if (rosterError) {
+          console.warn('Erro ao buscar monthly_rosters com seleção dinâmica, fallback sem snapshot:', rosterError?.message || String(rosterError))
+          try {
+            const { data, error } = await supabase
+              .from('monthly_rosters')
+              .select('id, nurse_id, unit_id')
+              .eq('month', month)
+              .eq('year', year)
+              .range(0, 9999)
+            if (!error) rostersData = data || []
+            else console.warn('Falha definitiva no monthly_rosters:', error.message)
+          } catch (e2: any) {
+            console.warn('Falha definitiva no monthly_rosters (fallback):', e2?.message || String(e2))
+          }
+        }
+        rosters = rostersData || []
+
+        if (rosters.length === 0 && nurses.length === 0) {
+          console.warn('Sem dados vindos do Supabase, tentando modo local como fallback.')
+          loadLocal()
+        }
+      } catch (e: any) {
+        console.warn('Erro geral na busca de dados, usando modo local:', e?.message || String(e))
+        loadLocal()
+      }
+    }
+
+    // APLICAR SNAPSHOTS V26 (PATCH): Criar nurseMap com dados CONGELADOS da época do lançamento,
+    // e registrar (por chave nurseId + unitId) o snapshot para usar no rowMap
     const nurseMap = new Map<string, any>()
-    nurses.forEach(n => nurseMap.set(String(n.id), n))
+    nurses.forEach(n => nurseMap.set(String(n.id), { ...n }))
+    // Pré-processar snapshots por (nurseId + unitId) para usar no rowMap
+    const snapshotByRosterKey = new Map<string, { name: string; role: string; vinculo: string; vinculosJson: string }>()
+    for (const r of rosters) {
+      const nid = String((r as any).nurse_id || '')
+      const uid = String((r as any).unit_id || '')
+      const key = `${nid}::${uid}`
+      const snapNome = String((r as any).snapshot_name || '').trim()
+      const snapCargo = String((r as any).snapshot_role || '').trim()
+      const snapVinculo = String((r as any).snapshot_vinculo || '').trim()
+      const snapVinculosJson = String((r as any).snapshot_vinculos_json || '').trim()
+      if (snapNome || snapCargo || snapVinculo || snapVinculosJson) {
+        const base = nurseMap.get(nid) || { id: nid, name: '', role: '', vinculo: '', vinculos: [] }
+        let vinculosParsed: any[] = (base as any).vinculos || []
+        if (snapVinculosJson) {
+          try {
+            const p = JSON.parse(snapVinculosJson)
+            if (Array.isArray(p)) vinculosParsed = p
+          } catch {}
+        }
+        const patched = {
+          ...base,
+          id: base.id,
+          name: snapNome || base.name,
+          role: snapCargo || base.role,
+          vinculo: snapVinculo || base.vinculo || '',
+          vinculos: vinculosParsed
+        }
+        nurseMap.set(nid, patched)
+        snapshotByRosterKey.set(key, { name: snapNome, role: snapCargo, vinculo: snapVinculo, vinculosJson: snapVinculosJson })
+      }
+    }
 
     const unitMap = new Map<string, any>()
     units.forEach(u => unitMap.set(String(u.id), u))
@@ -2532,6 +2993,52 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
       return String(match?.[1] || crm).trim()
     }
 
+    const parseCouncilFromCrm = (value: any) => {
+      const raw = String(value ?? '').trim()
+      if (!raw) return { type: '', number: '', raw: '' }
+
+      const normalized = raw.replace(/^[-–—:\s]+/, '').trim()
+      const m = normalized.match(/^([A-Za-z]{2,18})\s*[-–—:]*\s*(.+)$/)
+      if (m) {
+        const type = String(m[1] || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+        const number = String(m[2] || '').trim()
+        return { type, number, raw: normalized }
+      }
+
+      const numericOnly = normalized.replace(/[.\-\/\s]/g, '')
+      if (numericOnly && /^[0-9]+$/.test(numericOnly)) {
+        return { type: 'CRM', number: normalized, raw: normalized }
+      }
+
+      return { type: '', number: normalized, raw: normalized }
+    }
+
+    const resolveCouncil = (nurse: any) => {
+      const role = String(nurse?.role || '').toUpperCase()
+      const isDoctor = role.includes('MEDICO') || role.includes('MÉDICO')
+      const coren = String(nurse?.coren ?? '').trim()
+      const parsed = parseCouncilFromCrm(nurse?.crm)
+
+      let type = ''
+      let number = ''
+
+      if (isDoctor) {
+        if (parsed.type) type = parsed.type
+        else if (parsed.raw || coren) type = 'CRM'
+        if (parsed.number || parsed.raw || coren) number = (parsed.number || parsed.raw || coren).trim()
+      } else {
+        if (coren) {
+          type = 'COREN'
+          number = coren
+        } else {
+          type = parsed.type || ''
+          number = (parsed.number || parsed.raw || '').trim()
+        }
+      }
+
+      return { type: type || '-', number: number || '-' }
+    }
+
     const formatDate = (value: any) => {
       const raw = String(value || '').trim()
       if (!raw) return '-'
@@ -2545,9 +3052,16 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
       name: string
       role: string
       roleGroup: 'ENF' | 'TEC' | 'AUX' | 'MED' | 'OUTROS'
-      coren: string
+      councilType: string
+      councilNumber: string
       sector: string
       corenExpiryDate: string
+      birthDate: string
+      phone: string
+      address: string
+      houseNumber: string
+      city: string
+      email: string
     }>()
 
     const classifyRole = (value: any): 'ENF' | 'TEC' | 'AUX' | 'MED' | 'OUTROS' => {
@@ -2560,23 +3074,100 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
     }
 
     rosters.forEach((roster: any) => {
-      const nurse = nurseMap.get(String(roster.nurse_id))
-      const unit = unitMap.get(String(roster.unit_id))
-      if (!nurse || !unit) return
+      const nurseId = String(roster?.nurse_id || '')
+      const unitId = String(roster?.unit_id || '')
+      const nurse = nurseId ? nurseMap.get(nurseId) : undefined
+      const unit = unitId ? unitMap.get(unitId) : undefined
 
-      const key = `${String(roster.nurse_id)}::${String(roster.unit_id)}`
-      if (rowMap.has(key)) return
+      const key = `${nurseId}::${unitId}`
+      if (key === '::' || rowMap.has(key)) return
+
+      const baseNurse = nurse || {
+        id: nurseId,
+        name: '',
+        role: '',
+        coren: '',
+        crm: '',
+        coren_expiry_date: '',
+        birth_date: '',
+        phone: '',
+        address: '',
+        house_number: '',
+        city: '',
+        email: '',
+      }
+      const baseUnit = unit || {
+        id: unitId,
+        title: '',
+      }
+
+      const council = resolveCouncil(baseNurse)
+
+      const nurseName = String(baseNurse.name || '').trim()
+        || (nurseId ? `Servidor (${nurseId.slice(0, 8)}...)` : '-')
+      const sectorTitle = String(baseUnit.title || '').trim()
+        || (unitId ? `Setor (${unitId.slice(0, 8)}...)` : '-')
 
       rowMap.set(key, {
         id: key,
-        name: String(nurse.name || '').trim() || '-',
-        role: String(nurse.role || '').trim() || '-',
-        roleGroup: classifyRole(nurse.role),
-        coren: formatCouncilNumber(nurse) || '-',
-        sector: String(unit.title || '').trim() || '-',
-        corenExpiryDate: formatDate(nurse.coren_expiry_date)
+        name: nurseName,
+        role: String(baseNurse.role || '').trim() || '-',
+        roleGroup: classifyRole(baseNurse.role),
+        councilType: council.type,
+        councilNumber: council.number,
+        sector: sectorTitle,
+        corenExpiryDate: formatDate(baseNurse.coren_expiry_date),
+        birthDate: formatDate(baseNurse.birth_date),
+        phone: String(baseNurse.phone || '').trim() || '-',
+        address: String(baseNurse.address || '').trim() || '-',
+        houseNumber: String(baseNurse.house_number || '').trim() || '-',
+        city: String(baseNurse.city || '').trim() || '-',
+        email: String(baseNurse.email || '').trim() || '-'
       })
     })
+
+    if (rowMap.size === 0 && Array.isArray(nurses) && nurses.length > 0) {
+      const sectionMap = new Map(
+        (Array.isArray(sections) ? sections : [])
+          .map((s: any) => [String(s?.id || ''), s])
+          .filter(([id]) => id)
+      )
+
+      nurses.forEach((nurse: any) => {
+        const nurseId = String(nurse?.id || '')
+        if (!nurseId) return
+        const unitId = String(nurse?.unit_id || '')
+        const unit = unitId ? unitMap.get(unitId) : undefined
+        const sectionId = String(nurse?.section_id || '')
+        const section = sectionId ? sectionMap.get(sectionId) : undefined
+
+        const unitOrSectionTitle =
+          String(unit?.title || '').trim()
+          || String(section?.title || '').trim()
+          || (unitId ? `Setor (${unitId.slice(0, 8)}...)` : '-')
+
+        const key = `${nurseId}::${unitId || sectionId || 'no-unit'}`
+        if (rowMap.has(key)) return
+
+        const council = resolveCouncil(nurse)
+        rowMap.set(key, {
+          id: key,
+          name: String(nurse.name || '').trim() || '-',
+          role: String(nurse.role || '').trim() || '-',
+          roleGroup: classifyRole(nurse.role),
+          councilType: council.type,
+          councilNumber: council.number,
+          sector: unitOrSectionTitle,
+          corenExpiryDate: formatDate(nurse.coren_expiry_date),
+          birthDate: formatDate(nurse.birth_date),
+          phone: String(nurse.phone || '').trim() || '-',
+          address: String(nurse.address || '').trim() || '-',
+          houseNumber: String(nurse.house_number || '').trim() || '-',
+          city: String(nurse.city || '').trim() || '-',
+          email: String(nurse.email || '').trim() || '-'
+        })
+      })
+    }
 
     const rows = Array.from(rowMap.values()).sort((a, b) => {
       const sectorCompare = a.sector.localeCompare(b.sector, 'pt-BR', { sensitivity: 'base' })
@@ -3180,8 +3771,39 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         throw new Error('Acesso não autorizado: escala não liberada')
       }
 
+      // Patch com snapshots: para cada nurse, se roster tem snapshot, sobrepõe nome/cargo/vinculo do nurse com o snapshot (congelado na época)
+      const nursesById = new Map<string, any>()
+      ;(nurses || []).forEach((n: any) => nursesById.set(String(n.id), n))
+      for (const r of roster || []) {
+        const nid = String(r.nurse_id || '')
+        if (!nid) continue
+        const snapNome = String((r as any).snapshot_name || '').trim()
+        const snapCargo = String((r as any).snapshot_role || '').trim()
+        const snapVinculo = String((r as any).snapshot_vinculo || '').trim()
+        const snapVinculosJson = String((r as any).snapshot_vinculos_json || '').trim()
+        if (!snapNome && !snapCargo && !snapVinculo && !snapVinculosJson) continue
+        const nurseBase = nursesById.get(nid) || { id: nid, name: '', role: '', vinculo: '', vinculos: [] }
+        let vinculosParsed: any[] = nurseBase.vinculos || []
+        if (snapVinculosJson) {
+          try {
+            const parsed = JSON.parse(snapVinculosJson)
+            if (Array.isArray(parsed)) vinculosParsed = parsed
+          } catch {}
+        }
+        const patched: any = {
+          ...nurseBase,
+          id: nurseBase.id,
+          name: snapNome || nurseBase.name,
+          role: snapCargo || nurseBase.role,
+          vinculo: snapVinculo || nurseBase.vinculo || '',
+          vinculos: vinculosParsed
+        }
+        nursesById.set(nid, patched)
+      }
+      const nursesPatched = Array.from(nursesById.values())
+
       return {
-        nurses: nurses || [],
+        nurses: nursesPatched || [],
         roster: roster || [],
         shifts: shifts || [],
         timeOffs: timeOffs || [],
@@ -3210,8 +3832,13 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     }
 
     // FETCH BASE DATA IN PARALLEL (unit-scoped when unitId is provided)
+    const rosterBaseCols = ['id', 'nurse_id', 'unit_id', 'section_id', 'month', 'year', 'observation', 'sector', 'created_at', 'list_order', 'name_star']
+    const availSnapCols = await _detectColumns(supabase, 'monthly_rosters', [
+      'snapshot_name', 'snapshot_role', 'snapshot_vinculo', 'snapshot_vinculos_json'
+    ])
+    availSnapCols.forEach(c => rosterBaseCols.push(c))
     let rosterQuery = supabase.from('monthly_rosters')
-        .select('id, nurse_id, unit_id, section_id, month, year, observation, sector, created_at, list_order, name_star')
+        .select(rosterBaseCols.join(', '))
         .eq('month', month)
         .eq('year', year)
 
@@ -3250,14 +3877,20 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
     ])
 
     let roster = rosterData || []
-    if ((!rosterData || rosterData.length === 0) && rosterError?.message?.includes('name_star')) {
-      let fallbackRosterQuery = supabase.from('monthly_rosters')
-        .select('id, nurse_id, unit_id, section_id, month, year, observation, sector, created_at, list_order')
+    if ((!rosterData || rosterData.length === 0) && rosterError) {
+      // Fallback para versões antigas (colunas ausentes)
+      const fallbackCols = [
+        'id', 'nurse_id', 'unit_id', 'section_id', 'month', 'year', 'observation', 'sector', 'created_at', 'list_order'
+      ]
+      if (rosterError?.message?.includes('name_star')) fallbackCols.pop()
+      // remove colunas snapshot da lista de fallback (pois foram adicionadas no V26)
+      let rosterFallbackQuery = supabase.from('monthly_rosters')
+        .select(fallbackCols.join(', '))
         .eq('month', month)
         .eq('year', year)
-      if (unitId) fallbackRosterQuery = fallbackRosterQuery.eq('unit_id', unitId)
-      else if (unitId !== undefined) fallbackRosterQuery = fallbackRosterQuery.is('unit_id', null)
-      const { data: fallbackRoster, error: fallbackErr } = await fallbackRosterQuery.range(0, 5000)
+      if (unitId) rosterFallbackQuery = rosterFallbackQuery.eq('unit_id', unitId)
+      else if (unitId !== undefined) rosterFallbackQuery = rosterFallbackQuery.is('unit_id', null)
+      const { data: fallbackRoster, error: fallbackErr } = await rosterFallbackQuery.range(0, 5000)
       if (fallbackErr) throw fallbackErr
       roster = fallbackRoster || []
     }
@@ -3350,8 +3983,39 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       }))
     }
 
+    // Patch com snapshots (congela dados históricos da época do lançamento)
+    const nursesByIdSb = new Map<string, any>()
+    ;(nurses || []).forEach((n: any) => nursesByIdSb.set(String(n.id), n))
+    for (const r of roster || []) {
+      const nid = String(r.nurse_id || '')
+      if (!nid) continue
+      const snapNome = String((r as any).snapshot_name || '').trim()
+      const snapCargo = String((r as any).snapshot_role || '').trim()
+      const snapVinculo = String((r as any).snapshot_vinculo || '').trim()
+      const snapVinculosJson = String((r as any).snapshot_vinculos_json || '').trim()
+      if (!snapNome && !snapCargo && !snapVinculo && !snapVinculosJson) continue
+      const nurseBase = nursesByIdSb.get(nid) || { id: nid, name: '', role: '', vinculo: '', vinculos: [] }
+      let vinculosParsed: any[] = (nurseBase as any).vinculos || []
+      if (snapVinculosJson) {
+        try {
+          const parsed = JSON.parse(snapVinculosJson)
+          if (Array.isArray(parsed)) vinculosParsed = parsed
+        } catch {}
+      }
+      const patched: any = {
+        ...nurseBase,
+        id: nurseBase.id,
+        name: snapNome || nurseBase.name,
+        role: snapCargo || nurseBase.role,
+        vinculo: snapVinculo || nurseBase.vinculo || '',
+        vinculos: vinculosParsed
+      }
+      nursesByIdSb.set(nid, patched)
+    }
+    const nursesPatchedSb = Array.from(nursesByIdSb.values())
+
     return {
-        nurses: nurses || [],
+        nurses: nursesPatchedSb || [],
         roster: roster,
         shifts: shifts,
         timeOffs: timeOffs,
@@ -3893,6 +4557,21 @@ export async function clearMonthlySchedule(month: number, year: number, unitId: 
     return { success: false, message: 'Acesso negado.' }
   }
 
+  // === PROTECAO DE SEGURANCA: Trava de escala liberada ===
+  try {
+    const currentUser = await (async () => { try { return await checkUser() } catch(e){ return null } })()
+    const portalKey = resolvePortalKey()
+    const localMode = isLocalMode(portalKey)
+    const lib = localMode
+      ? await checkIsReleasedLocal(month, year, unitId)
+      : await checkIsReleasedSupabase(month, year, unitId)
+    if (lib.released) {
+      const v = validateClearMonthly(month, year, lib.unit_name)
+      return { success: false, locked: true, message: v.failMessage }
+    }
+  } catch {}
+  // === FIM TRAVA ===
+
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`
   const lastDay = new Date(year, month, 0).getDate()
   const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
@@ -4007,11 +4686,35 @@ export async function clearMonthlySchedule(month: number, year: number, unitId: 
   }
 }
 
-export async function clearAllDatabaseShifts() {
+export async function clearAllDatabaseShifts(confirmText?: string) {
   try {
     await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  // === PROTECAO 1: trava se EXISTIR QUALQUER escala liberada ===
+  try {
+    const portalKey = resolvePortalKey()
+    const localMode = isLocalMode(portalKey)
+    const any = localMode
+      ? await checkAnyReleasedLocal()
+      : await checkIsAnyReleasedSupabase()
+    if (any.released) {
+      return { success: false, locked: true,
+        message: `TRAVA DE SEGURANÇA: Existe escala liberada em "${any.unit_name || '?'}" (${any.month}/${any.year}). Para apagar TUDO você precisa primeiro cancelar a liberação de TODAS as escalas liberadas.` }
+    }
+    // === PROTECAO 2: Confirmacao obrigatoria APAGAR TUDO ===
+    if (confirmText !== 'APAGAR TUDO') {
+      return { success: false, needConfirm: true, expectedConfirm: 'APAGAR TUDO',
+        message: `Confirmação OBRIGATÓRIA: para apagar TODAS as escalas de TODOS os setores/meses (irrecuperável), DIGITE EXATAMENTE: APAGAR TUDO` }
+    }
+  } catch {}
+
+  try {
     const supabase = createClient()
-    
+    const currentUser = await (async () => { try { return await checkUser() } catch(e){ return null } })()
+
     if (isLocalMode()) {
         const db = readDb()
         db.shifts = []
@@ -4021,10 +4724,10 @@ export async function clearAllDatabaseShifts() {
         db.audit_logs = db.audit_logs || []
         db.audit_logs.push({
             id: randomUUID(),
-            user_id: 'system',
-            user_name: 'Limpeza Total',
+            user_id: currentUser?.id || 'system',
+            user_name: currentUser?.name || 'Limpeza Total',
             action: 'CLEAR_ALL_DATABASE',
-            details: { message: 'Banco de dados de escala resetado pelo usuário' },
+            details: { message: 'Banco de dados de escala resetado pelo usuário', confirmText },
             created_at: new Date().toISOString()
         })
         writeDb(db)
@@ -4049,15 +4752,12 @@ export async function clearAllDatabaseShifts() {
     const { error: absenceError } = await supabase.from('absences').delete().neq('id', '00000000-0000-0000-0000-000000000000')
     if (absenceError) throw absenceError
 
-    // Log the action
-    let user: any = null
-    try { user = await checkUser() } catch(e) {}
-    if (user) {
+    if (currentUser) {
         await supabase.from('audit_logs').insert({
-            user_id: user.id,
-            user_name: user.name,
+            user_id: currentUser.id,
+            user_name: currentUser.name,
             action: 'CLEAR_ALL_DATABASE',
-            details: { message: 'Reset total do banco solicitado' }
+            details: { message: 'Reset total do banco solicitado', confirmText }
         })
     }
 
@@ -4069,12 +4769,25 @@ export async function clearAllDatabaseShifts() {
   }
 }
 
-export async function clearSectionRoster(month: number, year: number, unitId: string | null, sectionId: string) {
+export async function clearSectionRoster(month: number, year: number, unitId: string | null, sectionId: string, confirmText?: string) {
   try {
     await checkAdmin()
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
+
+  // === PROTECAO SEGURANCA ===
+  try {
+    const portalKey = resolvePortalKey()
+    const localMode = isLocalMode(portalKey)
+    const lib = localMode
+      ? await checkIsReleasedLocal(month, year, unitId)
+      : await checkIsReleasedSupabase(month, year, unitId)
+    if (lib.released) {
+      return { success: false, locked: true,
+        message: `ESCALA LIBERADA (TRAVA DE SEGURANÇA): "${lib.unit_name || unitId || 'geral'}" (${month}/${year}) está liberada. Cancele a liberação primeiro antes de remover este bloco.` }
+    }
+  } catch {}
 
   if (isLocalMode()) {
     const db = readDb()
@@ -4141,12 +4854,54 @@ export async function clearSectionRoster(month: number, year: number, unitId: st
   }
 }
 
-export async function clearAllUnitRosters(unitId: string) {
+export async function clearAllUnitRosters(unitId: string, confirmText?: string) {
   try {
     await checkAdmin()
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
+
+  // === PROTECAO 1: trava se QUALQUER mes da unidade estiver liberado ===
+  try {
+    const portalKey = resolvePortalKey()
+    const localMode = isLocalMode(portalKey)
+    const mesesLiberados: string[] = []
+    let unit_name: string | null = null
+    if (localMode) {
+      const db = readDb()
+      const metas = db.monthly_schedule_metadata || []
+      const liberadas = metas.filter((m: any) => m.unit_id === unitId && m.is_released)
+      liberadas.forEach((m: any) => mesesLiberados.push(`${m.month}/${m.year}`))
+      const u = (db.units || []).find((x: any) => x.id === unitId) as any
+      unit_name = u?.title || null
+    } else {
+      const sb = createClient(portalKey)
+      const { data } = await sb
+        .from('monthly_schedule_metadata')
+        .select('month,year,is_released,units(title)')
+        .eq('unit_id', unitId).eq('is_released', true)
+      ;(data || []).forEach((m: any) => mesesLiberados.push(`${m.month}/${m.year}`))
+      unit_name = ((data||[])[0] as any)?.units?.title || null
+    }
+    if (mesesLiberados.length) {
+      return { success: false, locked: true,
+        message: `TRAVA DE SEGURANÇA: O setor "${unit_name || unitId}" tem escala(s) liberada(s) em: ${mesesLiberados.join(', ')}. Cancele a liberação PRIMEIRO de cada mês antes de apagar TODO o histórico do setor.` }
+    }
+    // PROTECAO 2: confirmacao do nome do setor em maiusculas
+    let esperado = 'SETOR'
+    if (localMode) {
+      const u = (readDb().units || []).find((x: any) => x.id === unitId) as any
+      esperado = (u?.title || 'SETOR').toString().toUpperCase().trim()
+    } else {
+      const sb = createClient(portalKey)
+      const { data } = await sb.from('units').select('title').eq('id', unitId).limit(1)
+      esperado = (((data||[])[0] as any)?.title || 'SETOR').toString().toUpperCase().trim()
+    }
+    if (confirmText !== esperado) {
+      return { success: false, needConfirm: true, expectedConfirm: esperado,
+        message: `Confirmação OBRIGATÓRIA: para apagar TODO O HISTÓRICO do setor "${esperado}", DIGITE EXATAMENTE o nome do setor em MAIÚSCULAS. Esperado: "${esperado}"` }
+    }
+  } catch {}
 
   if (isLocalMode()) {
     const db = readDb()
@@ -4269,6 +5024,54 @@ export async function getReleasedSchedules() {
   }
 }
 
+type NurseSnapshot = {
+  snapshot_name: string
+  snapshot_role: string
+  snapshot_vinculo: string
+  snapshot_vinculos_json: string
+}
+async function _buildNurseSnapshot(nurseId: string): Promise<NurseSnapshot> {
+  const empty: NurseSnapshot = { snapshot_name: '', snapshot_role: '', snapshot_vinculo: '', snapshot_vinculos_json: '' }
+  if (!nurseId) return empty
+  try {
+    let nurse: any = null
+    let vinculosAtivos: any[] = []
+    if (isLocalMode()) {
+      const db = readDb()
+      nurse = db.nurses.find((n: any) => n.id === nurseId) || null
+      const allVinculos = db.nurse_vinculos || []
+      vinculosAtivos = allVinculos.filter((v: any) => v.nurse_id === nurseId && !v.data_baixa)
+    } else {
+      const sb = createClient()
+      const { data } = await sb.from('nurses').select('*').eq('id', nurseId).maybeSingle()
+      nurse = data || null
+      try {
+        const { data: vdata } = await sb.from('nurse_vinculos').select('*').eq('nurse_id', nurseId).is('data_baixa', null)
+        vinculosAtivos = (vdata || []).filter((v: any) => !v.data_baixa || v.data_baixa === '')
+      } catch {}
+    }
+    if (!nurse) return empty
+    const snapshot_vinculo = vinculosAtivos.length > 0
+      ? Array.from(new Set(vinculosAtivos.map((v: any) => String(v.tipo_vinculo || '').toUpperCase()).filter(Boolean))).join(' / ')
+      : String(nurse.vinculo || '')
+    const snapshot_vinculos_json = vinculosAtivos.length > 0
+      ? JSON.stringify(vinculosAtivos.map((v: any) => ({
+          tipo_vinculo: String(v.tipo_vinculo || ''),
+          data_admissao: String(v.data_admissao || ''),
+          data_baixa: String(v.data_baixa || '')
+        })))
+      : ''
+    return {
+      snapshot_name: String(nurse.name || ''),
+      snapshot_role: String(nurse.role || ''),
+      snapshot_vinculo,
+      snapshot_vinculos_json
+    }
+  } catch {
+    return empty
+  }
+}
+
 export async function assignNurseToRoster(
   nurseId: string, 
   sectionId: string, 
@@ -4290,6 +5093,7 @@ export async function assignNurseToRoster(
   // Only update the specific month (no propagation)
   const monthsToUpdate = [month]
   let lastInsertedId: string | undefined = undefined
+  const snapshot = await _buildNurseSnapshot(nurseId)
 
   if (isLocalMode()) {
     const db = readDb()
@@ -4327,6 +5131,10 @@ export async function assignNurseToRoster(
           if (observation !== undefined) db.monthly_rosters[existingIndex].observation = observation
           if (createdAt) db.monthly_rosters[existingIndex].created_at = createdAt
           if (finalOrder !== undefined) db.monthly_rosters[existingIndex].list_order = finalOrder
+          const old = db.monthly_rosters[existingIndex]
+          if (!old.snapshot_name && !old.snapshot_vinculo) {
+            Object.assign(old, snapshot)
+          }
           lastInsertedId = db.monthly_rosters[existingIndex].id
         } else {
           const newId = randomUUID()
@@ -4339,7 +5147,8 @@ export async function assignNurseToRoster(
             year,
             observation: observation || '',
             created_at: createdAt || new Date().toISOString(),
-            list_order: finalOrder
+            list_order: finalOrder,
+            ...snapshot
           })
           lastInsertedId = newId
         }
@@ -4354,11 +5163,16 @@ export async function assignNurseToRoster(
   let warningMsg: string | undefined = undefined;
   
   try {
+  const rosterCols = await _detectColumns(supabase, 'monthly_rosters', [
+    'id','nurse_id','section_id','unit_id','month','year','observation','created_at','list_order','name_star',
+    'snapshot_name','snapshot_role','snapshot_vinculo','snapshot_vinculos_json'
+  ])
+
   for (const m of monthsToUpdate) {
     // Check if exists first to decide whether to clear shifts
     let query = supabase
         .from('monthly_rosters')
-        .select('id')
+        .select('id, snapshot_vinculo')
         .eq('nurse_id', nurseId)
         .eq('month', m)
         .eq('year', year)
@@ -4421,14 +5235,29 @@ export async function assignNurseToRoster(
     if (createdAt) payload.created_at = createdAt
     if (finalOrder !== undefined) payload.list_order = finalOrder
 
-    let error;
+    // Apply snapshots only if inserting new OR existing snapshot is empty (migração)
+    const needsSnapshot = !existing || !String(existing.snapshot_vinculo || '').trim()
+    if (needsSnapshot) {
+      if (rosterCols.has('snapshot_name')) payload.snapshot_name = snapshot.snapshot_name
+      if (rosterCols.has('snapshot_role')) payload.snapshot_role = snapshot.snapshot_role
+      if (rosterCols.has('snapshot_vinculo')) payload.snapshot_vinculo = snapshot.snapshot_vinculo
+      if (rosterCols.has('snapshot_vinculos_json')) payload.snapshot_vinculos_json = snapshot.snapshot_vinculos_json
+    }
+
+    // Filter payload to only include columns that exist
+    const filteredPayload: any = {}
+    for (const k of Object.keys(payload)) {
+      if (rosterCols.has(k)) filteredPayload[k] = payload[k]
+    }
+
+    let error: any;
     let resultId: string | undefined = undefined
 
     if (allowDuplicate) {
         // If allowing duplicates, always insert a new record
         const { data: inserted, error: insertError } = await supabase
             .from('monthly_rosters')
-            .insert(payload)
+            .insert(filteredPayload)
             .select('id')
             .single()
         error = insertError
@@ -4438,7 +5267,7 @@ export async function assignNurseToRoster(
             // Update existing in THIS unit
             const { error: updateError } = await supabase
                 .from('monthly_rosters')
-                .update(payload)
+                .update(filteredPayload)
                 .eq('id', existing.id)
             error = updateError
             resultId = existing.id
@@ -4446,7 +5275,7 @@ export async function assignNurseToRoster(
             // Insert new for THIS unit (even if nurse exists in other units)
             const { data: inserted, error: insertError } = await supabase
                 .from('monthly_rosters')
-                .insert(payload)
+                .insert(filteredPayload)
                 .select('id')
                 .single()
             error = insertError
@@ -4512,6 +5341,32 @@ export async function removeRosterEntry(rosterId: string) {
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
+
+  // === PROTECAO DE SEGURANCA: trava de escala liberada ===
+  try {
+    const portalKey = resolvePortalKey()
+    const localMode = isLocalMode(portalKey)
+    let unitIdCheck: string | null = null, month: number | null = null, year: number | null = null
+    if (localMode) {
+      const r = (readDb().monthly_rosters || []).find((x: any) => x.id === rosterId) as any
+      if (r) { unitIdCheck = r.unit_id || null; month = r.month; year = r.year }
+    } else {
+      const sb = createClient(portalKey)
+      const { data } = await sb.from('monthly_rosters').select('id,unit_id,month,year').eq('id', rosterId).limit(1)
+      const r = (data || [])[0] as any
+      if (r) { unitIdCheck = r.unit_id || null; month = r.month; year = r.year }
+    }
+    if (unitIdCheck && month && year) {
+      const lib = localMode
+        ? await checkIsReleasedLocal(month, year, unitIdCheck)
+        : await checkIsReleasedSupabase(month, year, unitIdCheck)
+      if (lib.released) {
+        return { success: false, locked: true,
+          message: `ESCALA LIBERADA (TRAVA DE SEGURANÇA): "${lib.unit_name || unitIdCheck}" (${month}/${year}) está liberada. Não é permitido remover servidores de escala já liberada. Cancele a liberação primeiro.` }
+      }
+    }
+  } catch {}
+  // === FIM TRAVA ===
 
   if (isLocalMode()) {
     const db = readDb()
@@ -4579,6 +5434,14 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
 
     const sourceRoster = db.monthly_rosters.filter(r => r.month === sourceMonth && r.year === sourceYear && (!unitId || r.unit_id === unitId))
     
+    // Pré-computar snapshots V26 para cada nurse (mês novo = lançamento novo, estado atual do cadastro é o snapshot)
+    const snapMapLocal = new Map<string, NurseSnapshot>()
+    for (const sr of sourceRoster) {
+      if (sr.nurse_id && !snapMapLocal.has(String(sr.nurse_id))) {
+        snapMapLocal.set(String(sr.nurse_id), await _buildNurseSnapshot(String(sr.nurse_id)))
+      }
+    }
+
     // 1. Calculate projected shifts for all professionals first to determine order
     const projections = sourceRoster.map(sr => {
         // Project shifts based on 6-day cycle: D -> N -> 4 off
@@ -4649,6 +5512,7 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
     let addedCount = 0
     projections.forEach((p, idx) => {
         const sr = p.source
+        const snap = snapMapLocal.get(String(sr.nurse_id))
         const targetRoster = {
             id: randomUUID(),
             nurse_id: sr.nurse_id,
@@ -4659,7 +5523,11 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
             observation: sr.observation || '',
             sector: sr.sector || '',
             list_order: idx + 1, // New sequential order based on staircase
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            snapshot_name: snap?.snapshot_name || '',
+            snapshot_role: snap?.snapshot_role || '',
+            snapshot_vinculo: snap?.snapshot_vinculo || '',
+            snapshot_vinculos_json: snap?.snapshot_vinculos_json || ''
         }
         db.monthly_rosters.push(targetRoster)
         addedCount++
@@ -4671,7 +5539,11 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
                 shift_date: ps.date,
                 shift_type: ps.type,
                 updated_at: new Date().toISOString(),
-                roster_id: targetRoster.id
+                roster_id: targetRoster.id,
+                snapshot_name: snap?.snapshot_name || '',
+                snapshot_role: snap?.snapshot_role || '',
+                snapshot_vinculo: snap?.snapshot_vinculo || '',
+                snapshot_vinculos_json: snap?.snapshot_vinculos_json || ''
             })
         })
     })
@@ -4691,6 +5563,22 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
   
   if (fetchError) return { success: false, message: fetchError.message }
   if (!sourceRoster || sourceRoster.length === 0) return { success: true, message: 'Nenhum servidor encontrado no mês de origem.' }
+
+  // Detectar colunas V26 em monthly_rosters e shifts
+  const rosterColsV26 = await _detectColumns(supabase, 'monthly_rosters', [
+    'snapshot_name','snapshot_role','snapshot_vinculo','snapshot_vinculos_json'
+  ])
+  const shiftsColsV26 = await _detectColumns(supabase, 'shifts', [
+    'snapshot_name','snapshot_role','snapshot_vinculo','snapshot_vinculos_json'
+  ])
+
+  // Pré-computar snapshots V26 para cada nurse (mês novo = lançamento novo, estado atual do cadastro)
+  const snapMapSb = new Map<string, NurseSnapshot>()
+  for (const sr of sourceRoster) {
+    if (sr.nurse_id && !snapMapSb.has(String(sr.nurse_id))) {
+      snapMapSb.set(String(sr.nurse_id), await _buildNurseSnapshot(String(sr.nurse_id)))
+    }
+  }
 
   // Fetch source shifts
   const nurseIds = sourceRoster.map(r => r.nurse_id)
@@ -4800,8 +5688,9 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
   for (let i = 0; i < projections.length; i++) {
       const p = projections[i]
       const sourceEntry = p.source
+      const snap = snapMapSb.get(String(sourceEntry.nurse_id))
       
-      const targetEntry = {
+      const targetEntry: any = {
           nurse_id: sourceEntry.nurse_id,
           section_id: sourceEntry.section_id,
           unit_id: sourceEntry.unit_id,
@@ -4811,6 +5700,12 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
           sector: sourceEntry.sector || null,
           list_order: i + 1, // New sequential order
           created_at: new Date().toISOString()
+      }
+      if (snap) {
+        if (rosterColsV26.has('snapshot_name')) targetEntry.snapshot_name = snap.snapshot_name
+        if (rosterColsV26.has('snapshot_role')) targetEntry.snapshot_role = snap.snapshot_role
+        if (rosterColsV26.has('snapshot_vinculo')) targetEntry.snapshot_vinculo = snap.snapshot_vinculo
+        if (rosterColsV26.has('snapshot_vinculos_json')) targetEntry.snapshot_vinculos_json = snap.snapshot_vinculos_json
       }
 
       const { data: insertedRoster, error: insertError } = await supabase
@@ -4823,10 +5718,19 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
       addedCount++
 
       if (p.shiftsToInsert.length > 0) {
-          const finalShifts = p.shiftsToInsert.map(s => ({
-              ...s,
-              roster_id: insertedRoster.id
-          }))
+          const finalShifts = p.shiftsToInsert.map(s => {
+              const row: any = {
+                  ...s,
+                  roster_id: insertedRoster.id
+              }
+              if (snap) {
+                if (shiftsColsV26.has('snapshot_name')) row.snapshot_name = snap.snapshot_name
+                if (shiftsColsV26.has('snapshot_role')) row.snapshot_role = snap.snapshot_role
+                if (shiftsColsV26.has('snapshot_vinculo')) row.snapshot_vinculo = snap.snapshot_vinculo
+                if (shiftsColsV26.has('snapshot_vinculos_json')) row.snapshot_vinculos_json = snap.snapshot_vinculos_json
+              }
+              return row
+          })
           await supabase.from('shifts').insert(finalShifts)
       }
   }
@@ -5402,6 +6306,32 @@ export async function logoutSamu() {
   redirect('/samu')
 }
 
+export async function touchSession() {
+  const portalConfig = getCurrentPortalConfig()
+  const sessionCookie = getCurrentSessionCookie()
+  if (!sessionCookie) {
+    return { ok: false, reason: 'no-session' }
+  }
+  try {
+    const parsed = JSON.parse(sessionCookie.value)
+    cookies().set(portalConfig.sessionCookieName, JSON.stringify(parsed), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: SESSION_IDLE_TIMEOUT_SECONDS,
+      path: portalConfig.basePath || '/',
+    })
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, reason: e?.message || String(e) }
+  }
+}
+
+export async function forceLogoutIdle() {
+  try { await logout() } catch (_) { /* noop */ }
+  try { await logoutSamu() } catch (_) { /* noop */ }
+  return { ok: true }
+}
+
 export async function requestTimeOff(prevState: any, formData: FormData) {
   const startDate = formData.get('startDate') as string
   let endDate = formData.get('endDate') as string
@@ -5705,6 +6635,10 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   const councilTypeRaw = formData.get('council_type') as string
   const councilNumberRaw = formData.get('council_number') as string
   const phone = formData.get('phone') as string
+  const address = (formData.get('address') as string) || ''
+  const houseNumber = (formData.get('house_number') as string) || ''
+  const city = (formData.get('city') as string) || ''
+  const email = (formData.get('email') as string) || ''
   const vinculo = formData.get('vinculo') as string
   const role = formData.get('role') as string
   const birthDate = (formData.get('birth_date') as string) || ''
@@ -5768,6 +6702,10 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     nurse.coren = coren
     if (crm !== undefined) nurse.crm = crm
     nurse.phone = phone || nurse.phone || ''
+    nurse.address = address || nurse.address || ''
+    nurse.house_number = houseNumber || nurse.house_number || ''
+    nurse.city = city || nurse.city || ''
+    nurse.email = email || nurse.email || ''
     nurse.vinculo = vinculo
     nurse.role = role
     nurse.sector = sector || nurse.sector
@@ -5844,6 +6782,10 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
       name,
       coren,
       phone: phone || '',
+      address: address || '',
+      house_number: houseNumber || '',
+      city: city || '',
+      email: email || '',
       vinculo,
       role,
       cpf: cpf || `TEMP-${Date.now()}`
@@ -5863,9 +6805,53 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
     updateData.password = password
   }
 
-  const { error } = await supabase.from('nurses').update(updateData).eq('id', id)
+  const existingCols = await _detectNursesColumns(supabase)
+  const filteredUpdate: any = {}
+  for (const k of Object.keys(updateData)) {
+    if (existingCols.has(k)) filteredUpdate[k] = updateData[k]
+  }
+
+  const { error } = await supabase.from('nurses').update(filteredUpdate).eq('id', id)
 
   if (error) {
+    console.error('[updateNurse] Supabase error:', JSON.stringify({ code: error.code, message: error.message, details: (error as any).details, hint: (error as any).hint }))
+    if (error.code === '42703') {
+      const missingColMatch = (error.message || '').match(/column\s+[`"']?([a-zA-Z0-9_]+)[`"']?\s+of/i) || (error.message || '').match(/([a-zA-Z0-9_]+)\s+does\s+not\s+exist/i)
+      const missingCol = missingColMatch ? missingColMatch[1] : ''
+      if (missingCol === 'city') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V24). Solicite ao suporte para rodar o script de Cidade.' }
+      }
+      if (missingCol === 'email') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V23). Solicite ao suporte para rodar o script de E-mail.' }
+      }
+      if (missingCol === 'address' || missingCol === 'house_number') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V22). Solicite ao suporte para rodar o script de Endereço e Número da Casa.' }
+      }
+      if (missingCol === 'crm' || missingCol === 'phone') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V15). Solicite ao suporte para rodar o script de CRM e Telefone.' }
+      }
+      if (missingCol === 'birth_date') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V18). Solicite ao suporte para rodar o script de Data de Nascimento.' }
+      }
+      if (missingCol === 'certidao_negativa_date' || missingCol === 'coren_expiry_date') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V19). Solicite ao suporte para rodar o script de Certidão Negativa e Vencimento do COREN.' }
+      }
+      if (missingCol === 'name_star') {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V21). Solicite ao suporte para rodar o script de Marcação com * no Nome.' }
+      }
+      if (missingCol) {
+        return { success: false, message: `Erro: Coluna "${missingCol}" não existe no Supabase. Por favor, abra o SQL HELP (botão vermelho no modal) e rode o script completo V15/V18/V19/V21/V22/V23/V24.` }
+      }
+    }
+    if (error.message?.includes('city')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V24). Solicite ao suporte para rodar o script de Cidade.' }
+    }
+    if (error.message?.includes('email')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V23). Solicite ao suporte para rodar o script de E-mail.' }
+    }
+    if (error.message?.includes('address') || error.message?.includes('house_number')) {
+        return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V22). Solicite ao suporte para rodar o script de Endereço e Número da Casa.' }
+    }
     if (error.message?.includes('crm') || error.message?.includes('phone')) {
         return { success: false, message: 'Erro: O banco de dados Supabase precisa ser atualizado (V15). Solicite ao suporte para rodar o script de CRM e Telefone.' }
     }
@@ -5908,6 +6894,305 @@ export async function updateNurse(id: string, prevState: any, formData: FormData
   revalidatePath('/')
   revalidatePath('/servidores')
   return { success: true, message: 'Servidor atualizado com sucesso' }
+}
+
+// ============================================================
+// 🔐 PERMISSÕES DO SIDEBAR + RELATÓRIOS (Configurável pelo Coord Geral)
+//    - Cada item de menu tem 3 níveis: TODOS / COORDENADORES_SETOR / COORD_GERAL
+//    - Relatórios ainda têm 2 subitens (management + scheduled)
+// ============================================================
+
+export interface SidebarMenuPermissionsAlias {
+  items: Record<SidebarMenuItemId, MenuAccessLevel>
+  reports: {
+    management: MenuAccessLevel
+    scheduled: MenuAccessLevel
+  }
+  updatedAt?: string
+  updatedBy?: string
+}
+
+const DEFAULT_SIDEBAR_PERMISSIONS: SidebarMenuPermissions = {
+  items: SIDEBAR_MENU_ITEMS.reduce((acc, item) => {
+    acc[item.id as SidebarMenuItemId] = item.defaultLevel
+    return acc
+  }, {} as SidebarMenuPermissions['items']),
+  reports: {
+    management: 'COORD_GERAL_ONLY',
+    scheduled: 'COORD_SETOR',
+  },
+}
+
+const APP_SETTINGS_KEY = 'sidebar_permissions_v2'
+const APP_SETTINGS_KEY_LEGACY = 'reports_permissions'
+
+function _applyLegacyReportsPerms(target: SidebarMenuPermissions, legacyRaw: any): SidebarMenuPermissions {
+  if (!legacyRaw) return target
+  const toLevel = (allowCoordSetor: boolean, allowCoordGeral: boolean): MenuAccessLevel => {
+    if (allowCoordSetor) return 'COORD_SETOR'
+    if (allowCoordGeral) return 'COORD_GERAL_ONLY'
+    return 'COORD_GERAL_ONLY'
+  }
+  const mgmt = legacyRaw?.management
+  const sched = legacyRaw?.scheduled
+  return {
+    ...target,
+    reports: {
+      management: toLevel(!!mgmt?.allowCoordSetor, !!mgmt?.allowCoordGeral),
+      scheduled: toLevel(!!sched?.allowCoordSetor, !!sched?.allowCoordGeral),
+    },
+  }
+}
+
+function _sanitizeSidebarPermissions(raw: any): SidebarMenuPermissions {
+  const base: SidebarMenuPermissions = {
+    items: { ...DEFAULT_SIDEBAR_PERMISSIONS.items },
+    reports: { ...DEFAULT_SIDEBAR_PERMISSIONS.reports },
+    updatedAt: undefined,
+    updatedBy: undefined,
+  }
+  if (!raw || typeof raw !== 'object') return base
+
+  // Items (garante que todos os IDs conhecidos existam com nível válido)
+  if (raw.items && typeof raw.items === 'object') {
+    for (const itemDef of SIDEBAR_MENU_ITEMS) {
+      const k = itemDef.id
+      const v = (raw.items as any)[k]
+      const isValid = v === 'EVERYONE' || v === 'COORD_SETOR' || v === 'COORD_GERAL_ONLY'
+      if (isValid) (base.items as any)[k] = v
+    }
+  }
+
+  if (raw.reports && typeof raw.reports === 'object') {
+    const mg = (raw.reports as any).management
+    const sc = (raw.reports as any).scheduled
+    if (mg === 'EVERYONE' || mg === 'COORD_SETOR' || mg === 'COORD_GERAL_ONLY') base.reports.management = mg
+    if (sc === 'EVERYONE' || sc === 'COORD_SETOR' || sc === 'COORD_GERAL_ONLY') base.reports.scheduled = sc
+  }
+
+  base.updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+  base.updatedBy = typeof raw.updatedBy === 'string' ? raw.updatedBy : undefined
+
+  return base
+}
+
+export async function getSidebarPermissions(): Promise<SidebarMenuPermissions> {
+  // 1. Tenta carregar formato NOVO (sidebar_permissions_v2)
+  let loadedNew: SidebarMenuPermissions | null = null
+
+  if (isLocalMode()) {
+    try {
+      const db = readDb()
+      const raw = (db as any)[APP_SETTINGS_KEY] as any
+      if (raw) loadedNew = _sanitizeSidebarPermissions(raw)
+    } catch (e) {
+      console.warn('getSidebarPermissions (local) falhou:', e)
+    }
+  } else {
+    const supabase = createClient()
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', APP_SETTINGS_KEY)
+        .maybeSingle()
+      if (!error && data && typeof (data as any).value === 'string' && (data as any).value.length > 0) {
+        try {
+          loadedNew = _sanitizeSidebarPermissions(JSON.parse((data as any).value))
+        } catch (_) { /* ignore JSON parse */ }
+      }
+    } catch (e: any) {
+      console.warn('getSidebarPermissions (supabase) falhou:', e?.message || String(e))
+    }
+  }
+
+  if (loadedNew) return loadedNew
+
+  // 2. Fallback: tenta carregar formato LEGADO (reports_permissions) e converter
+  let legacyRaw: any = null
+  if (isLocalMode()) {
+    try {
+      const db = readDb()
+      legacyRaw = (db as any)[APP_SETTINGS_KEY_LEGACY] || null
+    } catch (_) { /* noop */ }
+  } else {
+    const supabase = createClient()
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', APP_SETTINGS_KEY_LEGACY)
+        .maybeSingle()
+      if (!error && data && typeof (data as any).value === 'string') {
+        try { legacyRaw = JSON.parse((data as any).value) } catch (_) { /* noop */ }
+      }
+    } catch (_) { /* noop */ }
+  }
+
+  if (legacyRaw) {
+    return _applyLegacyReportsPerms(_sanitizeSidebarPermissions(DEFAULT_SIDEBAR_PERMISSIONS), legacyRaw)
+  }
+  return _sanitizeSidebarPermissions(DEFAULT_SIDEBAR_PERMISSIONS)
+}
+
+export async function saveSidebarPermissions(next: SidebarMenuPermissions) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado. Somente Coordenação Geral pode configurar permissões do menu lateral.' }
+  }
+
+  if (!next || !next.items || !next.reports) {
+    return { success: false, message: 'Dados de permissão inválidos.' }
+  }
+
+  const cleaned = _sanitizeSidebarPermissions(next)
+  cleaned.updatedAt = new Date().toISOString()
+  cleaned.updatedBy = (() => {
+    try {
+      const c = cookies().get('session_user')
+      const u = c ? JSON.parse(c.value) : null
+      return u?.name || u?.cpf || 'desconhecido'
+    } catch (_) { return 'desconhecido' }
+  })()
+
+  if (isLocalMode()) {
+    const db = readDb()
+    ;(db as any)[APP_SETTINGS_KEY] = cleaned
+    writeDb(db)
+    revalidatePath('/')
+    revalidatePath('/servidores')
+    revalidatePath('/escala')
+    revalidatePath('/coordenacao')
+    return { success: true, message: 'Permissões do menu lateral atualizadas (Modo Local).' }
+  }
+
+  const supabase = createClient()
+  try {
+    const { error } = await supabase.from('app_settings').upsert({
+      key: APP_SETTINGS_KEY,
+      value: JSON.stringify(cleaned),
+    }, { onConflict: 'key' })
+    if (error) {
+      return { success: false, message: `Erro Supabase: ${error.message}` }
+    }
+    revalidatePath('/')
+    revalidatePath('/servidores')
+    revalidatePath('/escala')
+    revalidatePath('/coordenacao')
+    return { success: true, message: 'Permissões do menu lateral atualizadas.' }
+  } catch (e: any) {
+    return { success: false, message: `Erro ao salvar: ${e?.message || String(e)}` }
+  }
+}
+
+export interface SidebarPermissionEvaluation {
+  // Por item do menu (true = usuário tem permissão de visualizar)
+  items: Record<SidebarMenuItemId, boolean>
+  // Por subitem de relatório
+  reports: { management: boolean; scheduled: boolean }
+  // Atalhos
+  canSeeReportsMenu: boolean
+}
+
+function _checkLevel(level: MenuAccessLevel, ctx: { isSuperAdmin: boolean; isCoordGeral: boolean; isCoordSetor: boolean }): boolean {
+  if (ctx.isSuperAdmin) return true
+  switch (level) {
+    case 'EVERYONE':
+      return true
+    case 'COORD_SETOR':
+      return ctx.isCoordGeral || ctx.isCoordSetor
+    case 'COORD_GERAL_ONLY':
+      return ctx.isCoordGeral
+    default:
+      return false
+  }
+}
+
+export async function evaluateSidebarPermissionsForCurrentUser(): Promise<SidebarPermissionEvaluation> {
+  let cpf = ''
+  let role = ''
+  try {
+    const c = cookies().get('session_user')
+    if (c) {
+      const u = JSON.parse(c.value)
+      cpf = String(u.cpf || '').replace(/\D/g, '')
+      role = String(u.role || '').toUpperCase()
+    }
+  } catch (_) { /* noop */ }
+
+  const cleanCpf = String(cpf || '').replace(/\D/g, '')
+  const isSuperAdmin =
+    role === 'ADMIN' ||
+    role === 'COORDENACAO_GERAL' ||
+    cleanCpf === '02170025367'
+  const isCoordGeral = role === 'COORDENACAO_GERAL' || isSuperAdmin
+  const isCoordSetor = role === 'COORDENADOR'
+
+  const ctx = { isSuperAdmin, isCoordGeral, isCoordSetor }
+  const perms = await getSidebarPermissions()
+
+  const itemsRes = {} as SidebarPermissionEvaluation['items']
+  for (const itemDef of SIDEBAR_MENU_ITEMS) {
+    const level = perms.items[itemDef.id] || DEFAULT_SIDEBAR_PERMISSIONS.items[itemDef.id]
+    itemsRes[itemDef.id] = _checkLevel(level, ctx)
+  }
+
+  const reportsRes = {
+    management: _checkLevel(perms.reports.management, ctx),
+    scheduled: _checkLevel(perms.reports.scheduled, ctx),
+  }
+
+  // Sobe como fallback para manter compat com os antigos nomes de actions.ts (relatórios)
+  ;(reportsRes as any).canSeeMenu = reportsRes.management || reportsRes.scheduled
+
+  return {
+    items: itemsRes,
+    reports: reportsRes,
+    canSeeReportsMenu: reportsRes.management || reportsRes.scheduled,
+  }
+}
+
+// Backward compatibility: alias para actions antigas (não quebrar imports já existentes)
+export type ReportsPermissions = SidebarMenuPermissions
+export interface ReportsPermissionEvaluation {
+  canSeeMenu: boolean
+  canRunManagement: boolean
+  canRunScheduled: boolean
+}
+
+export async function getReportsPermissions(): Promise<ReportsPermissions> {
+  return getSidebarPermissions() as unknown as ReportsPermissions
+}
+
+export async function saveReportsPermissions(next: any) {
+  // Se receber formato antigo reports-only, converte para o novo
+  if (next && !next.items && (next.management || next.scheduled)) {
+    const base = await getSidebarPermissions()
+    const toLevel = (allowCoordSetor: boolean, allowCoordGeral: boolean): MenuAccessLevel => {
+      if (allowCoordSetor) return 'COORD_SETOR'
+      if (allowCoordGeral) return 'COORD_GERAL_ONLY'
+      return 'COORD_GERAL_ONLY'
+    }
+    const converted: SidebarMenuPermissions = {
+      ...base,
+      reports: {
+        management: toLevel(!!next.management?.allowCoordSetor, !!next.management?.allowCoordGeral),
+        scheduled: toLevel(!!next.scheduled?.allowCoordSetor, !!next.scheduled?.allowCoordGeral),
+      },
+    }
+    return saveSidebarPermissions(converted)
+  }
+  return saveSidebarPermissions(next as SidebarMenuPermissions)
+}
+
+export async function evaluateReportsPermissionsForCurrentUser(): Promise<ReportsPermissionEvaluation> {
+  const evalRes = await evaluateSidebarPermissionsForCurrentUser()
+  return {
+    canSeeMenu: evalRes.canSeeReportsMenu,
+    canRunManagement: evalRes.reports.management,
+    canRunScheduled: evalRes.reports.scheduled,
+  }
 }
 
 export async function reassignNurse(oldId: string, newId: string) {
@@ -5969,6 +7254,204 @@ export async function assignNurseToSection(nurseId: string, sectionId: string, u
   if (error) return { success: false, message: error.message }
   revalidatePath('/')
   return { success: true }
+}
+
+function _normalizeName(name: string): string {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function _mergeVinculoStrings(a: string, b: string): string {
+  const items = new Set<string>()
+  const push = (raw: string) => {
+    if (!raw) return
+    String(raw)
+      .split(/[;,\/\s]+/)
+      .map(s => s.trim().toUpperCase())
+      .filter(s => s.length > 1 && s !== 'E' && s !== 'OU' && s !== 'E/OU')
+      .forEach(s => items.add(s))
+  }
+  push(a)
+  push(b)
+  return Array.from(items).join(' / ')
+}
+
+function _pickNonEmpty(a: any, b: any): any {
+  if (a === null || a === undefined || a === '') return b
+  if (b === null || b === undefined || b === '') return a
+  const as = String(a).trim()
+  const bs = String(b).trim()
+  if (!as) return b
+  if (!bs) return a
+  if (as === bs) return a
+  return a
+}
+
+export async function findDuplicateNurses() {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  const nurses = await getNurses() || []
+  const map = new Map<string, any[]>()
+
+  for (const n of nurses) {
+    const key = _normalizeName(n.name || n.name_star ? (n.name || '') : '')
+    if (!key) continue
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(n)
+  }
+
+  const groups = Array.from(map.entries())
+    .filter(([, arr]) => arr.length >= 2)
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+    .map(([normalized, arr]) => ({
+      name: normalized,
+      count: arr.length,
+      nurses: arr.map(n => ({
+        id: n.id,
+        displayName: n.name,
+        role: n.role,
+        vinculo: n.vinculo,
+        vinculos: Array.isArray(n.vinculos) ? n.vinculos : [],
+        phone: n.phone,
+        address: n.address,
+        house_number: n.house_number,
+        city: n.city,
+        email: n.email,
+        cpf: n.cpf?.startsWith?.('TEMP-') ? '' : n.cpf,
+        birth_date: n.birth_date,
+        coren: n.coren,
+        crm: n.crm,
+        section_id: n.section_id,
+        unit_id: n.unit_id,
+      }))
+    }))
+
+  return {
+    success: true,
+    totalDuplicates: groups.reduce((acc, g) => acc + g.count, 0),
+    totalGroups: groups.length,
+    groups
+  }
+}
+
+export async function mergeNurses(targetId: string, sourceIds: string[]) {
+  try {
+    await checkAdmin()
+  } catch (e) {
+    return { success: false, message: 'Acesso negado.' }
+  }
+
+  if (!targetId || !Array.isArray(sourceIds) || sourceIds.length === 0) {
+    return { success: false, message: 'Informe o cadastro principal e os cadastros a serem unificados.' }
+  }
+  if (sourceIds.includes(targetId)) {
+    return { success: false, message: 'O cadastro principal não pode estar na lista de cadastros a serem unificados.' }
+  }
+
+  const allIds = [targetId, ...sourceIds]
+
+  const nurses = await getNurses() || []
+  const all = allIds.map(id => nurses.find((n: any) => n.id === id)).filter(Boolean) as any[]
+  if (all.length < 2) {
+    return { success: false, message: 'Cadastros não encontrados para unificar.' }
+  }
+
+  const target = all.find(n => n.id === targetId)
+  const sources = all.filter(n => n.id !== targetId)
+
+  let mergedVinculo = target?.vinculo || ''
+  for (const s of sources) mergedVinculo = _mergeVinculoStrings(mergedVinculo, s.vinculo)
+
+  const mergeField = (key: string) => {
+    let val = target?.[key]
+    for (const s of sources) val = _pickNonEmpty(val, s[key])
+    return val
+  }
+
+  const merged = {
+    name: mergeField('name'),
+    cpf: mergeField('cpf'),
+    role: mergeField('role'),
+    section_id: mergeField('section_id'),
+    unit_id: mergeField('unit_id'),
+    coren: mergeField('coren'),
+    crm: mergeField('crm'),
+    vinculo: mergedVinculo,
+    birth_date: mergeField('birth_date'),
+    certidao_negativa_date: mergeField('certidao_negativa_date'),
+    coren_expiry_date: mergeField('coren_expiry_date'),
+    phone: mergeField('phone'),
+    address: mergeField('address'),
+    house_number: mergeField('house_number'),
+    city: mergeField('city'),
+    email: mergeField('email'),
+    name_star: Boolean(target?.name_star || sources.some((s: any) => s.name_star)),
+  }
+
+  const reassignForeignKeys = async (oldId: string, newId: string, supabase: any, db: any, isLocal: boolean) => {
+    if (isLocal) {
+      const tables = ['shifts', 'time_off_requests', 'monthly_rosters'] as const
+      for (const table of tables) {
+        for (const row of db[table] || []) {
+          if (row.nurse_id === oldId) row.nurse_id = newId
+        }
+      }
+      if (Array.isArray(db.nurse_vinculos)) {
+        for (const row of db.nurse_vinculos) if (row.nurse_id === oldId) row.nurse_id = newId
+      }
+      return null
+    }
+    let firstError: any = null
+    const promises = [
+      supabase.from('shifts').update({ nurse_id: newId }).eq('nurse_id', oldId),
+      supabase.from('time_off_requests').update({ nurse_id: newId }).eq('nurse_id', oldId),
+      supabase.from('monthly_rosters').update({ nurse_id: newId }).eq('nurse_id', oldId),
+      supabase.from('nurse_vinculos').update({ nurse_id: newId }).eq('nurse_id', oldId),
+    ]
+    const results = await Promise.all(promises)
+    for (const r of results) if (r?.error && !firstError) firstError = r.error
+    return firstError
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    db.nurses = db.nurses.filter((n: any) => n.id === targetId)
+    const idx = db.nurses.findIndex((n: any) => n.id === targetId)
+    if (idx >= 0) db.nurses[idx] = { ...db.nurses[idx], ...merged, id: targetId }
+    for (const srcId of sourceIds) {
+      await reassignForeignKeys(srcId, targetId, null, db, true)
+    }
+    writeDb(db)
+    revalidatePath('/servidores')
+    revalidatePath('/')
+    return { success: true, message: `${sources.length + 1} cadastros unificados em 1 (modo local).` }
+  }
+
+  const supabase = createClient()
+  const { error: upErr } = await supabase.from('nurses').update(merged).eq('id', targetId)
+  if (upErr) return { success: false, message: 'Erro ao atualizar cadastro principal: ' + (upErr.message || '') }
+
+  for (const srcId of sourceIds) {
+    const fkErr = await reassignForeignKeys(srcId, targetId, supabase, null, false)
+    if (fkErr) return { success: false, message: 'Erro ao reatribuir dados do id ' + srcId.slice(0, 8) + ': ' + (fkErr.message || '') }
+  }
+
+  for (const srcId of sourceIds) {
+    const { error: dErr } = await supabase.from('nurses').delete().eq('id', srcId)
+    if (dErr) return { success: false, message: 'Erro ao remover duplicata ' + srcId.slice(0, 8) + ': ' + (dErr.message || '') }
+  }
+
+  revalidatePath('/servidores')
+  revalidatePath('/')
+  return { success: true, message: `${sources.length + 1} cadastros unificados com sucesso. Vínculos combinados: ${mergedVinculo || 'nenhum'}` }
 }
 
 export async function getTimeOffRequests() {
@@ -6239,6 +7722,13 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
     // Not critical, continue
   }
 
+  // Pré-computar snapshots V26 por profissional (1 chamada por nurse)
+  const uniqueNurseIdsForSnapshot = Array.from(new Set((shifts || []).map(s => s.nurseId).filter(Boolean)))
+  const snapshotByNurse = new Map<string, NurseSnapshot>()
+  for (const nid of uniqueNurseIdsForSnapshot) {
+    snapshotByNurse.set(nid, await _buildNurseSnapshot(nid))
+  }
+
   // MODO LOCAL (SQLite simulado)
   if (isLocalMode()) {
     const db = readDb()
@@ -6257,6 +7747,7 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
       // Inserir novos (exceto os marcados como DELETE)
       ctx.shifts.forEach(s => {
         if (s.type !== 'DELETE') {
+          const snap = snapshotByNurse.get(s.nurseId)
           db.shifts.push({ 
             id: randomUUID(), 
             nurse_id: s.nurseId, 
@@ -6264,6 +7755,10 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
             shift_date: s.date, 
             shift_type: s.type, 
             is_red: !!(s as any).isRed,
+            snapshot_name: snap?.snapshot_name || '',
+            snapshot_role: snap?.snapshot_role || '',
+            snapshot_vinculo: snap?.snapshot_vinculo || '',
+            snapshot_vinculos_json: snap?.snapshot_vinculos_json || '',
             updated_at: new Date().toISOString() 
           })
         }
@@ -6293,6 +7788,11 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
   const supabase = createClient()
   
   try {
+    // Detectar colunas V26 em shifts (supabase) para evitar erro de schema
+    const shiftsCols = await _detectColumns(supabase, 'shifts', [
+      'snapshot_name','snapshot_role','snapshot_vinculo','snapshot_vinculos_json','is_red'
+    ])
+
     const allInserts: any[] = []
     
     // Agrupar deleções por Roster e Profissional para minimizar queries
@@ -6308,13 +7808,21 @@ export async function saveShifts(shifts: { nurseId: string, rosterId?: string, d
         
         // Só inserimos se não for um comando de DELETE explícito
         if (s.type !== 'DELETE') {
-            allInserts.push({
+            const snap = snapshotByNurse.get(s.nurseId)
+            const row: any = {
                 nurse_id: s.nurseId,
                 roster_id: s.rosterId || null,
                 date: s.date,
-                type: s.type,
-                is_red: !!(s as any).isRed
-            })
+                type: s.type
+            }
+            if (shiftsCols.has('is_red')) row.is_red = !!(s as any).isRed
+            if (snap) {
+              if (shiftsCols.has('snapshot_name')) row.snapshot_name = snap.snapshot_name
+              if (shiftsCols.has('snapshot_role')) row.snapshot_role = snap.snapshot_role
+              if (shiftsCols.has('snapshot_vinculo')) row.snapshot_vinculo = snap.snapshot_vinculo
+              if (shiftsCols.has('snapshot_vinculos_json')) row.snapshot_vinculos_json = snap.snapshot_vinculos_json
+            }
+            allInserts.push(row)
         }
     })
 
@@ -6418,13 +7926,239 @@ export async function changePassword(prevState: any, formData: FormData) {
   }
 
   // Update session cookie to remove mustChangePassword
-  const updatedUser = { ...user, mustChangePassword: false }
+  const updatedUser = { ...user, mustChangePassword: false, login_nonce: (user as any)?.login_nonce || randomUUID() }
   cookies().set(portalConfig.sessionCookieName, JSON.stringify(updatedUser), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: SESSION_IDLE_TIMEOUT_SECONDS,
     path: portalConfig.basePath || '/',
   })
 
   redirect(portalConfig.dashboardPath)
+}
+
+// ============================================================
+// 💬 FRASES MOTIVACIONAIS (Frases do Dia)
+// ============================================================
+export interface MotivationalPhrase {
+  id: string
+  text: string
+  active: boolean
+  author?: string
+  createdAt: string
+}
+
+const MOTIVATIONAL_SETTINGS_KEY = 'motivational_phrases_v1'
+const MOTIVATIONAL_SEEDED_KEY = 'motivational_phrases_v1_seeded'
+
+const DEFAULT_MOTIVATIONAL_PHRASES: string[] = [
+  'Cuidar de pessoas é mais do que um trabalho: é uma missão.',
+  'Cada profissional faz a diferença na construção de um atendimento melhor.',
+  'Juntos, somos mais fortes para cuidar de quem precisa.',
+  'Nosso trabalho transforma vidas, mesmo nos pequenos gestos.',
+  'Onde existe cuidado, existe esperança.',
+  'Ser profissional de saúde é escolher cuidar todos os dias.',
+  'Uma equipe unida faz acontecer o que parecia impossível.',
+  'Cada plantão é uma nova oportunidade de fazer a diferença.',
+  'Por trás de cada atendimento, existe uma vida que merece cuidado e respeito.',
+  'Nosso maior resultado é saber que alguém saiu daqui melhor do que chegou.',
+  'Cuidar com competência, servir com humanidade.',
+  'O trabalho de cada um fortalece o trabalho de todos.',
+  'Mesmo nos dias difíceis, nosso propósito permanece: cuidar.',
+  'Pequenas atitudes podem transformar grandes histórias.',
+  'A força de um hospital está na união de seus profissionais.',
+  'Quem cuida também deixa marcas de esperança por onde passa.',
+  'Nossa dedicação faz parte da recuperação de cada paciente.',
+  'Trabalhar em equipe é entender que ninguém cuida sozinho.',
+  'Excelência no cuidado começa com compromisso e termina com humanização.',
+  'Cada esforço vale a pena quando o propósito é salvar e cuidar de vidas.',
+  'Que nunca nos falte força para continuar fazendo o bem.',
+  'Nosso trabalho é essencial, nossa dedicação é insubstituível.',
+  'Cuidar é colocar conhecimento, responsabilidade e coração em cada atendimento.',
+  'Um bom atendimento começa com uma equipe que acredita no que faz.',
+  'Somos diferentes em nossas funções, mas iguais em nosso propósito: cuidar.',
+  'A união da equipe transforma desafios em resultados.',
+  'Todos os dias, temos a oportunidade de fazer a diferença na vida de alguém.',
+  'Nossa maior recompensa é contribuir para a vida e o bem-estar de quem precisa.',
+  'Que cada plantão seja marcado por respeito, união e compromisso.',
+  'Hospital é feito de pessoas que cuidam de pessoas. E cada um de nós importa.',
+]
+
+function _uid(prefix = 'p'): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function _buildSeedPhrases(): MotivationalPhrase[] {
+  const now = new Date().toISOString()
+  return DEFAULT_MOTIVATIONAL_PHRASES.map((text, i): MotivationalPhrase => ({
+    id: `seed_${Date.now().toString(36)}_${i}_${Math.random().toString(36).slice(2, 6)}`,
+    text,
+    active: true,
+    createdAt: now,
+  }))
+}
+
+async function _ensureMotivationalSeeded() {
+  if (isLocalMode()) {
+    try {
+      const db = readDb() as any
+      if (db[MOTIVATIONAL_SEEDED_KEY]) return
+      const existing = _sanitizeMotivationalPhrases(db[MOTIVATIONAL_SETTINGS_KEY])
+      if (existing.length === 0) {
+        db[MOTIVATIONAL_SETTINGS_KEY] = _buildSeedPhrases()
+      }
+      db[MOTIVATIONAL_SEEDED_KEY] = true
+      writeDb(db)
+    } catch (_) { /* noop */ }
+    return
+  }
+  const supabase = createClient()
+  try {
+    const { data: seededRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', MOTIVATIONAL_SEEDED_KEY)
+      .maybeSingle()
+    if (seededRow && (seededRow as any)?.value === '1') return
+
+    const { data: phrasesRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', MOTIVATIONAL_SETTINGS_KEY)
+      .maybeSingle()
+    let list: MotivationalPhrase[] = []
+    if (phrasesRow && typeof (phrasesRow as any).value === 'string') {
+      try { list = _sanitizeMotivationalPhrases(JSON.parse((phrasesRow as any).value)) } catch (_) { /* noop */ }
+    }
+    if (list.length === 0) {
+      const seed = _buildSeedPhrases()
+      await supabase.from('app_settings').upsert(
+        { key: MOTIVATIONAL_SETTINGS_KEY, value: JSON.stringify(seed) },
+        { onConflict: 'key' }
+      )
+    }
+    await supabase.from('app_settings').upsert(
+      { key: MOTIVATIONAL_SEEDED_KEY, value: '1' },
+      { onConflict: 'key' }
+    )
+  } catch (_) { /* noop */ }
+}
+
+function _sanitizeMotivationalPhrases(raw: any): MotivationalPhrase[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((r: any) => r && typeof r === 'object' && typeof r.text === 'string' && r.text.trim().length > 0)
+    .map((r: any): MotivationalPhrase => ({
+      id: typeof r.id === 'string' && r.id.length > 0 ? r.id : _uid(),
+      text: String(r.text).trim().slice(0, 500),
+      active: r.active === false ? false : true,
+      author: typeof r.author === 'string' ? r.author : undefined,
+      createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date().toISOString(),
+    }))
+}
+
+export async function getMotivationalPhrases(): Promise<MotivationalPhrase[]> {
+  try { await _ensureMotivationalSeeded() } catch (_) { /* noop */ }
+  if (isLocalMode()) {
+    try {
+      const db = readDb()
+      const raw = (db as any)[MOTIVATIONAL_SETTINGS_KEY]
+      return _sanitizeMotivationalPhrases(raw)
+    } catch (_) { return [] }
+  }
+  const supabase = createClient()
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', MOTIVATIONAL_SETTINGS_KEY)
+      .maybeSingle()
+    if (!error && data && typeof (data as any).value === 'string' && (data as any).value.length > 0) {
+      try {
+        return _sanitizeMotivationalPhrases(JSON.parse((data as any).value))
+      } catch (_) { /* ignore */ }
+    }
+  } catch (_) { /* ignore */ }
+  return []
+}
+
+async function _persistMotivationalPhrases(list: MotivationalPhrase[], isAdmin: boolean): Promise<{ success: boolean; message?: string }> {
+  const clean = _sanitizeMotivationalPhrases(list)
+  if (isLocalMode()) {
+    const db = readDb()
+    ;(db as any)[MOTIVATIONAL_SETTINGS_KEY] = clean
+    writeDb(db)
+    revalidatePath('/')
+    return { success: true }
+  }
+  const supabase = createClient()
+  const { error } = await supabase.from('app_settings').upsert(
+    { key: MOTIVATIONAL_SETTINGS_KEY, value: JSON.stringify(clean) },
+    { onConflict: 'key' }
+  )
+  if (error) return { success: false, message: 'Erro Supabase: ' + error.message }
+  revalidatePath('/')
+  return { success: true }
+}
+
+export async function saveMotivationalPhrases(list: MotivationalPhrase[]) {
+  try { await checkAdmin() } catch (_) { return { success: false, message: 'Acesso negado.' } }
+  return _persistMotivationalPhrases(list, true)
+}
+
+export async function addMotivationalPhrase(text: string) {
+  try { await checkAdmin() } catch (_) { return { success: false, message: 'Acesso negado.' } }
+  const cleanText = String(text || '').trim()
+  if (!cleanText) return { success: false, message: 'Digite uma frase.' }
+  if (cleanText.length > 500) return { success: false, message: 'Frase muito longa (máx. 500 caracteres).' }
+
+  const current = await getMotivationalPhrases()
+  const next: MotivationalPhrase = {
+    id: _uid(),
+    text: cleanText,
+    active: true,
+    createdAt: new Date().toISOString(),
+  }
+  return _persistMotivationalPhrases([next, ...current], true)
+}
+
+export async function updateMotivationalPhrase(id: string, changes: Partial<Pick<MotivationalPhrase, 'text' | 'active'>>) {
+  try { await checkAdmin() } catch (_) { return { success: false, message: 'Acesso negado.' } }
+  if (!id) return { success: false, message: 'ID inválido.' }
+  const current = await getMotivationalPhrases()
+  let changed = false
+  const next = current.map(p => {
+    if (p.id !== id) return p
+    changed = true
+    const np = { ...p }
+    if (typeof changes.text === 'string') {
+      const t = changes.text.trim()
+      if (!t) return p
+      np.text = t.slice(0, 500)
+    }
+    if (typeof changes.active === 'boolean') np.active = changes.active
+    return np
+  })
+  if (!changed) return { success: false, message: 'Frase não encontrada.' }
+  return _persistMotivationalPhrases(next, true)
+}
+
+export async function deleteMotivationalPhrase(id: string) {
+  try { await checkAdmin() } catch (_) { return { success: false, message: 'Acesso negado.' } }
+  if (!id) return { success: false, message: 'ID inválido.' }
+  const current = await getMotivationalPhrases()
+  const next = current.filter(p => p.id !== id)
+  return _persistMotivationalPhrases(next, true)
+}
+
+export async function getActiveMotivationalPhrases(): Promise<MotivationalPhrase[]> {
+  const all = await getMotivationalPhrases()
+  return all.filter(p => p.active)
+}
+
+export async function getRandomMotivationalPhrase(): Promise<MotivationalPhrase | null> {
+  const active = await getActiveMotivationalPhrases()
+  if (active.length === 0) return null
+  const idx = Math.floor(Math.random() * active.length)
+  return active[idx]
 }

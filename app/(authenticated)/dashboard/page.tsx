@@ -244,7 +244,7 @@ export default async function DashboardPage({
             {birthdays.map((b: any) => (
               <div key={b.id} className="flex items-center gap-3 px-3 py-2 rounded-2xl border border-slate-200 bg-white">
                 <span className="w-9 text-center font-black text-indigo-700">{String(b.day).padStart(2, '0')}</span>
-                <span className="text-sm font-semibold text-gray-900 truncate">{b.name}</span>
+                <span className="text-sm font-semibold text-gray-900 truncate">{String(b.name || '').split(' ').slice(0, 2).join(' ')}</span>
               </div>
             ))}
           </div>
@@ -257,16 +257,6 @@ export default async function DashboardPage({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <h2 className="text-lg font-semibold text-gray-800 tracking-tight">Cadastros por período</h2>
-              <ManagementReportButton 
-                selectedMonth={selectedMonth} 
-                selectedYear={selectedYear} 
-                monthLabel={currentMonthLabel}
-              />
-              <ScheduledStaffReportButton
-                selectedMonth={selectedMonth}
-                selectedYear={selectedYear}
-                monthLabel={currentMonthLabel}
-              />
             </div>
             <form className="flex items-center gap-2 text-sm text-gray-700">
               <label htmlFor="month" className="sr-only">
@@ -538,6 +528,42 @@ export default async function DashboardPage({
                     </tbody>
                   </table>
                 )}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/90 backdrop-blur rounded-3xl shadow-sm border border-slate-200/70 p-6">
+            <h3 className="text-lg font-semibold text-gray-800 tracking-tight mb-4">Relatórios</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-slate-200 bg-gradient-to-r from-indigo-50 to-white hover:from-indigo-100 hover:to-white transition-colors">
+                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-indigo-700" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Gerenciamento</p>
+                  <ManagementReportButton
+                    selectedMonth={selectedMonth}
+                    selectedYear={selectedYear}
+                    monthLabel={currentMonthLabel}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-slate-200 bg-gradient-to-r from-emerald-50 to-white hover:from-emerald-100 hover:to-white transition-colors">
+                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-emerald-700" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Plantões escalados</p>
+                  <ScheduledStaffReportButton
+                    selectedMonth={selectedMonth}
+                    selectedYear={selectedYear}
+                    monthLabel={currentMonthLabel}
+                  />
+                </div>
               </div>
             </div>
           </div>

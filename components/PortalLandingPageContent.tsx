@@ -111,26 +111,31 @@ export default function PortalLandingPageContent({
         <div className="bg-white/85 backdrop-blur rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/70 p-6 md:p-8 print:hidden">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${palette.ring} mb-6`} />
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-            <div className="flex items-center gap-8 justify-center lg:justify-start">
+            <div className="flex items-start gap-8 justify-center lg:justify-start">
               <Image
                 src={logoPrefeitura}
                 alt="Prefeitura de Açailândia"
                 width={160}
                 height={54}
-                className="h-12 md:h-14 w-auto object-contain"
+                className="h-12 md:h-14 w-auto object-contain pt-2"
                 priority
               />
-              <div className="h-10 w-px bg-slate-200/80 hidden sm:block" />
-              <div className="flex items-center gap-4">
-                <Image
-                  src={portalLogo}
-                  alt={portalTitle}
-                  width={160}
-                  height={54}
-                  className="h-12 md:h-14 w-auto object-contain"
-                  priority
-                />
-                {showPortalBadge && <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.2em] ${palette.chip}`}>{portalTitle}</span>}
+              <div className="h-12 md:h-14 w-px bg-slate-200/80 self-center hidden sm:block" />
+              <div className="flex flex-col items-start justify-start gap-1.5">
+                <div className="flex items-center gap-4">
+                  <Image
+                    src={portalLogo}
+                    alt={portalTitle}
+                    width={160}
+                    height={54}
+                    className="h-12 md:h-14 w-auto object-contain"
+                    priority
+                  />
+                  {showPortalBadge && <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.2em] ${palette.chip}`}>{portalTitle}</span>}
+                </div>
+                <p className="text-[11px] md:text-xs font-black tracking-tight text-blue-900 leading-tight pl-1">
+                  Hospital Municipal de Açailândia
+                </p>
               </div>
             </div>
 

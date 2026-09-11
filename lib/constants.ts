@@ -1,0 +1,1 @@
+export const SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60

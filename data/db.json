@@ -599,5 +599,227 @@
       "reason": "Falta Injustificada (Teste)",
       "created_at": "2026-01-19T17:42:48.010884"
     }
+  ],
+  "app_settings": [
+    {
+      "id": "app-set-motivational_phrases_v1",
+      "key": "motivational_phrases_v1",
+      "value": [
+        {
+          "id": "1",
+          "text": "Cuidar de pessoas é mais do que um trabalho: é uma missão.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.677Z"
+        },
+        {
+          "id": "2",
+          "text": "Cada profissional faz a diferença na construção de um atendimento melhor.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.677Z"
+        },
+        {
+          "id": "3",
+          "text": "Juntos, somos mais fortes para cuidar de quem precisa.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.677Z"
+        },
+        {
+          "id": "4",
+          "text": "Nosso trabalho transforma vidas, mesmo nos pequenos gestos.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.677Z"
+        },
+        {
+          "id": "5",
+          "text": "Onde existe cuidado, existe esperança.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.677Z"
+        },
+        {
+          "id": "6",
+          "text": "Ser profissional de saúde é escolher cuidar todos os dias.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.677Z"
+        },
+        {
+          "id": "7",
+          "text": "Uma equipe unida faz acontecer o que parecia impossível.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.677Z"
+        },
+        {
+          "id": "8",
+          "text": "Cada plantão é uma nova oportunidade de fazer a diferença.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "9",
+          "text": "Por trás de cada atendimento, existe uma vida que merece cuidado e respeito.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "10",
+          "text": "Nosso maior resultado é saber que alguém saiu daqui melhor do que chegou.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "11",
+          "text": "Cuidar com competência, servir com humanidade.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "12",
+          "text": "O trabalho de cada um fortalece o trabalho de todos.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "13",
+          "text": "Mesmo nos dias difíceis, nosso propósito permanece: cuidar.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "14",
+          "text": "Pequenas atitudes podem transformar grandes histórias.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "15",
+          "text": "A força de um hospital está na união de seus profissionais.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "16",
+          "text": "Quem cuida também deixa marcas de esperança por onde passa.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "17",
+          "text": "Nossa dedicação faz parte da recuperação de cada paciente.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "18",
+          "text": "Trabalhar em equipe é entender que ninguém cuida sozinho.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "19",
+          "text": "Excelência no cuidado começa com compromisso e termina com humanização.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "20",
+          "text": "Cada esforço vale a pena quando o propósito é salvar e cuidar de vidas.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "21",
+          "text": "Que nunca nos falte força para continuar fazendo o bem.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "22",
+          "text": "Nosso trabalho é essencial, nossa dedicação é insubstituível.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "23",
+          "text": "Cuidar é colocar conhecimento, responsabilidade e coração em cada atendimento.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "24",
+          "text": "Um bom atendimento começa com uma equipe que acredita no que faz.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "25",
+          "text": "Somos diferentes em nossas funções, mas iguais em nosso propósito: cuidar.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "26",
+          "text": "A união da equipe transforma desafios em resultados.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "27",
+          "text": "Todos os dias, temos a oportunidade de fazer a diferença na vida de alguém.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "28",
+          "text": "Nossa maior recompensa é contribuir para a vida e o bem-estar de quem precisa.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "29",
+          "text": "Que cada plantão seja marcado por respeito, união e compromisso.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        },
+        {
+          "id": "30",
+          "text": "Hospital é feito de pessoas que cuidam de pessoas. E cada um de nós importa.",
+          "active": true,
+          "created_at": "2026-09-11T01:20:41.678Z"
+        }
+      ],
+      "updated_at": "2026-09-11T01:20:41.678Z"
+    },
+    {
+      "id": "app-set-motivational_phrases_v1_seeded",
+      "key": "motivational_phrases_v1_seeded",
+      "value": "1",
+      "updated_at": "2026-09-11T01:20:41.678Z"
+    },
+    {
+      "id": "app-set-sidebar_permissions_v2",
+      "key": "sidebar_permissions_v2",
+      "value": {
+        "version": 2,
+        "updated_at": "2026-09-11T01:20:41.678Z",
+        "items": {
+          "dashboard": "EVERYONE",
+          "schedule": "EVERYONE",
+          "nurses": "COORD_SETOR",
+          "exchanges": "COORD_SETOR",
+          "leaves": "COORD_SETOR",
+          "report_management": "COORD_SETOR",
+          "report_scheduled": "COORD_SETOR",
+          "settings": "COORD_SETOR",
+          "frases": "COORD_GERAL_ONLY",
+          "logs": "COORD_GERAL_ONLY",
+          "sectors": "COORD_GERAL_ONLY",
+          "downloads": "EVERYONE"
+        },
+        "reports": {
+          "management": "COORD_SETOR",
+          "scheduledStaff": "COORD_SETOR"
+        }
+      },
+      "updated_at": "2026-09-11T01:20:41.678Z"
+    }
   ]
 }

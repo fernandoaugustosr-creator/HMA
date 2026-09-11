@@ -39,3 +39,9 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local data & backups
+/data/db.json
+/data/db.json.bak
+/backup/
+/.dbg/

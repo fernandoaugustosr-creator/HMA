@@ -1041,21 +1041,28 @@ export default function Schedule({
     const unitName = data.units.find(u => u.id === selectedUnitId)?.title
     if (!confirm(`ATENÇÃO: Deseja EXCLUIR TODO O HISTÓRICO DE ESCALAS do setor "${unitName}"?\n\nIsso apagará TODAS as escalas (passadas, presentes e futuras) deste setor.\n\nO setor em si NÃO será excluído.`)) return
     
-    // Double confirmation
-    const confirmName = prompt(`Para confirmar, digite o nome do setor: ${unitName}`)
-    if (confirmName !== unitName) {
-        alert('Nome incorreto. Ação cancelada.')
+    // Double confirmation — enviar MAIÚSCULAS para o backend também validar
+    const expected = (unitName || 'SETOR').toUpperCase()
+    const confirmName = prompt(`Para confirmar, digite o NOME DO SETOR em MAIÚSCULAS (sem acentos se possível): ${expected}`)
+    if (!confirmName || confirmName.trim().toUpperCase() !== expected) {
+        alert('Confirmação incorreta. Ação cancelada.')
         return
     }
 
     setLoading(true)
-    const res = await clearAllUnitRosters(selectedUnitId)
+    const res = await clearAllUnitRosters(selectedUnitId, confirmName.trim().toUpperCase())
     if (res.success) {
         alert('Histórico de escalas excluído com sucesso!')
         clearCache()
         fetchData(true)
     } else {
-        alert(res.message || 'Erro ao limpar histórico')
+        if ((res as any).locked) {
+          alert('🛑 TRAVA DE SEGURANÇA (ESCALA LIBERADA):\n\n' + (res.message || 'Não permitido.'))
+        } else if ((res as any).needConfirm) {
+          alert('⚠️ Confirmação exigida pelo sistema:\n\n' + (res.message || ''))
+        } else {
+          alert(res.message || 'Erro ao limpar histórico')
+        }
     }
     setLoading(false)
   }
@@ -1199,7 +1206,11 @@ export default function Schedule({
         clearCache()
         fetchData(true)
     } else {
-        alert(res.message || 'Erro ao excluir escala')
+        if ((res as any).locked) {
+          alert('🛑 TRAVA DE SEGURANÇA (ESCALA LIBERADA):\n\n' + (res.message || 'Não permitido.'))
+        } else {
+          alert(res.message || 'Erro ao excluir escala')
+        }
     }
     setLoading(false)
   }
@@ -1208,20 +1219,26 @@ export default function Schedule({
     if (isScheduleReleased) return
     if (!confirm('ATENÇÃO: Você está prestes a EXCLUIR TODOS OS DADOS de todas as escalas (todos os meses e setores) do banco de dados.')) return
     if (!confirm('TEM CERTEZA ABSOLUTA? Esta ação é irreversível e apagará tudo.')) return
-    const code = prompt('Para confirmar a exclusão TOTAL, digite "DELETAR TUDO":')
-    if (code !== 'DELETAR TUDO') {
+    const code = prompt('Para confirmar a exclusão TOTAL do banco de dados, DIGITE EXATAMENTE (tudo em maiúsculo, com espaço):\n\nAPAGAR TUDO')
+    if (code !== 'APAGAR TUDO') {
         alert('Operação cancelada. O código de confirmação estava incorreto.')
         return
     }
 
     setLoading(true)
-    const res = await clearAllDatabaseShifts()
+    const res = await clearAllDatabaseShifts(code)
     if (res.success) {
         alert(res.message)
         clearCache()
         fetchData(true)
     } else {
-        alert(res.message)
+        if ((res as any).locked) {
+          alert('🛑 TRAVA DE SEGURANÇA (existem escalas liberadas):\n\n' + (res.message || ''))
+        } else if ((res as any).needConfirm) {
+          alert('⚠️ Confirmação exigida pelo servidor:\n\n' + (res.message || ''))
+        } else {
+          alert(res.message)
+        }
     }
     setLoading(false)
   }
@@ -1231,7 +1248,13 @@ export default function Schedule({
     if (!confirm('Tem certeza que deseja remover este servidor desta escala mensal?')) return
     setLoading(true)
     const res = await removeRosterEntry(rosterId)
-    if (!res.success) alert(res.message)
+    if (!res.success) {
+      if ((res as any).locked) {
+        alert('🛑 TRAVA DE SEGURANÇA (ESCALA LIBERADA):\n\n' + (res.message || 'Não permitido.'))
+      } else {
+        alert(res.message)
+      }
+    }
     clearCache()
     await fetchData(true)
   }
@@ -3456,7 +3479,22 @@ export default function Schedule({
                                                         clearCache();
                                                         await fetchData(true);
                                                     } else {
-                                                        alert(res.message || 'Erro ao remover grupo');
+                                                        if ((res as any).locked) {
+                                                          alert('🛑 TRAVA DE SEGURANÇA (ESCALA LIBERADA):\n\n' + (res.message || 'Não permitido.'))
+                                                        } else if ((res as any).needConfirm) {
+                                                          const esperado = (res as any).expectedConfirm || section.title?.toUpperCase() || 'BLOCO';
+                                                          const txt = prompt((res.message || 'Confirmação obrigatória.') + '\n\nDigite abaixo:');
+                                                          if (txt && txt.trim().toUpperCase() === String(esperado).toUpperCase()) {
+                                                            setLoading(true);
+                                                            const res2 = await clearSectionRoster(selectedMonth + 1, selectedYear, selectedUnitId || null, section.id, txt.trim().toUpperCase());
+                                                            if (res2.success) { clearCache(); await fetchData(true); }
+                                                            else alert(res2.message || 'Erro');
+                                                          } else if (txt) {
+                                                            alert('Texto incorreto. Ação cancelada.');
+                                                          }
+                                                        } else {
+                                                          alert(res.message || 'Erro ao remover grupo');
+                                                        }
                                                     }
                                                     setLoading(false);
                                                 }}

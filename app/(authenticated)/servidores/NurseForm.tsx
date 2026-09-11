@@ -170,6 +170,59 @@ export default function NurseForm({ sections = [] as any[] }: { sections?: any[]
             ))}
           </select>
         </div>
+        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-3">
+            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Telefone</label>
+            <input
+              type="text"
+              name="phone"
+              id="phone"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+              placeholder="(00) 00000-0000"
+              maxLength={15}
+            />
+          </div>
+          <div className="md:col-span-9">
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">E-mail</label>
+            <input
+              type="email"
+              name="email"
+              id="email"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+              placeholder="exemplo@empresa.com"
+            />
+          </div>
+          <div className="md:col-span-6">
+            <label htmlFor="address" className="block text-sm font-medium text-gray-700">Endereço (Rua, Avenida, Travessa, etc.)</label>
+            <input
+              type="text"
+              name="address"
+              id="address"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+              placeholder="Ex: Rua das Flores, Bairro Centro"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label htmlFor="house_number" className="block text-sm font-medium text-gray-700">Número</label>
+            <input
+              type="text"
+              name="house_number"
+              id="house_number"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+              placeholder="123"
+            />
+          </div>
+          <div className="md:col-span-4">
+            <label htmlFor="city" className="block text-sm font-medium text-gray-700">Cidade</label>
+            <input
+              type="text"
+              name="city"
+              id="city"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white text-black"
+              placeholder="Ex: Açailândia"
+            />
+          </div>
+        </div>
       </div>
       
       <div>

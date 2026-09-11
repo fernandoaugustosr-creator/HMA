@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import type { StaticImageData } from 'next/image'
-import logoHma from '@/public/logo-hma.png'
 import logoSamu from '@/public/logo_samu.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { usePathname } from 'next/navigation'
-import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileBarChart, FileSpreadsheet, LogOut, LayoutDashboard, CalendarCheck2, Users2, Repeat2, CalendarRange, ClipboardList, Download, ShieldCheck, History, ArrowLeftRight, Pause, Sparkles, Plus } from 'lucide-react'
+import { SidebarReportLink, useReportLauncher } from './ReportLauncher'
+import type { SidebarMenuItemId } from '@/lib/sidebar-menu-items'
 
 export default function Sidebar({
   user,
@@ -16,6 +17,8 @@ export default function Sidebar({
   portalLabel = 'HMA',
   showPortalBadge = true,
   logoutAction,
+  canSeeReports = true,
+  menuPerms,
 }: {
   user: any
   initialEditableUnits?: { id: string, title: string }[]
@@ -23,258 +26,407 @@ export default function Sidebar({
   portalLabel?: string
   showPortalBadge?: boolean
   logoutAction: (formData: FormData) => void | Promise<void>
+  canSeeReports?: boolean
+  menuPerms?: Record<SidebarMenuItemId, boolean>
 }) {
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [editableUnits, setEditableUnits] = useState<{ id: string, title: string }[]>(initialEditableUnits)
   const isSamuPortal = basePath === '/samu'
-  const portalLogo: StaticImageData = isSamuPortal ? logoSamu : logoHma
   const withBasePath = useCallback((path: string) => `${basePath}${path}`, [basePath])
   const coordPath = withBasePath('/coordenacao')
   const folgasPath = withBasePath('/folgas')
   const escalaPath = withBasePath('/escala')
+
+  // ================================================================
+  // 🎨 THEME HMA AZUL (moderno, com gradiente e profundidade)
+  // ================================================================
+  const HMA_BLUE_DEEP = '#1e3a8a'
+  const HMA_BLUE_PRIMARY = '#2563eb'
+  const HMA_BLUE_SOFT = '#3b82f6'
+  const HMA_BLUE_PALE = '#dbeafe'
+
   const theme = isSamuPortal
     ? {
-        ring: 'focus-visible:ring-red-500/60',
-        activeItem: 'bg-gradient-to-r from-red-50 via-rose-50/70 to-orange-50/60 text-red-900 border border-red-200/70 shadow-sm',
-        hoverItem: 'text-slate-600 hover:bg-red-50/70 hover:text-slate-900',
-        activeIconBox: 'bg-red-100 text-red-700',
-        activeIcon: 'text-red-700',
-        hoverIcon: 'text-slate-500 group-hover:text-red-700',
-        subActive: 'bg-red-50 text-red-900 border border-red-200/60',
-        subHover: 'text-slate-500 hover:bg-red-50/60 hover:text-red-900',
-        mobileHover: 'hover:bg-red-50/60',
-        badge: 'bg-red-100 text-red-700',
-        gradient: 'bg-gradient-to-r from-red-600 via-rose-500 to-orange-400',
-        sectionText: 'text-red-600',
-        avatarBg: 'bg-red-100 text-red-700',
-        roleText: 'text-red-500',
-        collapseHover: 'hover:bg-red-50/60 text-slate-600',
+        bgSidebar: 'bg-gradient-to-b from-white via-white to-rose-50/50',
+        topGradient: `linear-gradient(90deg, #dc2626 0%, #ef4444 40%, #f97316 100%)`,
+        active: {
+          box: 'shadow-[0_4px_14px_rgba(220,38,38,0.15)] bg-gradient-to-r from-rose-50 via-red-50 to-orange-50 border border-red-200/60',
+          text: 'text-red-900',
+          iconBox: 'bg-gradient-to-br from-red-500 to-orange-500 text-white shadow-md',
+          accentBar: 'from-red-500 via-rose-500 to-orange-400',
+        },
+        hover: {
+          box: 'hover:bg-slate-100/60 text-slate-600 hover:text-slate-800',
+          iconBox: 'bg-slate-100 text-slate-500 group-hover:bg-red-100 group-hover:text-red-700',
+        },
+        badge: 'bg-red-500/10 text-red-700 border border-red-200/50',
+        avatar: 'bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-sm',
+        role: 'text-red-600',
+        section: 'text-red-600',
+        divider: 'border-red-100/60',
       }
     : {
-        ring: 'focus-visible:ring-indigo-500/60',
-        activeItem: 'bg-gradient-to-r from-indigo-50 via-blue-50/40 to-emerald-50/40 text-indigo-900 border border-indigo-200/60 shadow-sm',
-        hoverItem: 'text-slate-600 hover:bg-indigo-50/60 hover:text-slate-900',
-        activeIconBox: 'bg-indigo-100 text-indigo-700',
-        activeIcon: 'text-indigo-700',
-        hoverIcon: 'text-slate-500 group-hover:text-slate-700',
-        subActive: 'bg-indigo-50 text-indigo-900 border border-indigo-200/60',
-        subHover: 'text-slate-500 hover:bg-indigo-50/50 hover:text-slate-900',
-        mobileHover: 'hover:bg-indigo-50/60',
-        badge: 'bg-indigo-100 text-indigo-700',
-        gradient: 'bg-gradient-to-r from-indigo-600 via-blue-600 to-emerald-500',
-        sectionText: 'text-indigo-600',
-        avatarBg: 'bg-indigo-100 text-indigo-600',
-        roleText: 'text-indigo-500',
-        collapseHover: 'hover:bg-indigo-50/60 text-slate-600',
+        bgSidebar: 'bg-gradient-to-b from-white via-white to-[#eff6ff]/60',
+        topGradient: `linear-gradient(135deg, ${HMA_BLUE_DEEP} 0%, ${HMA_BLUE_PRIMARY} 55%, ${HMA_BLUE_SOFT} 100%)`,
+        active: {
+          box: `shadow-[0_4px_14px_rgba(37,99,235,0.14)] border border-blue-200/70`,
+          bgActive: `linear-gradient(110deg, ${HMA_BLUE_PALE} 0%, #ffffff 35%, #eff6ff 100%)`,
+          text: 'text-blue-900',
+          iconBox: `shadow-[0_3px_10px_rgba(37,99,235,0.25)] text-white`,
+          iconBg: `linear-gradient(135deg, ${HMA_BLUE_DEEP} 0%, ${HMA_BLUE_PRIMARY} 55%, ${HMA_BLUE_SOFT} 100%)`,
+          accentBar: `from-[${HMA_BLUE_DEEP}] via-[${HMA_BLUE_PRIMARY}] to-[${HMA_BLUE_SOFT}]`,
+        },
+        hover: {
+          box: 'hover:bg-slate-100/70 text-slate-600 hover:text-slate-800',
+          iconBox: 'bg-slate-100 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-700',
+        },
+        badge: 'bg-blue-500/10 text-blue-800 border border-blue-200/60',
+        avatar: `text-white shadow-[0_3px_10px_rgba(37,99,235,0.25)]`,
+        avatarBg: `linear-gradient(135deg, ${HMA_BLUE_DEEP} 0%, ${HMA_BLUE_PRIMARY} 100%)`,
+        role: 'text-blue-700',
+        section: 'text-blue-700',
+        divider: 'border-blue-100/70',
       }
-
-  const getNavItemClass = (isActive: boolean, isCollapsedView: boolean) => {
-    const base = `group flex items-center rounded-2xl transition-colors select-none focus-visible:outline-none focus-visible:ring-2 ${theme.ring} focus-visible:ring-offset-2 focus-visible:ring-offset-white`
-    if (isActive) {
-      return `${base} ${theme.activeItem} ${isCollapsedView ? 'justify-center px-2' : 'px-4'} py-3`
-    }
-    return `${base} ${theme.hoverItem} ${isCollapsedView ? 'justify-center px-2' : 'px-4'} py-3`
-  }
-
-  const getNavIconClass = (isActive: boolean, isCollapsedView: boolean) => {
-    const base = 'shrink-0'
-    if (isCollapsedView) {
-      return `${base} p-2 rounded-xl ${isActive ? theme.activeIconBox : theme.hoverIcon}`
-    }
-    return `${base} ${isActive ? theme.activeIcon : theme.hoverIcon}`
-  }
-
-  const getSubItemClass = (isActive: boolean) => {
-    const base = `ml-10 mt-1 flex items-center px-4 py-2 text-xs font-semibold rounded-xl transition-colors select-none focus-visible:outline-none focus-visible:ring-2 ${theme.ring} focus-visible:ring-offset-2 focus-visible:ring-offset-white`
-    if (isActive) return `${base} ${theme.subActive}`
-    return `${base} ${theme.subHover}`
-  }
 
   // Força a re-renderização para garantir que o botão de logout apareça
   const role = user?.role || ''
-  const isAdmin = role === 'ADMIN' || role === 'COORDENACAO_GERAL' || user?.cpf === '02170025367'
+  const isAdmin = role === 'ADMIN' || role === 'COORDENACAO_GERAL' || String(user?.cpf || '').replace(/\D/g, '') === '02170025367'
   const canSeeScaleMenu = isAdmin || editableUnits.length > 0
 
   useEffect(() => {
     setEditableUnits(initialEditableUnits)
   }, [initialEditableUnits])
 
-  const allNavItems = [
-    { name: 'Dashboard', href: withBasePath('/dashboard'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-      </svg>
-    )},
-    { name: 'Escala', href: withBasePath('/escala'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    )},
-    { name: 'Servidores', href: withBasePath('/servidores'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-      </svg>
-    )},
-    { name: 'Permultas', href: withBasePath('/trocas'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-      </svg>
-    )},
-    { name: 'Folgas', href: withBasePath('/folgas'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    )},
-    { name: 'Faltas', href: withBasePath('/coordenacao'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zm4-8h6m-6 4h3" />
-      </svg>
-    )},
-    { name: 'Escalas Liberadas', href: withBasePath('/downloads'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
-    )},
-    { name: 'Coordenação', href: withBasePath('/coordenacao'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-      </svg>
-    )},
-    { name: 'Logs de Login', href: withBasePath('/logs?label=Logs%20de%20Login'), icon: (
-      <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    )},
-  ]
+  // Helper: pode ver este item? (pode ser undefined -> true por default)
+  const canSee = (id: SidebarMenuItemId): boolean => {
+    if (!menuPerms) return true
+    const val = menuPerms[id]
+    return typeof val === 'boolean' ? val : true
+  }
 
-  const dashboardIcon = allNavItems.find(item => item.name === 'Dashboard')?.icon
-  const folgasIcon = allNavItems.find(item => item.name === 'Folgas')?.icon
-  const trocasIcon = allNavItems.find(item => item.name === 'Permultas')?.icon
-  const downloadsIcon = allNavItems.find(item => item.name === 'Escalas Liberadas')?.icon
-  const faltasIcon = allNavItems.find(item => item.name === 'Faltas')?.icon
-  const escalaIcon = allNavItems.find(item => item.name === 'Escala')?.icon
+  // ==================== ÍCONES MODERNOS LUCIDE ====================
+  const Icons = {
+    dashboard: <LayoutDashboard size={19} strokeWidth={2} />,
+    escala: <CalendarCheck2 size={19} strokeWidth={2} />,
+    servidores: <Users2 size={19} strokeWidth={2} />,
+    permultas: <Repeat2 size={19} strokeWidth={2} />,
+    folgas: <CalendarRange size={19} strokeWidth={2} />,
+    faltas: <ClipboardList size={19} strokeWidth={2} />,
+    downloads: <Download size={19} strokeWidth={2} />,
+    coordenacao: <ShieldCheck size={19} strokeWidth={2} />,
+    logs: <History size={19} strokeWidth={2} />,
+    trocas: <ArrowLeftRight size={19} strokeWidth={2} />,
+    pause: <Pause size={19} strokeWidth={2} />,
+    frases: <Sparkles size={19} strokeWidth={2} />,
+  }
 
-  const coordSubmenuItems = useMemo(() => {
-    if (isAdmin) {
-      return [
-        { name: 'Faltas', href: withBasePath('/coordenacao?tab=falta') },
-        { name: 'Solicitações de Pagamentos', href: withBasePath('/coordenacao?tab=pagamento') },
-        { name: 'Outras Solicitações', href: withBasePath('/coordenacao?tab=outros') },
-        { name: 'Folgas', href: withBasePath('/folgas') },
-        { name: 'Gestão de Coordenações', href: withBasePath('/coordenacao/gestao') },
-      ]
+  // ==================== DEFINIÇÃO ESTRUTURADA DOS MENUS ====================
+  interface MenuItemDef {
+    name: string
+    id: SidebarMenuItemId
+    href: string
+    icon: JSX.Element
+    submenu?: { name: string; href: string }[]
+    badge?: string
+  }
+
+  const buildMainMenu = (): MenuItemDef[] => {
+    const items: MenuItemDef[] = []
+
+    if (canSee('dashboard')) {
+      items.push({ name: 'Dashboard', id: 'dashboard', href: withBasePath('/dashboard'), icon: Icons.dashboard })
     }
 
-    if (role !== 'COORDENADOR') {
-      return [
-        { name: 'Folgas', href: withBasePath('/folgas') },
-      ]
+    if (canSee('escala') && (isAdmin || role === 'COORDENADOR' ? canSeeScaleMenu : canSeeScaleMenu)) {
+      items.push({ name: 'Escala', id: 'escala', href: escalaHref, icon: Icons.escala })
     }
 
-    return []
-  }, [isAdmin, role, withBasePath])
+    if (canSee('servidores')) {
+      items.push({ name: 'Servidores', id: 'servidores', href: withBasePath('/servidores'), icon: Icons.servidores })
+    }
+
+    if (canSee('relatorios') && canSeeReports) {
+      // Submenu será renderizado abaixo via SidebarReportLink
+      items.push({ name: 'Relatórios', id: 'relatorios', href: withBasePath('/dashboard#reports'), icon: Icons.coordenacao })
+    }
+
+    if (canSee('permultas') && (isAdmin || role === 'COORDENADOR')) {
+      items.push({ name: 'Permultas', id: 'permultas', href: withBasePath('/trocas'), icon: Icons.permultas })
+    }
+
+    if (canSee('trocas') && (isAdmin || role === 'COORDENADOR')) {
+      items.push({ name: 'Trocas / Permutas', id: 'trocas', href: withBasePath('/trocas'), icon: Icons.trocas })
+    }
+
+    if (canSee('folgas') && (isAdmin || role === 'COORDENADOR')) {
+      items.push({ name: 'Faltas e Folgas', id: 'folgas', href: folgasPath, icon: Icons.folgas })
+    }
+
+    if (canSee('coordenacao') && (isAdmin || role === 'COORDENADOR')) {
+      const submenu: MenuItemDef['submenu'] = []
+      if (isAdmin) {
+        submenu.push({ name: 'Faltas', href: withBasePath('/coordenacao?tab=falta') })
+        submenu.push({ name: 'Solicitações de Pagamentos', href: withBasePath('/coordenacao?tab=pagamento') })
+        submenu.push({ name: 'Outras Solicitações', href: withBasePath('/coordenacao?tab=outros') })
+        submenu.push({ name: 'Folgas', href: withBasePath('/folgas') })
+        submenu.push({ name: 'Gestão de Coordenações', href: withBasePath('/coordenacao/gestao') })
+      } else if (role === 'COORDENADOR') {
+        submenu.push({ name: 'Faltas', href: withBasePath('/coordenacao?tab=falta') })
+        submenu.push({ name: 'Solicitações de Pagamentos', href: withBasePath('/coordenacao?tab=pagamento') })
+        submenu.push({ name: 'Outras Solicitações', href: withBasePath('/coordenacao?tab=outros') })
+        submenu.push({ name: 'Folgas', href: withBasePath('/folgas') })
+      } else {
+        submenu.push({ name: 'Faltas', href: withBasePath('/coordenacao') })
+        submenu.push({ name: 'Folgas', href: withBasePath('/folgas') })
+      }
+      items.push({ name: 'Coordenação', id: 'coordenacao', href: coordPath, icon: Icons.coordenacao, submenu })
+    }
+
+    if (canSee('downloads')) {
+      items.push({ name: 'Escalas Liberadas', id: 'downloads', href: withBasePath('/downloads'), icon: Icons.downloads })
+    }
+
+    if (canSee('frases') && isAdmin) {
+      items.push({ name: 'Frases Motivacionais', id: 'frases', href: withBasePath('/frases-motivacionais'), icon: Icons.frases })
+    }
+
+    if (canSee('logs') && isAdmin) {
+      items.push({ name: 'Logs de Login', id: 'logs', href: withBasePath('/logs?label=Logs%20de%20Login'), icon: Icons.logs })
+    }
+
+    return items
+  }
 
   const escalaHref = escalaPath
+  const navItems = buildMainMenu()
 
-  let navItems: { name: string; href: string; icon: JSX.Element }[] = []
-
-  if (isAdmin) {
-    navItems = allNavItems.filter(item => item.name !== 'Faltas' && item.name !== 'Folgas')
-  } else if (role === 'COORDENADOR') {
-    navItems = [
-      dashboardIcon && { name: 'Dashboard', href: withBasePath('/dashboard'), icon: dashboardIcon },
-      canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
-      faltasIcon && { name: 'Lançar Falta', href: withBasePath('/coordenacao?tab=falta'), icon: faltasIcon },
-      faltasIcon && { name: 'Solicitar Pagamentos', href: withBasePath('/coordenacao?tab=pagamento'), icon: faltasIcon },
-      faltasIcon && { name: 'Outras Solicitações', href: withBasePath('/coordenacao?tab=outros'), icon: faltasIcon },
-      folgasIcon && { name: 'Folgas', href: withBasePath('/folgas'), icon: folgasIcon },
-      trocasIcon && { name: 'Permultas', href: withBasePath('/trocas'), icon: trocasIcon },
-      downloadsIcon && { name: 'Escalas Liberadas', href: withBasePath('/downloads'), icon: downloadsIcon },
-    ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
-  } else {
-    navItems = [
-      dashboardIcon && { name: 'Dashboard', href: withBasePath('/dashboard'), icon: dashboardIcon },
-      canSeeScaleMenu && escalaIcon && { name: 'Escala', href: escalaHref, icon: escalaIcon },
-      trocasIcon && { name: 'Permultas', href: withBasePath('/trocas'), icon: trocasIcon },
-      faltasIcon && { name: 'Faltas', href: withBasePath('/coordenacao'), icon: faltasIcon },
-      downloadsIcon && { name: 'Escalas Liberadas', href: withBasePath('/downloads'), icon: downloadsIcon },
-    ].filter((item): item is { name: string; href: string; icon: JSX.Element } => Boolean(item))
+  // ================================================================
+  // 🎯 HELPERS DE CLASSE PARA NAV ITEMS (MODERNO, COM DEPTH)
+  // ================================================================
+  const getItemClass = (isActive: boolean, isCollapsedView: boolean) => {
+    const pad = isCollapsedView ? 'justify-center px-2 py-2.5' : 'px-3.5 py-2.5'
+    const base = `group relative flex items-center rounded-2xl transition-all duration-300 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white overflow-hidden`
+    if (isActive) {
+      return `${base} ${pad} ${theme.active.box} ${theme.active.text}`
+    }
+    return `${base} ${pad} ${theme.hover.box}`
   }
+
+  const getIconBoxClass = (isActive: boolean) => {
+    const base = `w-9 h-9 rounded-xl shrink-0 flex items-center justify-center transition-all duration-300`
+    if (isActive) return `${base}`
+    return `${base} ${theme.hover.iconBox}`
+  }
+
+  const getSubItemClass = (isActive: boolean) => {
+    const base = `ml-12 flex items-center gap-2.5 px-3 py-2 text-[12.5px] font-semibold rounded-xl transition-all duration-200 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-white`
+    if (isActive) return `${base} bg-blue-50 text-blue-900 border border-blue-200/60 shadow-sm`
+    return `${base} text-slate-500 hover:bg-slate-100 hover:text-slate-800`
+  }
+
+  const isPathActiveFor = (item: MenuItemDef): boolean => {
+    const itemPath = item.href.split('?')[0]
+    if (itemPath === coordPath) {
+      return pathname === coordPath || pathname.startsWith(coordPath) || pathname === folgasPath
+    }
+    if (itemPath === escalaPath) {
+      return pathname.startsWith(escalaPath)
+    }
+    if (itemPath === withBasePath('/servidores')) {
+      return pathname.startsWith(withBasePath('/servidores'))
+    }
+    if (itemPath === withBasePath('/dashboard')) {
+      return pathname === withBasePath('/dashboard')
+    }
+    return pathname.startsWith(itemPath)
+  }
+
+  const IconStyle = { isSamu: isSamuPortal }
 
   return (
     <>
-      {/* Mobile Navbar */}
-      <div className={`flex md:!hidden ${isSamuPortal ? 'bg-white/95' : 'bg-white/85'} backdrop-blur border-b border-slate-200/70 p-4 sticky top-0 z-30 justify-between items-center shadow-sm w-full`}>
-        <div className="flex items-center gap-2">
-          <Image src={logoPrefeitura} alt="Logo Prefeitura" width={120} height={40} className="h-8 w-auto object-contain" />
-          <Image src={portalLogo} alt={`${portalLabel} Logo`} width={90} height={30} className="h-8 w-auto object-contain" />
-          {showPortalBadge && <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-widest ${theme.badge}`}>{portalLabel}</span>}
+      {/* ============================================================ */}
+      {/* 📱 MOBILE NAVBAR (LOGO + TEXTO ABAIXO + BOTÃO ABRIR MENU)    */}
+      {/* ============================================================ */}
+      <div className={`flex md:!hidden ${theme.bgSidebar} border-b ${theme.divider} p-3 sticky top-0 z-30 justify-between items-start shadow-sm w-full bg-white`}>
+        <div className="flex flex-col items-start gap-1.5 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* LOGO — moderno sem img (monograma HMA); SAMU usa img original */}
+            {isSamuPortal ? (
+              <div
+                className="h-11 w-[62px] rounded-xl flex items-center justify-center shrink-0 bg-white border border-slate-200/70 shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+              >
+                <Image src={logoSamu} alt="SAMU Logo" width={60} height={60} className="h-8 w-[50px] object-contain" />
+              </div>
+            ) : (
+              <div
+                className="h-11 w-[62px] rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-blue-200/80 shadow-[0_2px_10px_rgba(37,99,235,0.25)] relative"
+                style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
+              >
+                <div className="absolute inset-[2px] rounded-[10px] bg-white/95 flex items-center justify-center gap-1">
+                  <Plus size={14} strokeWidth={3} className="text-blue-700 shrink-0" />
+                  <span className="text-[15px] font-black tracking-tight text-blue-900 leading-none">
+                    HMA
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+          {!isSamuPortal && (
+            <p className="text-[10.5px] font-black tracking-tight text-blue-900 leading-tight pl-0.5">
+              Hospital Municipal
+              <br />
+              de Açailândia
+            </p>
+          )}
         </div>
-        <button 
+        <button
+          type="button"
           onClick={() => setIsMobileMenuOpen(true)}
-          className={`focus:outline-none p-2 rounded-xl ${theme.mobileHover}`}
+          className={`p-2.5 h-10 w-10 rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95 border border-slate-200/70 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-sm`}
+          aria-label="Abrir menu"
         >
-          <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          <svg className="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.3} d="M4 7h16M4 12h16M4 17h16" />
           </svg>
         </button>
       </div>
 
-      {/* Mobile Drawer */}
+      {/* ============================================================ */}
+      {/* 📱 MOBILE DRAWER (Header limpo: só logo + fechar)            */}
+      {/* ============================================================ */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
-          {/* Overlay */}
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+          <div
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] transition-opacity duration-200"
             onClick={() => setIsMobileMenuOpen(false)}
-          ></div>
-
-          {/* Sidebar Content */}
-          <div className={`relative flex flex-col w-64 max-w-xs h-full ${isSamuPortal ? 'bg-white' : 'bg-white/90'} backdrop-blur shadow-xl transform transition-transform duration-300 ease-in-out border-r border-slate-200/70`}>
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <Image src={logoPrefeitura} alt="Logo Prefeitura" width={120} height={40} className="h-8 w-auto object-contain" />
-                <Image src={portalLogo} alt={`${portalLabel} Logo`} width={90} height={30} className="h-8 w-auto object-contain" />
-                {showPortalBadge && <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-widest ${theme.badge}`}>{portalLabel}</span>}
+          />
+          <div className={`relative flex flex-col w-72 max-w-[85vw] h-full bg-white shadow-2xl transform transition-transform duration-300 ease-out border-r ${theme.divider}`}>
+            {/* Header (LOGO ESQUERDA + TEXTO ABAIXO / FECHAR DIREITA) */}
+            <div className={`flex items-start justify-between p-4 border-b ${theme.divider} bg-white gap-2`}>
+              <div className="flex flex-col items-start gap-2 min-w-0 shrink-0">
+                {isSamuPortal ? (
+                  <div
+                    className="h-12 w-12 rounded-xl flex items-center justify-center shrink-0 bg-white border border-slate-200/70 shadow-[0_2px_10px_rgba(15,23,42,0.07)]"
+                  >
+                    <Image src={logoSamu} alt="SAMU Logo" width={48} height={48} className="h-8 w-8 object-contain" />
+                  </div>
+                ) : (
+                  <div
+                    className="h-12 w-[68px] rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-blue-200/80 shadow-[0_2px_12px_rgba(37,99,235,0.3)] relative"
+                    style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
+                  >
+                    <div className="absolute inset-[2px] rounded-[10px] bg-white/95 flex items-center justify-center gap-1.5">
+                      <Plus size={15} strokeWidth={3} className="text-blue-700 shrink-0" />
+                      <span className="text-[15.5px] font-black tracking-tight text-blue-900 leading-none">
+                        HMA
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {!isSamuPortal && (
+                  <p className="text-[10.5px] font-black tracking-tight text-blue-900 leading-tight pl-0.5">
+                    Hospital Municipal
+                    <br />
+                    de Açailândia
+                  </p>
+                )}
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
+                className="p-2 h-10 w-10 rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200/60 bg-white shadow-sm"
+                aria-label="Fechar menu"
               >
-                <svg className="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg className="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.3} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="px-4 pt-4">
-              <div className={`h-1.5 w-full rounded-full ${theme.gradient}`} />
+
+            {/* Barra gradiente status */}
+            <div className="px-4 pt-3.5 pb-2 bg-white">
+              <div
+                className="h-1.5 w-full rounded-full shadow-inner"
+                style={{ backgroundImage: theme.topGradient }}
+              />
             </div>
 
-            <nav className="flex-1 overflow-y-auto py-4 space-y-2 px-2">
+            {/* NAV */}
+            <nav className="flex-1 overflow-y-auto py-3 space-y-1 px-2.5 custom-scrollbar">
               {role === 'COORDENADOR' && user?.section_title && (
-                <div className={`px-4 pb-2 text-xs font-semibold uppercase tracking-wide ${theme.sectionText}`}>
-                  {`Login: Coordenador de ${user.section_title}`}
+                <div className={`px-2 pt-2 pb-1 text-[10.5px] font-black uppercase tracking-[0.12em] ${theme.section}`}>
+                  Coordenador · {user.section_title}
                 </div>
               )}
               {navItems.map((item) => {
-                const itemPath = item.href.split('?')[0]
-                const isCoord = itemPath === coordPath
-                const isActive = pathname === itemPath || (isCoord && (pathname.startsWith(coordPath) || pathname === folgasPath))
+                const isActive = isPathActiveFor(item)
+                const isRelatorios = item.id === 'relatorios'
+                const isCoord = item.id === 'coordenacao'
                 return (
-                  <div key={item.href}>
+                  <div key={item.id}>
                     <a
                       href={item.href}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={getNavItemClass(isActive, false)}
-                      title=""
+                      onClick={() => { if (!isRelatorios) setIsMobileMenuOpen(false) }}
+                      className={getItemClass(isActive, false)}
                       aria-current={isActive ? 'page' : undefined}
+                      style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.bgActive } : undefined}
                     >
-                      <span className={`mr-3 ${getNavIconClass(isActive, false)}`}>{item.icon}</span>
-                      {item.name}
+                      {/* Barrinha de destaque esquerda no ativo */}
+                      {isActive && (
+                        <div
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 rounded-r-full bg-gradient-to-b"
+                          style={{ backgroundImage: theme.topGradient }}
+                        />
+                      )}
+                      <div
+                        className={getIconBoxClass(isActive)}
+                        style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.iconBg, boxShadow: '0 3px 10px rgba(37,99,235,0.25)' } : undefined}
+                      >
+                        {item.icon}
+                      </div>
+                      <div className="ml-3 flex-1 flex items-center gap-2 min-w-0">
+                        <span className={`truncate font-bold text-[14px] leading-none ${isActive ? theme.active.text : ''}`}>
+                          {item.name}
+                        </span>
+                        {item.badge && (
+                          <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${theme.badge}`}>
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
                     </a>
-                    {isCoord && coordSubmenuItems.map((subItem) => {
+
+                    {/* Submenu Relatórios */}
+                    {isRelatorios && !isCollapsed && (
+                      <div className="mt-1.5 space-y-1">
+                        <SidebarReportLink
+                          kind="management"
+                          label="Relatório Gerencial"
+                          Icon={FileBarChart}
+                          iconClass=""
+                          submenu
+                          compact
+                          containerClass="ml-10"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        />
+                        <SidebarReportLink
+                          kind="scheduled"
+                          label="Relatório de Escalados"
+                          Icon={FileSpreadsheet}
+                          iconClass=""
+                          submenu
+                          compact
+                          containerClass="ml-10"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        />
+                      </div>
+                    )}
+
+                    {/* Submenu Coordenação */}
+                    {isCoord && !isCollapsed && item.submenu?.map((subItem) => {
                       const subPath = subItem.href.split('?')[0]
                       const isSubActive = pathname === subPath || (subPath === coordPath && pathname.startsWith(coordPath))
                       return (
@@ -289,33 +441,35 @@ export default function Sidebar({
                         </a>
                       )
                     })}
-                    {itemPath === escalaPath && !isCollapsed && editableUnits.length > 0 && (
-                      null
-                    )}
                   </div>
                 )
               })}
             </nav>
 
-            <div className={`p-4 border-t border-gray-200 ${isSamuPortal ? 'bg-red-50/40' : 'bg-gray-50'}`}>
-              <div className="flex items-center mb-4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 ${theme.avatarBg}`}>
+            {/* Footer usuário + logout */}
+            <div className={`p-3.5 border-t ${theme.divider} ${isSamuPortal ? 'bg-rose-50/40' : 'bg-gradient-to-t from-blue-50/40 to-transparent'}`}>
+              <div className="flex items-center mb-3 px-1">
+                <div
+                  className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black shrink-0 ${theme.avatar}`}
+                  style={!isSamuPortal ? { backgroundImage: theme.avatarBg } : undefined}
+                >
                   {user?.name?.charAt(0) || 'U'}
                 </div>
-                <div className="ml-3 overflow-hidden">
-                  <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'Usuário'}</p>
-                  <p className="text-xs text-gray-500 truncate">{user?.cpf || ''}</p>
-                  <p className={`text-xs truncate font-semibold ${theme.roleText}`}>{user?.role || ''}</p>
+                <div className="ml-3 overflow-hidden min-w-0 flex-1">
+                  <p className="text-[13.5px] font-bold text-slate-900 truncate leading-tight">{user?.name || 'Usuário'}</p>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">{user?.cpf || ''}</p>
+                  <p className={`text-[10.5px] truncate font-black uppercase tracking-wider mt-1 ${theme.role}`}>
+                    {user?.role || ''}
+                  </p>
                 </div>
               </div>
-              
               <form action={logoutAction}>
                 <button
                   type="submit"
-                  className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 text-[13px] font-bold text-red-600 bg-gradient-to-b from-red-50 to-red-50/60 hover:from-red-100 hover:to-red-50 border border-red-200/60 rounded-2xl transition-all duration-200 active:scale-[0.98] shadow-sm"
                 >
-                  <LogOut className="w-5 h-5 mr-2" />
-                  Sair
+                  <LogOut size={16} strokeWidth={2.3} />
+                  Sair da Conta
                 </button>
               </form>
             </div>
@@ -323,48 +477,185 @@ export default function Sidebar({
         </div>
       )}
 
-      {/* Desktop Sidebar */}
-      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-20' : 'w-64'} h-full ${isSamuPortal ? 'bg-white/95' : 'bg-white/85'} backdrop-blur border-r border-slate-200/70 sticky top-0 z-40 pointer-events-auto transition-all duration-300`}>
-        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-4'} py-8 mb-2`}>
-            {!isCollapsed && (
-              <div className="flex items-center">
-                <Image src={portalLogo} alt={`${portalLabel} Logo`} width={120} height={40} className="h-10 w-auto object-contain" />
+      {/* ============================================================ */}
+      {/* 💻 DESKTOP SIDEBAR (MODERNO, AZUL HMA)                       */}
+      {/* ============================================================ */}
+      <div className={`hidden md:flex flex-col ${isCollapsed ? 'w-[84px]' : 'w-[272px]'} h-full ${theme.bgSidebar} border-r ${theme.divider} sticky top-0 z-40 pointer-events-auto transition-all duration-300 ease-out`}>
+        {/* Header com LOGO + TEXTO ABAIXO + botão colapsar */}
+        <div className={`relative px-4 pt-5 pb-4 bg-white border-b ${theme.divider}`}>
+          {!isCollapsed ? (
+            <div className="flex items-start justify-between gap-2">
+              {/* LOGO + TEXTO */}
+              <div className="relative z-10 shrink-0 flex flex-col items-start gap-2">
+                {isSamuPortal ? (
+                  <div
+                    className="h-14 w-14 rounded-2xl flex items-center justify-center bg-white border border-slate-200/70 shadow-[0_3px_10px_rgba(15,23,42,0.07)]"
+                  >
+                    <Image src={logoSamu} alt="SAMU Logo" width={56} height={56} className="h-10 w-10 object-contain" />
+                  </div>
+                ) : (
+                  <div
+                    className="h-14 w-[84px] rounded-2xl flex items-center justify-center overflow-hidden border border-blue-200/80 shadow-[0_3px_12px_rgba(37,99,235,0.28)] relative"
+                    style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
+                  >
+                    <div className="absolute inset-[2.5px] rounded-[14px] bg-white/95 flex items-center justify-center gap-1.5">
+                      <Plus size={17} strokeWidth={3} className="text-blue-700 shrink-0" />
+                      <span className="text-[19px] font-black tracking-tight text-blue-900 leading-none">
+                        HMA
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {!isSamuPortal && (
+                  <div className="leading-tight pl-0.5">
+                    <p className="text-[11px] font-black tracking-tight text-blue-900">
+                      Hospital Municipal
+                    </p>
+                    <p className="text-[11px] font-black tracking-tight text-blue-700">
+                      de Açailândia
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
-            <button 
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className={`p-1 rounded-full ${theme.collapseHover}`}
-                title={isCollapsed ? "Expandir menu" : "Recolher menu"}
-            >
-                {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-            </button>
-        </div>
-        <div className={`${isCollapsed ? 'px-3' : 'px-4'} mb-4`}>
-          <div className={`h-1.5 w-full rounded-full ${theme.gradient}`} />
+
+              {/* BOTÃO RECOLHER — sempre aparece no expandido */}
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(true)}
+                className="relative z-10 p-2.5 h-10 w-10 rounded-xl flex items-center justify-center transition-all duration-200 active:scale-90 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200/70 bg-white shadow-sm"
+                title="Recolher menu"
+                aria-label="Recolher menu"
+              >
+                <ChevronLeft size={19} strokeWidth={2.3} />
+              </button>
+            </div>
+          ) : (
+            // === COLAPSADO: centraliza logo, texto minúsculo, botão expandir ABAIXO ===
+            <div className="flex flex-col items-center justify-start gap-2.5">
+              {isSamuPortal ? (
+                <div
+                  className="h-12 w-12 rounded-2xl flex items-center justify-center bg-white border border-slate-200/70 shadow-[0_3px_10px_rgba(15,23,42,0.07)] shrink-0"
+                >
+                  <Image src={logoSamu} alt="SAMU Logo" width={48} height={48} className="h-8 w-8 object-contain" />
+                </div>
+              ) : (
+                <div
+                  className="h-12 w-[68px] rounded-2xl flex items-center justify-center overflow-hidden border border-blue-200/70 shadow-[0_3px_10px_rgba(37,99,235,0.25)] shrink-0 relative"
+                  style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
+                >
+                  <div className="absolute inset-[2px] rounded-[14px] bg-white/95 flex items-center justify-center gap-1">
+                    <Plus size={13} strokeWidth={3} className="text-blue-700 shrink-0" />
+                    <span className="text-[13.5px] font-black tracking-tight text-blue-900 leading-none">
+                      HMA
+                    </span>
+                  </div>
+                </div>
+              )}
+              {!isSamuPortal && (
+                <p className="text-[8.5px] font-black tracking-tight text-blue-800 leading-[1.05] text-center">
+                  Hospital
+                  <br />
+                  Municipal
+                  <br />
+                  Açailândia
+                </p>
+              )}
+
+              {/* BOTÃO EXPANDIR — sempre aparece no colapsado (abaixo da logo, posição normal não flutuante) */}
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(false)}
+                className="p-2 h-8 w-8 rounded-xl flex items-center justify-center transition-all duration-200 active:scale-90 hover:bg-slate-100 text-slate-500 hover:text-slate-800 border border-slate-200/60 bg-white shadow-sm"
+                title="Expandir menu"
+                aria-label="Expandir menu"
+              >
+                <ChevronRight size={16} strokeWidth={2.4} />
+              </button>
+            </div>
+          )}
         </div>
 
-        <nav className="flex-1 space-y-2 px-2 overflow-y-auto min-h-0 custom-scrollbar relative z-10 pointer-events-auto">
+        {/* Barra gradiente topo */}
+        <div className={`${isCollapsed ? 'px-4' : 'px-5'} mb-4`}>
+          <div
+            className="h-1.5 w-full rounded-full shadow-inner opacity-90"
+            style={{ backgroundImage: theme.topGradient }}
+          />
+        </div>
+
+        {/* NAVIGATION */}
+        <nav className="flex-1 space-y-1 px-2.5 overflow-y-auto min-h-0 custom-scrollbar relative z-10 pointer-events-auto">
           {role === 'COORDENADOR' && user?.section_title && !isCollapsed && (
-            <div className={`px-2 pb-1 text-xs font-semibold uppercase tracking-wide ${theme.sectionText}`}>
-              {`Login: Coordenador de ${user.section_title}`}
+            <div className={`px-3 pt-1 pb-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${theme.section}`}>
+              Coordenador · {user.section_title}
             </div>
           )}
           {navItems.map((item) => {
-            const itemPath = item.href.split('?')[0]
-            const isCoord = itemPath === coordPath
-            const isActive = pathname === itemPath || (isCoord && (pathname.startsWith(coordPath) || pathname === folgasPath))
+            const isActive = isPathActiveFor(item)
+            const isRelatorios = item.id === 'relatorios'
+            const isCoord = item.id === 'coordenacao'
             return (
-              <div key={item.href}>
+              <div key={item.id} className="relative">
                 <a
                   href={item.href}
-                  className={getNavItemClass(isActive, isCollapsed)}
+                  className={getItemClass(isActive, isCollapsed)}
                   title={isCollapsed ? item.name : ''}
                   aria-current={isActive ? 'page' : undefined}
+                  style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.bgActive } : undefined}
                 >
-                  <span className={`${isCollapsed ? '' : 'mr-3'} ${getNavIconClass(isActive, isCollapsed)}`}>{item.icon}</span>
-                  {!isCollapsed && <span className="truncate font-semibold">{item.name}</span>}
+                  {/* Barrinha de destaque esquerda no ativo (desktop) */}
+                  {isActive && (
+                    <div
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3.5px] h-8 rounded-r-full"
+                      style={{ backgroundImage: theme.topGradient }}
+                    />
+                  )}
+                  <div
+                    className={getIconBoxClass(isActive)}
+                    style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.iconBg } : undefined}
+                  >
+                    {item.icon}
+                  </div>
+                  {!isCollapsed && (
+                    <div className="ml-3 flex-1 flex items-center gap-2 min-w-0">
+                      <span className={`truncate font-bold text-[14px] leading-none ${isActive ? theme.active.text : ''}`}>
+                        {item.name}
+                      </span>
+                      {item.badge && (
+                        <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${theme.badge}`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </a>
-                {isCoord && !isCollapsed && coordSubmenuItems.map((subItem) => {
+
+                {/* Submenu Relatórios */}
+                {isRelatorios && !isCollapsed && (
+                  <div className="mt-1.5 space-y-1">
+                    <SidebarReportLink
+                      kind="management"
+                      label="Relatório Gerencial"
+                      Icon={FileBarChart}
+                      iconClass=""
+                      submenu
+                      compact
+                      containerClass="ml-12"
+                    />
+                    <SidebarReportLink
+                      kind="scheduled"
+                      label="Relatório de Escalados"
+                      Icon={FileSpreadsheet}
+                      iconClass=""
+                      submenu
+                      compact
+                      containerClass="ml-12"
+                    />
+                  </div>
+                )}
+
+                {/* Submenu Coordenação */}
+                {isCoord && !isCollapsed && item.submenu?.map((subItem) => {
                   const subPath = subItem.href.split('?')[0]
                   const isSubActive = pathname === subPath || (subPath === coordPath && pathname.startsWith(coordPath))
                   return (
@@ -378,36 +669,43 @@ export default function Sidebar({
                     </a>
                   )
                 })}
-                {itemPath === escalaPath && !isCollapsed && editableUnits.length > 0 && (
-                  null
-                )}
               </div>
             )
           })}
         </nav>
 
-        <div className="mt-auto pt-4 border-t border-gray-200 p-2">
-          <div className={`flex items-center mb-4 ${isCollapsed ? 'justify-center' : 'px-2'}`}>
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 ${theme.avatarBg}`}>
+        {/* Footer: Usuário + Sair */}
+        <div className={`mt-auto pt-3 border-t ${theme.divider} p-2.5 relative overflow-hidden`}>
+          {/* Gradiente sutil no footer */}
+          <div
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3 w-56 h-56 rounded-full opacity-[0.06] blur-3xl pointer-events-none"
+            style={{ backgroundImage: theme.topGradient }}
+          />
+          <div className={`relative z-10 flex items-center mb-3 ${isCollapsed ? 'justify-center' : 'px-2'}`}>
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black shrink-0 ${theme.avatar}`}
+              style={!isSamuPortal ? { backgroundImage: theme.avatarBg } : undefined}
+            >
               {user?.name?.charAt(0) || 'U'}
             </div>
             {!isCollapsed && (
-                <div className="ml-3 overflow-hidden">
-                <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'Usuário'}</p>
-                <p className="text-xs text-gray-500 truncate max-w-[140px]">{user?.cpf || ''}</p>
-                <p className={`text-xs truncate font-semibold max-w-[140px] ${theme.roleText}`}>{user?.role || ''}</p>
-                </div>
+              <div className="ml-3 overflow-hidden min-w-0 flex-1">
+                <p className="text-[13.5px] font-bold text-slate-900 truncate leading-tight">{user?.name || 'Usuário'}</p>
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">{user?.cpf || ''}</p>
+                <p className={`text-[10.5px] truncate font-black uppercase tracking-wider mt-1 ${theme.role}`}>
+                  {user?.role || ''}
+                </p>
+              </div>
             )}
           </div>
-          
-          <form action={logoutAction}>
+          <form action={logoutAction} className="relative z-10">
             <button
               type="submit"
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'justify-start px-4'} py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors`}
-              title={isCollapsed ? "Sair" : ""}
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'justify-start gap-2 px-3.5'} py-2.5 text-[13px] font-bold text-red-600 bg-gradient-to-b from-red-50 to-red-50/60 hover:from-red-100 hover:to-red-50 border border-red-200/50 rounded-2xl transition-all duration-200 active:scale-[0.98] shadow-sm`}
+              title={isCollapsed ? 'Sair da Conta' : ''}
             >
-              <LogOut className={`w-5 h-5 ${isCollapsed ? '' : 'mr-2'}`} />
-              {!isCollapsed && 'Sair'}
+              <LogOut size={16} strokeWidth={2.3} />
+              {!isCollapsed && 'Sair da Conta'}
             </button>
           </form>
         </div>
