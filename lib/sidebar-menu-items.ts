@@ -16,6 +16,7 @@ export const SIDEBAR_MENU_ITEMS = [
   { id: 'folgas',          label: 'Faltas e Folgas',    defaultLevel: 'COORD_SETOR' as MenuAccessLevel },
   { id: 'downloads',       label: 'Downloads',          defaultLevel: 'EVERYONE' as MenuAccessLevel },
   { id: 'frases',          label: 'Frases Motivacionais', defaultLevel: 'COORD_GERAL_ONLY' as MenuAccessLevel },
+  { id: 'permissoes_menu',  label: 'Permissões do Menu',   defaultLevel: 'COORD_GERAL_ONLY' as MenuAccessLevel },
 ] as const
 
 export type SidebarMenuItemId = typeof SIDEBAR_MENU_ITEMS[number]['id']

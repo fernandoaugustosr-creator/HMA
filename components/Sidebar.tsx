@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import type { StaticImageData } from 'next/image'
+import logoHma from '@/public/logo-hma.png'
 import logoSamu from '@/public/logo_samu.png'
 import logoPrefeitura from '@/public/logo-prefeitura.png'
 import { usePathname } from 'next/navigation'
-import { ChevronLeft, ChevronRight, FileBarChart, FileSpreadsheet, LogOut, LayoutDashboard, CalendarCheck2, Users2, Repeat2, CalendarRange, ClipboardList, Download, ShieldCheck, History, ArrowLeftRight, Pause, Sparkles, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileBarChart, FileSpreadsheet, LogOut, LayoutDashboard, CalendarCheck2, Users2, Repeat2, CalendarRange, ClipboardList, Download, ShieldCheck, History, ArrowLeftRight, Pause, Sparkles, Settings } from 'lucide-react'
 import { SidebarReportLink, useReportLauncher } from './ReportLauncher'
+import { useReportsPermissionModal } from './ReportsPermissionModalProvider'
 import type { SidebarMenuItemId } from '@/lib/sidebar-menu-items'
 
 export default function Sidebar({
@@ -30,10 +32,12 @@ export default function Sidebar({
   menuPerms?: Record<SidebarMenuItemId, boolean>
 }) {
   const pathname = usePathname()
+  const { open: openPermissionsModal } = useReportsPermissionModal()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [editableUnits, setEditableUnits] = useState<{ id: string, title: string }[]>(initialEditableUnits)
   const isSamuPortal = basePath === '/samu'
+  const portalLogo: StaticImageData = isSamuPortal ? logoSamu : logoHma
   const withBasePath = useCallback((path: string) => `${basePath}${path}`, [basePath])
   const coordPath = withBasePath('/coordenacao')
   const folgasPath = withBasePath('/folgas')
@@ -120,6 +124,7 @@ export default function Sidebar({
     trocas: <ArrowLeftRight size={19} strokeWidth={2} />,
     pause: <Pause size={19} strokeWidth={2} />,
     frases: <Sparkles size={19} strokeWidth={2} />,
+    permissoes_menu: <Settings size={19} strokeWidth={2} />,
   }
 
   // ==================== DEFINIÇÃO ESTRUTURADA DOS MENUS ====================
@@ -130,6 +135,7 @@ export default function Sidebar({
     icon: JSX.Element
     submenu?: { name: string; href: string }[]
     badge?: string
+    onClick?: (closeMobile: () => void) => void
   }
 
   const buildMainMenu = (): MenuItemDef[] => {
@@ -190,6 +196,16 @@ export default function Sidebar({
 
     if (canSee('frases') && isAdmin) {
       items.push({ name: 'Frases Motivacionais', id: 'frases', href: withBasePath('/frases-motivacionais'), icon: Icons.frases })
+    }
+
+    if (canSee('permissoes_menu') && isAdmin) {
+      items.push({
+        name: 'Permissões do Menu',
+        id: 'permissoes_menu',
+        href: '#',
+        icon: Icons.permissoes_menu,
+        onClick: () => openPermissionsModal(),
+      })
     }
 
     if (canSee('logs') && isAdmin) {
@@ -253,26 +269,12 @@ export default function Sidebar({
       <div className={`flex md:!hidden ${theme.bgSidebar} border-b ${theme.divider} p-3 sticky top-0 z-30 justify-between items-start shadow-sm w-full bg-white`}>
         <div className="flex flex-col items-start gap-1.5 min-w-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            {/* LOGO — moderno sem img (monograma HMA); SAMU usa img original */}
-            {isSamuPortal ? (
-              <div
-                className="h-11 w-[62px] rounded-xl flex items-center justify-center shrink-0 bg-white border border-slate-200/70 shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
-              >
-                <Image src={logoSamu} alt="SAMU Logo" width={60} height={60} className="h-8 w-[50px] object-contain" />
-              </div>
-            ) : (
-              <div
-                className="h-11 w-[62px] rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-blue-200/80 shadow-[0_2px_10px_rgba(37,99,235,0.25)] relative"
-                style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
-              >
-                <div className="absolute inset-[2px] rounded-[10px] bg-white/95 flex items-center justify-center gap-1">
-                  <Plus size={14} strokeWidth={3} className="text-blue-700 shrink-0" />
-                  <span className="text-[15px] font-black tracking-tight text-blue-900 leading-none">
-                    HMA
-                  </span>
-                </div>
-              </div>
-            )}
+            {/* LOGO (fundo branco limpo) */}
+            <div
+              className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0 bg-white border border-slate-200/70 shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+            >
+              <Image src={portalLogo} alt={`${portalLabel} Logo`} width={44} height={44} className="h-8 w-8 object-contain" />
+            </div>
           </div>
           {!isSamuPortal && (
             <p className="text-[10.5px] font-black tracking-tight text-blue-900 leading-tight pl-0.5">
@@ -307,25 +309,11 @@ export default function Sidebar({
             {/* Header (LOGO ESQUERDA + TEXTO ABAIXO / FECHAR DIREITA) */}
             <div className={`flex items-start justify-between p-4 border-b ${theme.divider} bg-white gap-2`}>
               <div className="flex flex-col items-start gap-2 min-w-0 shrink-0">
-                {isSamuPortal ? (
-                  <div
-                    className="h-12 w-12 rounded-xl flex items-center justify-center shrink-0 bg-white border border-slate-200/70 shadow-[0_2px_10px_rgba(15,23,42,0.07)]"
-                  >
-                    <Image src={logoSamu} alt="SAMU Logo" width={48} height={48} className="h-8 w-8 object-contain" />
-                  </div>
-                ) : (
-                  <div
-                    className="h-12 w-[68px] rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-blue-200/80 shadow-[0_2px_12px_rgba(37,99,235,0.3)] relative"
-                    style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
-                  >
-                    <div className="absolute inset-[2px] rounded-[10px] bg-white/95 flex items-center justify-center gap-1.5">
-                      <Plus size={15} strokeWidth={3} className="text-blue-700 shrink-0" />
-                      <span className="text-[15.5px] font-black tracking-tight text-blue-900 leading-none">
-                        HMA
-                      </span>
-                    </div>
-                  </div>
-                )}
+                <div
+                  className="h-12 w-12 rounded-xl flex items-center justify-center shrink-0 bg-white border border-slate-200/70 shadow-[0_2px_10px_rgba(15,23,42,0.07)]"
+                >
+                  <Image src={portalLogo} alt={`${portalLabel} Logo`} width={48} height={48} className="h-8 w-8 object-contain" />
+                </div>
                 {!isSamuPortal && (
                   <p className="text-[10.5px] font-black tracking-tight text-blue-900 leading-tight pl-0.5">
                     Hospital Municipal
@@ -365,39 +353,57 @@ export default function Sidebar({
                 const isActive = isPathActiveFor(item)
                 const isRelatorios = item.id === 'relatorios'
                 const isCoord = item.id === 'coordenacao'
+                const hasCustomClick = typeof item.onClick === 'function'
+                const closeMobile = () => setIsMobileMenuOpen(false)
+                const commonInner = (
+                  <>
+                    {isActive && (
+                      <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 rounded-r-full bg-gradient-to-b"
+                        style={{ backgroundImage: theme.topGradient }}
+                      />
+                    )}
+                    <div
+                      className={getIconBoxClass(isActive)}
+                      style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.iconBg, boxShadow: '0 3px 10px rgba(37,99,235,0.25)' } : undefined}
+                    >
+                      {item.icon}
+                    </div>
+                    <div className="ml-3 flex-1 flex items-center gap-2 min-w-0">
+                      <span className={`truncate font-bold text-[14px] leading-none ${isActive ? theme.active.text : ''}`}>
+                        {item.name}
+                      </span>
+                      {item.badge && (
+                        <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${theme.badge}`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )
                 return (
                   <div key={item.id}>
-                    <a
-                      href={item.href}
-                      onClick={() => { if (!isRelatorios) setIsMobileMenuOpen(false) }}
-                      className={getItemClass(isActive, false)}
-                      aria-current={isActive ? 'page' : undefined}
-                      style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.bgActive } : undefined}
-                    >
-                      {/* Barrinha de destaque esquerda no ativo */}
-                      {isActive && (
-                        <div
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 rounded-r-full bg-gradient-to-b"
-                          style={{ backgroundImage: theme.topGradient }}
-                        />
-                      )}
-                      <div
-                        className={getIconBoxClass(isActive)}
-                        style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.iconBg, boxShadow: '0 3px 10px rgba(37,99,235,0.25)' } : undefined}
+                    {hasCustomClick ? (
+                      <button
+                        type="button"
+                        onClick={() => { item.onClick?.(closeMobile); closeMobile() }}
+                        className={getItemClass(isActive, false) + ' w-full'}
+                        aria-current={isActive ? 'page' : undefined}
+                        style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.bgActive } : undefined}
                       >
-                        {item.icon}
-                      </div>
-                      <div className="ml-3 flex-1 flex items-center gap-2 min-w-0">
-                        <span className={`truncate font-bold text-[14px] leading-none ${isActive ? theme.active.text : ''}`}>
-                          {item.name}
-                        </span>
-                        {item.badge && (
-                          <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${theme.badge}`}>
-                            {item.badge}
-                          </span>
-                        )}
-                      </div>
-                    </a>
+                        {commonInner}
+                      </button>
+                    ) : (
+                      <a
+                        href={item.href}
+                        onClick={() => { if (!isRelatorios) closeMobile() }}
+                        className={getItemClass(isActive, false)}
+                        aria-current={isActive ? 'page' : undefined}
+                        style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.bgActive } : undefined}
+                      >
+                        {commonInner}
+                      </a>
+                    )}
 
                     {/* Submenu Relatórios */}
                     {isRelatorios && !isCollapsed && (
@@ -487,25 +493,11 @@ export default function Sidebar({
             <div className="flex items-start justify-between gap-2">
               {/* LOGO + TEXTO */}
               <div className="relative z-10 shrink-0 flex flex-col items-start gap-2">
-                {isSamuPortal ? (
-                  <div
-                    className="h-14 w-14 rounded-2xl flex items-center justify-center bg-white border border-slate-200/70 shadow-[0_3px_10px_rgba(15,23,42,0.07)]"
-                  >
-                    <Image src={logoSamu} alt="SAMU Logo" width={56} height={56} className="h-10 w-10 object-contain" />
-                  </div>
-                ) : (
-                  <div
-                    className="h-14 w-[84px] rounded-2xl flex items-center justify-center overflow-hidden border border-blue-200/80 shadow-[0_3px_12px_rgba(37,99,235,0.28)] relative"
-                    style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
-                  >
-                    <div className="absolute inset-[2.5px] rounded-[14px] bg-white/95 flex items-center justify-center gap-1.5">
-                      <Plus size={17} strokeWidth={3} className="text-blue-700 shrink-0" />
-                      <span className="text-[19px] font-black tracking-tight text-blue-900 leading-none">
-                        HMA
-                      </span>
-                    </div>
-                  </div>
-                )}
+                <div
+                  className="h-14 w-14 rounded-2xl flex items-center justify-center bg-white border border-slate-200/70 shadow-[0_3px_10px_rgba(15,23,42,0.07)]"
+                >
+                  <Image src={portalLogo} alt={`${portalLabel} Logo`} width={56} height={56} className="h-10 w-10 object-contain" />
+                </div>
                 {!isSamuPortal && (
                   <div className="leading-tight pl-0.5">
                     <p className="text-[11px] font-black tracking-tight text-blue-900">
@@ -532,25 +524,11 @@ export default function Sidebar({
           ) : (
             // === COLAPSADO: centraliza logo, texto minúsculo, botão expandir ABAIXO ===
             <div className="flex flex-col items-center justify-start gap-2.5">
-              {isSamuPortal ? (
-                <div
-                  className="h-12 w-12 rounded-2xl flex items-center justify-center bg-white border border-slate-200/70 shadow-[0_3px_10px_rgba(15,23,42,0.07)] shrink-0"
-                >
-                  <Image src={logoSamu} alt="SAMU Logo" width={48} height={48} className="h-8 w-8 object-contain" />
-                </div>
-              ) : (
-                <div
-                  className="h-12 w-[68px] rounded-2xl flex items-center justify-center overflow-hidden border border-blue-200/70 shadow-[0_3px_10px_rgba(37,99,235,0.25)] shrink-0 relative"
-                  style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
-                >
-                  <div className="absolute inset-[2px] rounded-[14px] bg-white/95 flex items-center justify-center gap-1">
-                    <Plus size={13} strokeWidth={3} className="text-blue-700 shrink-0" />
-                    <span className="text-[13.5px] font-black tracking-tight text-blue-900 leading-none">
-                      HMA
-                    </span>
-                  </div>
-                </div>
-              )}
+              <div
+                className="h-12 w-12 rounded-2xl flex items-center justify-center bg-white border border-slate-200/70 shadow-[0_3px_10px_rgba(15,23,42,0.07)] shrink-0"
+              >
+                <Image src={portalLogo} alt={`${portalLabel} Logo`} width={48} height={48} className="h-8 w-8 object-contain" />
+              </div>
               {!isSamuPortal && (
                 <p className="text-[8.5px] font-black tracking-tight text-blue-800 leading-[1.05] text-center">
                   Hospital
@@ -594,41 +572,60 @@ export default function Sidebar({
             const isActive = isPathActiveFor(item)
             const isRelatorios = item.id === 'relatorios'
             const isCoord = item.id === 'coordenacao'
+            const hasCustomClick = typeof item.onClick === 'function'
+            const closeMobile = () => setIsMobileMenuOpen(false)
+            const sharedBars = (
+              <>
+                {isActive && (
+                  <div
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3.5px] h-8 rounded-r-full"
+                    style={{ backgroundImage: theme.topGradient }}
+                  />
+                )}
+                <div
+                  className={getIconBoxClass(isActive)}
+                  style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.iconBg } : undefined}
+                >
+                  {item.icon}
+                </div>
+                {!isCollapsed && (
+                  <div className="ml-3 flex-1 flex items-center gap-2 min-w-0">
+                    <span className={`truncate font-bold text-[14px] leading-none ${isActive ? theme.active.text : ''}`}>
+                      {item.name}
+                    </span>
+                    {item.badge && (
+                      <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${theme.badge}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </>
+            )
             return (
               <div key={item.id} className="relative">
-                <a
-                  href={item.href}
-                  className={getItemClass(isActive, isCollapsed)}
-                  title={isCollapsed ? item.name : ''}
-                  aria-current={isActive ? 'page' : undefined}
-                  style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.bgActive } : undefined}
-                >
-                  {/* Barrinha de destaque esquerda no ativo (desktop) */}
-                  {isActive && (
-                    <div
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3.5px] h-8 rounded-r-full"
-                      style={{ backgroundImage: theme.topGradient }}
-                    />
-                  )}
-                  <div
-                    className={getIconBoxClass(isActive)}
-                    style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.iconBg } : undefined}
+                {hasCustomClick ? (
+                  <button
+                    type="button"
+                    onClick={() => item.onClick?.(closeMobile)}
+                    className={getItemClass(isActive, isCollapsed) + ' w-full'}
+                    title={isCollapsed ? item.name : ''}
+                    aria-current={isActive ? 'page' : undefined}
+                    style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.bgActive } : undefined}
                   >
-                    {item.icon}
-                  </div>
-                  {!isCollapsed && (
-                    <div className="ml-3 flex-1 flex items-center gap-2 min-w-0">
-                      <span className={`truncate font-bold text-[14px] leading-none ${isActive ? theme.active.text : ''}`}>
-                        {item.name}
-                      </span>
-                      {item.badge && (
-                        <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${theme.badge}`}>
-                          {item.badge}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </a>
+                    {sharedBars}
+                  </button>
+                ) : (
+                  <a
+                    href={item.href}
+                    className={getItemClass(isActive, isCollapsed)}
+                    title={isCollapsed ? item.name : ''}
+                    aria-current={isActive ? 'page' : undefined}
+                    style={isActive && !IconStyle.isSamu ? { backgroundImage: theme.active.bgActive } : undefined}
+                  >
+                    {sharedBars}
+                  </a>
+                )}
 
                 {/* Submenu Relatórios */}
                 {isRelatorios && !isCollapsed && (

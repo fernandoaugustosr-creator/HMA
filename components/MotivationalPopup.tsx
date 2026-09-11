@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Quote, Sparkles, Plus } from 'lucide-react'
+import Image from 'next/image'
+import { Quote, Sparkles } from 'lucide-react'
 import type { MotivationalPhrase } from '@/app/actions'
+import logoHma from '@/public/logo-hma.png'
 
 const LAST_NONCE_KEY = 'motivational_popup_last_nonce_v1'
 
@@ -48,22 +50,22 @@ export default function MotivationalPopup({
         <div className="absolute -bottom-24 -left-20 h-60 w-60 rounded-full bg-indigo-400/20 blur-3xl" />
 
         <div className="relative px-8 pt-8 pb-6 text-center">
-          {/* 🏥 MONOGRAMA HMA MODERNO (sem img) */}
-          <div className="mx-auto mb-5 w-fit">
-            <div
-              className="relative rounded-2xl overflow-hidden shadow-[0_8px_30px_rgba(15,23,42,0.35)] border-2 border-white/80"
-              style={{ backgroundImage: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%)' }}
-            >
-              <div className="absolute inset-[3px] rounded-[14px] bg-white/95 flex items-center justify-center px-5 py-3 gap-2">
-                <Plus size={22} strokeWidth={3} className="text-blue-700 shrink-0" />
-                <span className="text-[28px] font-black tracking-tight text-blue-900 leading-none">
-                  HMA
-                </span>
-              </div>
-            </div>
+          {/* 🏥 LOGO HMA 3x maior, SEM fundo branco */}
+          <div className="mx-auto mb-4 drop-shadow-[0_4px_20px_rgba(255,255,255,0.25)]">
+            <Image src={logoHma} alt="Logo HMA" width={500} height={50} className="object-contain" style={{ width: '500px', height: '50px' }} priority />
           </div>
 
-          <div className="mt-2 mb-1 h-px w-24 mx-auto bg-white/30" />
+          {/* 🏥 NOME COMPLETO ABAIXO DA LOGO */}
+          <h2 className="text-white font-black tracking-tight leading-tight">
+            <div className="text-[17px] md:text-[18px] drop-shadow-sm">
+              Hospital Municipal
+            </div>
+            <div className="text-[16px] md:text-[17px] text-blue-100 mt-0.5 drop-shadow-sm">
+              de Açailândia
+            </div>
+          </h2>
+
+          <div className="mt-4 mb-2 h-px w-24 mx-auto bg-white/30" />
 
           <h3 className="text-yellow-100/90 text-[11px] font-black uppercase tracking-[0.25em] mb-1">
             Bem-vindo(a) — Frase do Dia

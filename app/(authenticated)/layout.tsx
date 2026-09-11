@@ -94,7 +94,7 @@ export default async function AuthenticatedLayout({
   } catch (_) { motivationalPhrase = null }
 
   return (
-    <ReportsPermissionModalProvider showButton={isAdmin}>
+    <ReportsPermissionModalProvider>
       <ReportLauncherProvider
         canRunManagementReport={permEvaluation.canRunManagement}
         canRunScheduledReport={permEvaluation.canRunScheduled}
