@@ -5244,12 +5244,25 @@ export async function assignNurseToRoster(
   const safeYear  = _safeYear(year)
   const safeMonth = _safeMonth(month)
 
+  // ===== VALIDAÇÃO HARD (DOUBLE CHECK): NUNCA pode chegar aqui com null/NaN/object.
+  // Mesmo que _safeMonth/_safeYear sejam reescritos com bug no futuro, este bloco previne.
+  const __m = Number(safeMonth)
+  const __y = Number(safeYear)
+  if (!Number.isInteger(__m) || __m < 1 || __m > 12) {
+    console.error('[assignNurseToRoster:VALIDAÇÃO MÊS FALHOU]', { monthParam: month, _safeMonth, safeMonth, __m })
+    return { success: false, message: `Mês inválido (debug: month=${JSON.stringify(month)} safe=${JSON.stringify(safeMonth)})` }
+  }
+  if (!Number.isInteger(__y) || __y < 2020 || __y > 2100) {
+    console.error('[assignNurseToRoster:VALIDAÇÃO ANO FALHOU]', { yearParam: year, safeYear, __y })
+    return { success: false, message: `Ano inválido (debug: year=${JSON.stringify(year)} safe=${JSON.stringify(safeYear)})` }
+  }
+
   // Validar nurseId e sectionId (não podem ficar empty também)
   if (!nurseId || !String(nurseId).trim()) return { success: false, message: 'Profissional não informado (nurseId vazio).' }
   if (!sectionId || !String(sectionId).trim()) return { success: false, message: 'Setor / Secção não informado.' }
 
   // Only update the specific month (no propagation)
-  const monthsToUpdate = [safeMonth]
+  const monthsToUpdate = [__m]
   let lastInsertedId: string | undefined = undefined
   const snapshot = await _buildNurseSnapshot(nurseId)
 
@@ -5296,13 +5309,15 @@ export async function assignNurseToRoster(
           lastInsertedId = db.monthly_rosters[existingIndex].id
         } else {
           const newId = randomUUID()
+          const __month = __m
+          const __year  = __y
           db.monthly_rosters.push({
             id: newId,
             nurse_id: nurseId,
             section_id: sectionId,
             unit_id: unitId,
-            month: m,
-            year: safeYear,
+            month: __month,
+            year: __year,
             observation: observation || '',
             created_at: createdAt || new Date().toISOString(),
             list_order: finalOrder,
@@ -5365,8 +5380,8 @@ export async function assignNurseToRoster(
         nurse_id: nurseId, 
         section_id: sectionId, 
         unit_id: unitId, 
-        month: m, 
-        year: safeYear
+        month: __m,       // NÃO confiar em "m" do loop. Forçar número seguro validado.
+        year:  __y        // NÃO confiar em safeYear direto. Forçar número validado.
     }
     
     let finalOrder = listOrder
@@ -5376,8 +5391,8 @@ export async function assignNurseToRoster(
             .from('monthly_rosters')
             .select('list_order')
             .eq('section_id', sectionId)
-            .eq('month', m)
-            .eq('year', safeYear)
+            .eq('month', __m)
+            .eq('year', __y)
         
         if (unitId) maxQuery = maxQuery.eq('unit_id', unitId)
         else maxQuery = maxQuery.is('unit_id', null)
@@ -5392,7 +5407,7 @@ export async function assignNurseToRoster(
 
     if (observation !== undefined) payload.observation = observation
     if (createdAt) payload.created_at = createdAt
-    if (finalOrder !== undefined) payload.list_order = finalOrder
+    if (finalOrder !== undefined) payload.list_order = Number(finalOrder)
 
     // Apply snapshots only if inserting new OR existing snapshot is empty (migração)
     const needsSnapshot = !existing || !String(existing.snapshot_vinculo || '').trim()
@@ -5403,11 +5418,46 @@ export async function assignNurseToRoster(
       if (rosterCols.has('snapshot_vinculos_json')) payload.snapshot_vinculos_json = snapshot.snapshot_vinculos_json
     }
 
-    // Filter payload to only include columns that exist
+    // ==================================================================================
+    // FIX CRÍTICO: _detectColumns pode falhar com timeout e APAGAR month/year obrigatórios
+    // do filteredPayload → Postgres NOT NULL violation. NUNCA filtrar colunas mínimas.
+    // ==================================================================================
+    const COLUNAS_OBRIGATORIAS = new Set([
+      'nurse_id','section_id','unit_id','month','year','observation','created_at','list_order'
+    ])
+
+    // Filter payload to only include columns that exist OR are mandatory (nunca remover obrigatórias!)
     const filteredPayload: any = {}
     for (const k of Object.keys(payload)) {
-      if (rosterCols.has(k)) filteredPayload[k] = payload[k]
+      if (COLUNAS_OBRIGATORIAS.has(k) || rosterCols.has(k)) {
+        filteredPayload[k] = payload[k]
+      }
     }
+
+    // ==================================================================================
+    // VALIDAÇÃO FINAL ANTES DE INSERT / UPDATE: se não tem month/year → RETORNAR ANTES de chamar Supabase
+    // (previne para sempre o erro "null value in column month of relation monthly_rosters")
+    // ==================================================================================
+    const __pfMonth = Number(filteredPayload.month)
+    const __pfYear  = Number(filteredPayload.year)
+    if (!Number.isInteger(__pfMonth) || __pfMonth < 1 || __pfMonth > 12 || !Number.isInteger(__pfYear) || __pfYear < 2020 || __pfYear > 2100) {
+      console.error('[assignNurseToRoster:VALOR FINAL PAYLOAD INVÁLIDO ANTES DE INSERT!]', {
+        params: { month, year },
+        safe: { safeMonth, safeYear, __m, __y },
+        payload,
+        filteredPayload,
+        rosterCols: Array.from(rosterCols),
+        'colunas detectadas qtd': rosterCols.size
+      })
+      return {
+        success: false,
+        message: `Validação mês/ano falhou no payload final (detecção de colunas timeout? rosterCols.size=${rosterCols.size}). filteredMonth=${JSON.stringify(filteredPayload.month)} filteredYear=${JSON.stringify(filteredPayload.year)} — contate suporte.`
+      }
+    }
+    // Garantir que são números inteiros limpos (não strings)
+    filteredPayload.month = __pfMonth
+    filteredPayload.year  = __pfYear
+    if (filteredPayload.list_order !== undefined) filteredPayload.list_order = Number(filteredPayload.list_order)
 
     let error: any;
     let resultId: string | undefined = undefined
