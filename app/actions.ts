@@ -1174,6 +1174,69 @@ async function _detectColumns(supabase: any, tableName: string, columnsToCheck: 
   return set
 }
 
+/**
+ * Coerção segura de mês (número 1..12). Evita "month is NULL violates not-null constraint"
+ * quando o front-end enviar string 'Agosto' ou undefined/NaN após re-render da tela /escala.
+ * Default: mês corrente (nunca retorna null/undefined/NaN).
+ */
+function _safeMonth(m: any, fallbackMonth?: number): number {
+  const fb = (typeof fallbackMonth === 'number' && !isNaN(fallbackMonth) && fallbackMonth >= 1 && fallbackMonth <= 12)
+    ? fallbackMonth
+    : new Date().getMonth() + 1
+  if (m === null || m === undefined || m === '') return fb
+  // Número direto
+  if (typeof m === 'number') {
+    const r = Math.trunc(m)
+    if (!isNaN(r) && r >= 1 && r <= 12) return r
+    return fb
+  }
+  // String
+  if (typeof m === 'string') {
+    const trimmed = m.trim()
+    if (!trimmed) return fb
+    const asNumber = Number(trimmed.replace(/[^\d-]/g,''))
+    if (!isNaN(asNumber) && asNumber >= 1 && asNumber <= 12) return Math.trunc(asNumber)
+    // Nome do mês em PT-BR
+    const lower = trimmed.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    const map: Record<string, number> = {
+      'janeiro':1,'jan':1,'fevereiro':2,'fev':2,'marco':3,'mar':3,'abril':4,'abr':4,'maio':5,'mai':5,
+      'junho':6,'jun':6,'julho':7,'jul':7,'agosto':8,'ago':8,'setembro':9,'set':9,'outubro':10,'out':10,
+      'novembro':11,'nov':11,'dezembro':12,'dez':12,
+    }
+    // match exato
+    if (map[lower]) return map[lower]
+    // match substring
+    for (const k of Object.keys(map)) if (lower.includes(k)) return map[k]
+    return fb
+  }
+  return fb
+}
+
+/**
+ * Coerção segura de ano (2020..2100). Default: ano corrente.
+ * Nunca retorna null/undefined/NaN.
+ */
+function _safeYear(y: any, fallbackYear?: number): number {
+  const fb = (typeof fallbackYear === 'number' && !isNaN(fallbackYear) && fallbackYear >= 2020 && fallbackYear <= 2100)
+    ? fallbackYear
+    : new Date().getFullYear()
+  if (y === null || y === undefined || y === '') return fb
+  if (typeof y === 'number') {
+    const r = Math.trunc(y)
+    if (!isNaN(r) && r >= 2020 && r <= 2100) return r
+    return fb
+  }
+  if (typeof y === 'string') {
+    const trimmed = y.trim()
+    if (!trimmed) return fb
+    const asNumber = Number(trimmed.replace(/[^\d]/g,''))
+    if (!isNaN(asNumber) && asNumber >= 2020 && asNumber <= 2100) return Math.trunc(asNumber)
+    if (asNumber >= 20 && asNumber <= 99) return 2000 + asNumber
+    return fb
+  }
+  return fb
+}
+
 const _formatPtDate = (iso: any) => {
   if (!iso) return ''
   const s = String(iso).slice(0, 10)
@@ -1691,6 +1754,9 @@ export async function createNurse(prevState: any, formData: FormData) {
       const now = new Date()
       const rosterMonth = customMonth || (now.getMonth() + 1)
       const rosterYear = customYear || now.getFullYear()
+      // ===== COERÇÃO FORTE (evita NULL em monthly_rosters.month / year) =====
+      const safeRosterMonth = _safeMonth(rosterMonth, (now.getMonth() + 1))
+      const safeRosterYear  = _safeYear(rosterYear, now.getFullYear())
       
       const rosterCols = await _detectColumns(supabase, 'monthly_rosters', [
         'id','nurse_id','section_id','unit_id','month','year','sector','created_at','list_order','observation',
@@ -1701,8 +1767,8 @@ export async function createNurse(prevState: any, formData: FormData) {
           nurse_id: insertedNurse.id,
           section_id: finalSectionId,
           unit_id: unitId,
-          month: rosterMonth,
-          year: rosterYear,
+          month: safeRosterMonth,
+          year: safeRosterYear,
           sector: sector || '' // History for this month
       }
       if (rosterCols.has('snapshot_name')) rosterPayload.snapshot_name = rosterSnapshot.snapshot_name
@@ -5090,8 +5156,17 @@ export async function assignNurseToRoster(
     return { success: false, message: 'Acesso negado.' }
   }
 
+  // ===== VALIDAÇÃO / COERÇÃO FORTE DE MÊS E ANO (evita NULL em monthly_rosters.month) =====
+  // Se chegou string 'Agosto', NaN, null, undefined ou 0 → caí no default (mês/ano atual)
+  const safeYear  = _safeYear(year)
+  const safeMonth = _safeMonth(month)
+
+  // Validar nurseId e sectionId (não podem ficar empty também)
+  if (!nurseId || !String(nurseId).trim()) return { success: false, message: 'Profissional não informado (nurseId vazio).' }
+  if (!sectionId || !String(sectionId).trim()) return { success: false, message: 'Setor / Secção não informado.' }
+
   // Only update the specific month (no propagation)
-  const monthsToUpdate = [month]
+  const monthsToUpdate = [safeMonth]
   let lastInsertedId: string | undefined = undefined
   const snapshot = await _buildNurseSnapshot(nurseId)
 
@@ -5104,7 +5179,7 @@ export async function assignNurseToRoster(
         const existingIndex = db.monthly_rosters.findIndex((r: any) => 
             r.nurse_id === nurseId && 
             r.month === m && 
-            r.year === year &&
+            r.year === safeYear &&
             (unitId ? r.unit_id === unitId : !r.unit_id)
         )
         
@@ -5114,7 +5189,7 @@ export async function assignNurseToRoster(
             const currentRoster = db.monthly_rosters.filter((r: any) => 
                 r.section_id === sectionId && 
                 r.month === m && 
-                r.year === year &&
+                r.year === safeYear &&
                 (unitId ? r.unit_id === unitId : !r.unit_id)
             )
             if (currentRoster.length > 0) {
@@ -5144,7 +5219,7 @@ export async function assignNurseToRoster(
             section_id: sectionId,
             unit_id: unitId,
             month: m,
-            year,
+            year: safeYear,
             observation: observation || '',
             created_at: createdAt || new Date().toISOString(),
             list_order: finalOrder,
@@ -5163,8 +5238,9 @@ export async function assignNurseToRoster(
   let warningMsg: string | undefined = undefined;
   
   try {
+  // Incluir 'sector' nas colunas detectadas pois assignNurseToRoster pode receber sector.
   const rosterCols = await _detectColumns(supabase, 'monthly_rosters', [
-    'id','nurse_id','section_id','unit_id','month','year','observation','created_at','list_order','name_star',
+    'id','nurse_id','section_id','unit_id','month','year','sector','observation','created_at','list_order','name_star',
     'snapshot_name','snapshot_role','snapshot_vinculo','snapshot_vinculos_json'
   ])
 
@@ -5175,7 +5251,7 @@ export async function assignNurseToRoster(
         .select('id, snapshot_vinculo')
         .eq('nurse_id', nurseId)
         .eq('month', m)
-        .eq('year', year)
+        .eq('year', safeYear)
     
     if (unitId) query = query.eq('unit_id', unitId)
     else query = query.is('unit_id', null)
@@ -5189,7 +5265,7 @@ export async function assignNurseToRoster(
             .select('units(title)')
             .eq('nurse_id', nurseId)
             .eq('month', m)
-            .eq('year', year)
+            .eq('year', safeYear)
         
         if (unitId) conflictQuery = conflictQuery.neq('unit_id', unitId)
         else conflictQuery = conflictQuery.not('unit_id', 'is', null)
@@ -5207,7 +5283,7 @@ export async function assignNurseToRoster(
         section_id: sectionId, 
         unit_id: unitId, 
         month: m, 
-        year 
+        year: safeYear
     }
     
     let finalOrder = listOrder
@@ -5218,7 +5294,7 @@ export async function assignNurseToRoster(
             .select('list_order')
             .eq('section_id', sectionId)
             .eq('month', m)
-            .eq('year', year)
+            .eq('year', safeYear)
         
         if (unitId) maxQuery = maxQuery.eq('unit_id', unitId)
         else maxQuery = maxQuery.is('unit_id', null)
@@ -5410,6 +5486,18 @@ export async function copyMonthlyRoster(sourceMonth: number, sourceYear: number,
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
+
+  // ===== COERÇÃO FORTE DE MÊS/ANO (evita month=NULL, NaN, string "Agosto", etc.) =====
+  const now = new Date()
+  const safeSourceMonth = _safeMonth(sourceMonth, (now.getMonth() + 1))
+  const safeSourceYear  = _safeYear(sourceYear, now.getFullYear())
+  const safeTargetMonth = _safeMonth(targetMonth, (now.getMonth() + 1))
+  const safeTargetYear  = _safeYear(targetYear, now.getFullYear())
+  // Rebind das variáveis de origem para usar os valores seguros em TODO resto da função
+  sourceMonth = safeSourceMonth
+  sourceYear  = safeSourceYear
+  targetMonth = safeTargetMonth
+  targetYear  = safeTargetYear
 
   const computeInterval = (days: number[]) => {
     if (!days || days.length < 2) return null
