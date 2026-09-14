@@ -1621,8 +1621,8 @@ export default function Schedule({
                 nurseId, 
                 sectionId, 
                 selectedUnitId, 
-                selectedMonth + 1, 
-                selectedYear, 
+                Number(selectedMonth) + 1, 
+                Number(selectedYear), 
                 observation, 
                 undefined, 
                 true, // allow duplicate
@@ -1634,7 +1634,7 @@ export default function Schedule({
                 const orderedIds = [...(insertionOrderedIds || [])]
                 orderedIds.splice(insertionPosition || 0, 0, res.rosterId)
                 
-                await resetSectionOrder(sectionId, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, undefined, orderedIds, 1)
+                await resetSectionOrder(sectionId, selectedUnitId || 'ALL', Number(selectedMonth) + 1, Number(selectedYear), undefined, orderedIds, 1)
                 
                 clearCache()
                 await fetchData(true)
@@ -1653,7 +1653,7 @@ export default function Schedule({
 
              // Step 1: Capture the current order of IDs in this section
              const currentSectionRoster = data.roster
-                .filter(r => r.section_id === sectionId && r.month === selectedMonth + 1 && r.year === selectedYear && (!selectedUnitId || r.unit_id === selectedUnitId))
+                .filter(r => r.section_id === sectionId && r.month === Number(selectedMonth) + 1 && r.year === Number(selectedYear) && (!selectedUnitId || r.unit_id === selectedUnitId))
                 .sort((a, b) => (a.list_order || 0) - (b.list_order || 0))
              
              const orderedIds = currentSectionRoster.map(r => r.id)
@@ -1673,8 +1673,8 @@ export default function Schedule({
                  nurseId, 
                  sectionId, 
                  selectedUnitId, 
-                 selectedMonth + 1, 
-                 selectedYear, 
+                 Number(selectedMonth) + 1, 
+                 Number(selectedYear), 
                  observation, 
                  rosterItem.created_at, 
                  allowDuplicate,
@@ -1690,7 +1690,7 @@ export default function Schedule({
                     const finalOrderedIds = [...orderedIds]
                     finalOrderedIds[positionIndex] = newRosterId
                     
-                    await resetSectionOrder(sectionId, selectedUnitId || 'ALL', selectedMonth + 1, selectedYear, undefined, finalOrderedIds, 1)
+                    await resetSectionOrder(sectionId, selectedUnitId || 'ALL', Number(selectedMonth) + 1, Number(selectedYear), undefined, finalOrderedIds, 1)
                 }
                 
                 clearCache()
@@ -1703,14 +1703,14 @@ export default function Schedule({
             const isAlreadyInThisSection = data.roster.some(r => 
                 r.nurse_id === nurseId && 
                 r.section_id === sectionId && 
-                r.month === selectedMonth + 1 && 
-                r.year === selectedYear &&
+                r.month === Number(selectedMonth) + 1 && 
+                r.year === Number(selectedYear) &&
                 (!selectedUnitId || r.unit_id === selectedUnitId)
             )
 
             const allowDuplicate = observation.includes('ED') || isAlreadyInThisSection
 
-            const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, selectedMonth + 1, selectedYear, observation, undefined, allowDuplicate)
+            const res = await assignNurseToRoster(nurseId, sectionId, selectedUnitId, Number(selectedMonth) + 1, Number(selectedYear), observation, undefined, allowDuplicate)
             if (res.success) {
                 if ((res as any).warning) alert((res as any).warning)
                 clearCache()

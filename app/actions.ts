@@ -314,6 +314,9 @@ export async function getBirthdaysForMonth(month: number) {
   const user = getCurrentSessionUser()
   if (!user) return []
 
+  // ===== COERÇÃO FORTE =====
+  month = _safeMonth(month) as number
+
   const parseBirthDate = (raw: any) => {
     if (!raw) return null
     const s = String(raw)
@@ -762,6 +765,10 @@ export async function getUnitMonthStatuses(month: number, year: number) {
     return {}
   }
 
+  // ===== COERÇÃO FORTE =====
+  year  = _safeYear(year)  as number
+  month = _safeMonth(month) as number
+
   const isGlobalAdmin = user.role === 'ADMIN' || user.role === 'COORDENACAO_GERAL' || user.cpf === '02170025367'
   const allowedUnitIds = new Set<string>()
 
@@ -1040,9 +1047,10 @@ export async function toggleSameDaySwapSetting() {
 
 export async function getScheduleSectionDisplayFields(unitId: string, month: number, year: number): Promise<Record<string, string>> {
   const safeUnitId = String(unitId || '').trim()
-  const safeMonth = Number(month)
-  const safeYear = Number(year)
-  if (!safeUnitId || !safeMonth || !safeYear) return {}
+  // ===== COERÇÃO FORTE (mesmo padrão das outras funções) =====
+  const safeMonth = _safeMonth(month)
+  const safeYear  = _safeYear(year)
+  if (!safeUnitId) return {}
 
   if (isLocalMode()) {
     const db = readDb()
@@ -1085,11 +1093,12 @@ export async function getScheduleSectionDisplayFields(unitId: string, month: num
 export async function saveScheduleSectionDisplayField(unitId: string, sectionId: string, month: number, year: number, field: string) {
   const safeUnitId = String(unitId || '').trim()
   const safeSectionId = String(sectionId || '').trim()
-  const safeMonth = Number(month)
-  const safeYear = Number(year)
+  // ===== COERÇÃO FORTE (mesmo padrão das outras funções) =====
+  const safeMonth = _safeMonth(month)
+  const safeYear  = _safeYear(year)
   const safeField = String(field || '').trim().toLowerCase()
 
-  if (!safeUnitId || !safeSectionId || !safeMonth || !safeYear || !safeField) {
+  if (!safeUnitId || !safeSectionId || !safeField) {
     return { success: false, message: 'Configuração inválida.' }
   }
 
@@ -2671,7 +2680,11 @@ export async function loginSamu(prevState: any, formData: FormData) {
 export async function getMonthlyManagementReport(month: number, year: number) {
   try {
     await checkAdmin()
-    
+
+    // ===== COERÇÃO FORTE =====
+    year  = _safeYear(year)  as number
+    month = _safeMonth(month) as number
+
     let nurses: any[] = []
     let rosters: any[] = []
     let units: any[] = []
@@ -2930,6 +2943,10 @@ export async function getMonthlyManagementReport(month: number, year: number) {
 export async function getMonthlyScheduledStaffReport(month: number, year: number) {
   try {
     await checkAdmin()
+
+    // ===== COERÇÃO FORTE =====
+    year  = _safeYear(year)  as number
+    month = _safeMonth(month) as number
 
     let nurses: any[] = []
     let rosters: any[] = []
@@ -3265,6 +3282,10 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
 
 export async function getMonthlyNote(month: number, year: number, unitId?: string | null) {
   try {
+    // ===== COERÇÃO FORTE =====
+    year  = _safeYear(year)  as number
+    month = _safeMonth(month) as number
+
     if (isLocalMode()) {
        const db = readDb()
        const note = db.monthly_notes.find(n => n.month === month && n.year === year && (unitId ? n.unit_id === unitId : !n.unit_id))
@@ -3273,7 +3294,7 @@ export async function getMonthlyNote(month: number, year: number, unitId?: strin
 
     const supabase = createClient()
     let query = supabase.from('monthly_notes').select('note').eq('month', month).eq('year', year)
-    
+
     if (unitId) {
         query = query.eq('unit_id', unitId)
     } else {
@@ -3297,7 +3318,13 @@ export async function getMonthlyNote(month: number, year: number, unitId?: strin
 export async function saveMonthlyNote(month: number, year: number, note: string, unitId?: string | null) {
   try {
       await checkAdmin()
-      
+
+      // ===== COERÇÃO FORTE =====
+      const safeYear  = _safeYear(year)
+      const safeMonth = _safeMonth(month)
+      month = safeMonth as number
+      year  = safeYear  as number
+
       if (isLocalMode()) {
           const db = readDb()
           const index = db.monthly_notes.findIndex(n => n.month === month && n.year === year && (unitId ? n.unit_id === unitId : !n.unit_id))
@@ -3780,6 +3807,10 @@ export async function getDailyShifts(date: string) {
 
 export async function getMonthlyScheduleData(month: number, year: number, unitId?: string, isPublic: boolean = false) {
   try {
+    // ===== COERÇÃO FORTE (evita startDate NaN e retorno vazio indevido) =====
+    year  = _safeYear(year)  as number
+    month = _safeMonth(month) as number
+
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
     const lastDay = new Date(year, month, 0).getDate()
     const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
@@ -4118,6 +4149,9 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
 export async function exportMonthlySchedule(month: number, year: number, unitId: string | null) {
     try {
         await checkAdmin()
+        // ===== COERÇÃO FORTE =====
+        year  = _safeYear(year)  as number
+        month = _safeMonth(month) as number
         const data = await getMonthlyScheduleData(month, year, unitId || undefined)
         return { success: true, data }
     } catch (e: any) {
@@ -4129,7 +4163,13 @@ export async function importMonthlySchedule(month: number, year: number, unitId:
     try {
         const user = await checkAdmin()
         const supabase = createClient()
-        
+
+        // ===== COERÇÃO FORTE (evita importar no mês errado / NULL) =====
+        const safeYear  = _safeYear(year)
+        const safeMonth = _safeMonth(month)
+        month = safeMonth as number
+        year  = safeYear  as number
+
         if (!data || !data.shifts) throw new Error('Dados inválidos para importação')
 
         // 1. Prepare roster entries
@@ -4204,6 +4244,12 @@ export async function releaseSchedule(month: number, year: number, unitId: strin
       }
       const user = getCurrentSessionUser()
       if (!user) throw new Error('Sessão inválida')
+
+      // ===== COERÇÃO FORTE (evita liberar mês errado / NULL) =====
+      const safeYear  = _safeYear(year)
+      const safeMonth = _safeMonth(month)
+      month = safeMonth as number
+      year  = safeYear  as number
       
       // Get current nurse info for the signature
       let nurseName = user.name
@@ -4356,7 +4402,13 @@ export async function unreleaseSchedule(month: number, year: number, unitId: str
       } else {
         await checkAdmin()
       }
-      
+
+      // ===== COERÇÃO FORTE =====
+      const safeYear  = _safeYear(year)
+      const safeMonth = _safeMonth(month)
+      month = safeMonth as number
+      year  = safeYear  as number
+
       if (isLocalMode()) {
         const db = readDb()
         const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
@@ -4403,6 +4455,12 @@ export async function updateScheduleFooter(month: number, year: number, unitId: 
       } else {
         await checkAdmin()
       }
+
+      // ===== COERÇÃO FORTE =====
+      const safeYear  = _safeYear(year)
+      const safeMonth = _safeMonth(month)
+      month = safeMonth as number
+      year  = safeYear  as number
 
       if (isLocalMode()) {
         const db = readDb()
@@ -4469,6 +4527,12 @@ export async function updateScheduleFooter(month: number, year: number, unitId: 
 export async function updateScheduleDynamicField(month: number, year: number, unitId: string | null, field: string) {
   try {
       await checkAdmin()
+
+      // ===== COERÇÃO FORTE =====
+      const safeYear  = _safeYear(year)
+      const safeMonth = _safeMonth(month)
+      month = safeMonth as number
+      year  = safeYear  as number
 
       if (isLocalMode()) {
         const db = readDb()
@@ -4553,6 +4617,12 @@ export async function updateScheduleSetorVisibility(month: number, year: number,
   try {
       await checkAdmin()
 
+      // ===== COERÇÃO FORTE =====
+      const safeYear  = _safeYear(year)
+      const safeMonth = _safeMonth(month)
+      month = safeMonth as number
+      year  = safeYear  as number
+
       if (isLocalMode()) {
         const db = readDb()
         const existingIndex = db.monthly_schedule_metadata.findIndex(m => m.month === month && m.year === year && (unitId ? m.unit_id === unitId : !m.unit_id))
@@ -4622,6 +4692,13 @@ export async function clearMonthlySchedule(month: number, year: number, unitId: 
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
+
+  // ===== COERÇÃO FORTE (evita apagar tudo caso month/year cheguem NaN/undefined do front) =====
+  const safeYear  = _safeYear(year)
+  const safeMonth = _safeMonth(month)
+  // Rebind transparente: todo o resto da função continua igual, mas usa valores seguros.
+  month = safeMonth as number
+  year  = safeYear  as number
 
   // === PROTECAO DE SEGURANCA: Trava de escala liberada ===
   try {
@@ -4841,6 +4918,12 @@ export async function clearSectionRoster(month: number, year: number, unitId: st
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
+
+  // ===== COERÇÃO FORTE (evita apagar tudo caso month/year cheguem NaN/undefined do front) =====
+  const safeYear  = _safeYear(year)
+  const safeMonth = _safeMonth(month)
+  month = safeMonth as number
+  year  = safeYear  as number
 
   // === PROTECAO SEGURANCA ===
   try {
@@ -5385,6 +5468,12 @@ export async function removeNurseFromRoster(nurseId: string, month: number, year
   } catch (e) {
     return { success: false, message: 'Acesso negado.' }
   }
+
+  // ===== COERÇÃO FORTE (evita apagar de mês errado / NULL) =====
+  const safeYear  = _safeYear(year)
+  const safeMonth = _safeMonth(month)
+  month = safeMonth as number
+  year  = safeYear  as number
 
   if (isLocalMode()) {
     const db = readDb()
@@ -6054,6 +6143,12 @@ export async function resetSectionOrder(sectionId: string, unitId: string | null
     } else {
       await checkScaleEditor(unitId)
     }
+
+    // ===== COERÇÃO FORTE =====
+    const safeYear  = _safeYear(year)
+    const safeMonth = _safeMonth(month)
+    month = safeMonth as number
+    year  = safeYear  as number
 
     if (isLocalMode()) {
       const db = readDb()
