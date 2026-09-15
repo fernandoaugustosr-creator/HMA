@@ -2677,6 +2677,105 @@ export async function loginSamu(prevState: any, formData: FormData) {
   return loginWithPortal(prevState, formData, SAMU_PORTAL)
 }
 
+function _enrichNursesWithActiveVinculosHelper(
+  nursesInput: any[],
+  vinculosInput: any[],
+  rosterNurseIds?: Set<string>
+) {
+  const vinculosByNurse = new Map<string, any[]>()
+  for (const v of vinculosInput || []) {
+    const baixa = String((v as any).data_baixa ?? '').trim()
+    if (baixa) continue
+    const nid = String((v as any).nurse_id ?? '')
+    if (!nid) continue
+    if (!vinculosByNurse.has(nid)) vinculosByNurse.set(nid, [])
+    vinculosByNurse.get(nid)!.push({ ...v })
+  }
+
+  const result = new Map<string, any>()
+  const nurses = nursesInput || []
+  for (const n of nurses) {
+    const nid = String(n?.id ?? '')
+    if (!nid) continue
+    if (rosterNurseIds && rosterNurseIds.size > 0 && !rosterNurseIds.has(nid)) {
+      result.set(nid, { ...n })
+      continue
+    }
+    const vinculosAtivos = vinculosByNurse.get(nid) || []
+    const principal = vinculosAtivos[0]
+
+    let vinculoField = String(n?.vinculo ?? '').trim()
+    if (!vinculoField && principal) {
+      const tv = String((principal as any).tipo_vinculo ?? '').trim()
+      const mat = String((principal as any).matricula ?? '').trim()
+      if (tv) vinculoField = tv
+      if (mat && !vinculoField) vinculoField = mat
+    }
+
+    const vinculosExistentes = Array.isArray((n as any).vinculos) ? (n as any).vinculos : []
+    const todosVinculos = [...vinculosExistentes]
+    for (const v of vinculosAtivos) {
+      const ja = todosVinculos.some(
+        (x: any) =>
+          String(x?.id ?? '') === String((v as any).id ?? '') &&
+          String(x?.tipo_vinculo ?? '') === String((v as any).tipo_vinculo ?? '')
+      )
+      if (!ja) todosVinculos.push({ ...v })
+    }
+
+    result.set(nid, {
+      ...n,
+      vinculo: vinculoField,
+      vinculos: todosVinculos,
+      _vinculos_ativos_count: vinculosAtivos.length,
+    })
+  }
+  return result
+}
+
+async function _enrichNursesWithActiveVinculos(
+  nursesInput: any[],
+  rosterNurseIds?: Set<string>
+) {
+  const nurseIds = Array.from(
+    (rosterNurseIds && rosterNurseIds.size > 0 ? rosterNurseIds : new Set((nursesInput || []).map((n: any) => String(n?.id ?? '')).filter(Boolean)))
+  )
+  if (nurseIds.length === 0) {
+    const empty = new Map<string, any>()
+    for (const n of nursesInput || []) empty.set(String(n?.id ?? ''), { ...n })
+    return empty
+  }
+
+  if (isLocalMode()) {
+    const db = readDb()
+    const vinculos = Array.isArray((db as any).nurse_vinculos) ? (db as any).nurse_vinculos : []
+    return _enrichNursesWithActiveVinculosHelper(nursesInput, vinculos, rosterNurseIds)
+  }
+
+  const supabase = createClient()
+  try {
+    const CHUNK = 500
+    const all: any[] = []
+    for (let i = 0; i < nurseIds.length; i += CHUNK) {
+      const part = nurseIds.slice(i, i + CHUNK)
+      const { data, error } = await supabase
+        .from('nurse_vinculos')
+        .select('*')
+        .in('nurse_id', part)
+        .is('data_baixa', null)
+        .order('created_at', { ascending: true })
+        .range(0, 99999)
+      if (!error && data) all.push(...data)
+    }
+    return _enrichNursesWithActiveVinculosHelper(nursesInput, all, rosterNurseIds)
+  } catch (e: any) {
+    console.warn('_enrichNursesWithActiveVinculos falhou (provavelmente tabela nurse_vinculos nao criada ainda), fallback sem enrichment:', e?.message || String(e))
+    const fallback = new Map<string, any>()
+    for (const n of nursesInput || []) fallback.set(String(n?.id ?? ''), { ...n })
+    return fallback
+  }
+}
+
 export async function getMonthlyManagementReport(month: number, year: number) {
   try {
     await checkAdmin()
@@ -2760,10 +2859,11 @@ export async function getMonthlyManagementReport(month: number, year: number) {
       releases = releasesData || []
     }
 
+    // ENRICHMENT: busca vínculos ativos na tabela 1:N nurse_vinculos (fallback p/ nurses.vinculo coluna antiga)
+    const rosterNurseIds = new Set(rosters.map(r => String((r as any).nurse_id || '')).filter(Boolean))
+    let nurseMap = await _enrichNursesWithActiveVinculos(nurses, rosterNurseIds)
+
     // APLICAR SNAPSHOTS V26 (PATCH): para cada roster, se tiver snapshot, cria um nurse "congelado" no lugar do atual
-    const nurseMap = new Map()
-    nurses.forEach(n => nurseMap.set(String(n.id), { ...n }))
-    // Para cada roster, verificamos se há snapshot e atualizamos (ou criamos) a entrada no nurseMap
     const rosterPatchedNurses = new Map<string, any>()
     for (const r of rosters) {
       const nid = String((r as any).nurse_id || '')
@@ -2771,16 +2871,23 @@ export async function getMonthlyManagementReport(month: number, year: number) {
       const snapNome = String((r as any).snapshot_name || '').trim()
       const snapCargo = String((r as any).snapshot_role || '').trim()
       const snapVinculo = String((r as any).snapshot_vinculo || '').trim()
-      if (!snapNome && !snapCargo && !snapVinculo) continue
-      // Guardamos por (nurseId + rosterId) pois o mesmo nurse pode estar em múltiplos setores com snapshots diferentes no mesmo mês?
-      // Para relatório gerencial, usamos uma chave (nid) única — snapshots válidos para o mês prevalecem
-      const base = nurseMap.get(nid) || { id: nid, name: '', role: '', vinculo: '' }
+      const snapVinculosJson = String((r as any).snapshot_vinculos_json || '').trim()
+      if (!snapNome && !snapCargo && !snapVinculo && !snapVinculosJson) continue
+      const base = nurseMap.get(nid) || { id: nid, name: '', role: '', vinculo: '', vinculos: [] }
+      let vinculosParsed: any[] = Array.isArray((base as any).vinculos) ? (base as any).vinculos : []
+      if (snapVinculosJson) {
+        try {
+          const p = JSON.parse(snapVinculosJson)
+          if (Array.isArray(p)) vinculosParsed = p
+        } catch {}
+      }
       const patched = {
         ...base,
         id: base.id,
         name: snapNome || base.name,
         role: snapCargo || base.role,
-        vinculo: snapVinculo || base.vinculo || ''
+        vinculo: snapVinculo || base.vinculo || '',
+        vinculos: vinculosParsed
       }
       rosterPatchedNurses.set(nid, patched)
     }
@@ -3026,10 +3133,12 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
       }
     }
 
+    // ENRICHMENT: busca vínculos ativos na tabela 1:N nurse_vinculos (fallback p/ nurses.vinculo coluna antiga)
+    const rosterNurseIdsScheduled = new Set(rosters.map(r => String((r as any).nurse_id || '')).filter(Boolean))
+    let nurseMap: Map<string, any> = await _enrichNursesWithActiveVinculos(nurses, rosterNurseIdsScheduled)
+
     // APLICAR SNAPSHOTS V26 (PATCH): Criar nurseMap com dados CONGELADOS da época do lançamento,
     // e registrar (por chave nurseId + unitId) o snapshot para usar no rowMap
-    const nurseMap = new Map<string, any>()
-    nurses.forEach(n => nurseMap.set(String(n.id), { ...n }))
     // Pré-processar snapshots por (nurseId + unitId) para usar no rowMap
     const snapshotByRosterKey = new Map<string, { name: string; role: string; vinculo: string; vinculosJson: string }>()
     for (const r of rosters) {

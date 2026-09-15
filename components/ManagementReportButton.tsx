@@ -18,7 +18,11 @@ export default function ManagementReportButton({ selectedMonth, selectedYear, mo
   const handleOpenReport = async () => {
     setLoading(true)
     try {
-      const res = await getMonthlyManagementReport(selectedMonth, selectedYear)
+      const __m = Number(selectedMonth)
+      const __y = Number(selectedYear)
+      const sendMonth = Number.isInteger(__m) && __m >= 1 && __m <= 12 ? __m : new Date().getMonth() + 1
+      const sendYear  = Number.isInteger(__y) && __y >= 2000 && __y <= 2100 ? __y : new Date().getFullYear()
+      const res = await getMonthlyManagementReport(sendMonth, sendYear)
       if (res.success) {
         setReportData(res.data)
       } else {

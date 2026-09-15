@@ -1105,7 +1105,13 @@ export default function Schedule({
     if (!confirm('Tem certeza que deseja liberar esta escala? Ela ficará disponível para download.')) return
     
     setLoading(true)
-    const res = await releaseSchedule(selectedMonth + 1, selectedYear, selectedUnitId)
+    const __m = Number(selectedMonth)
+    const __y = Number(selectedYear)
+    const res = await releaseSchedule(
+      Number.isInteger(__m) ? __m + 1 : new Date().getMonth() + 1,
+      Number.isInteger(__y) && __y >= 2000 && __y <= 2100 ? __y : new Date().getFullYear(),
+      selectedUnitId
+    )
     if (res.success) {
         alert('Escala liberada com sucesso!')
         clearCache()
@@ -1117,11 +1123,17 @@ export default function Schedule({
   }
 
   const handleUnrelease = async () => {
-    if (!selectedUnitId) return
+    if (!selectedUnitId) return alert('Selecione um setor para cancelar liberação')
     if (!confirm('Tem certeza que deseja CANCELAR a liberação desta escala? Ela deixará de aparecer na área pública.')) return
     
     setLoading(true)
-    const res = await unreleaseSchedule(selectedMonth + 1, selectedYear, selectedUnitId)
+    const __m = Number(selectedMonth)
+    const __y = Number(selectedYear)
+    const res = await unreleaseSchedule(
+      Number.isInteger(__m) ? __m + 1 : new Date().getMonth() + 1,
+      Number.isInteger(__y) && __y >= 2000 && __y <= 2100 ? __y : new Date().getFullYear(),
+      selectedUnitId
+    )
     if (res.success) {
         alert('Liberação cancelada com sucesso!')
         clearCache()
@@ -1133,15 +1145,21 @@ export default function Schedule({
   }
 
   const handleExportBackup = async () => {
+      if (!selectedUnitId) return alert('Selecione um setor para baixar backup')
       setLoading(true)
-      const res = await exportMonthlySchedule(selectedMonth + 1, selectedYear, selectedUnitId)
+      const __m = Number(selectedMonth)
+      const __y = Number(selectedYear)
+      const sendMonth = Number.isInteger(__m) ? __m + 1 : new Date().getMonth() + 1
+      const sendYear  = Number.isInteger(__y) && __y >= 2000 && __y <= 2100 ? __y : new Date().getFullYear()
+      const res = await exportMonthlySchedule(sendMonth, sendYear, selectedUnitId)
       if (res.success) {
           const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
           const url = URL.createObjectURL(blob)
           const a = document.createElement('a')
           const unitName = data.units.find(u => u.id === selectedUnitId)?.title || 'Geral'
+          const monthLabel = (MONTHS[__m] || '').toString() || `${sendMonth}`
           a.href = url
-          a.download = `backup_escala_${unitName}_${MONTHS[selectedMonth]}_${selectedYear}.json`
+          a.download = `backup_escala_${unitName}_${monthLabel}_${sendYear}.json`
           a.click()
           alert('Backup baixado com sucesso! Guarde este arquivo em local seguro.')
       } else {
@@ -1154,6 +1172,12 @@ export default function Schedule({
       const file = e.target.files?.[0]
       if (!file) return
 
+      if (!selectedUnitId) {
+        alert('Selecione um setor para restaurar o backup')
+        e.target.value = ''
+        return
+      }
+
       if (!confirm('ATENÇÃO: A importação irá sobrescrever os dados atuais desta escala com os dados do arquivo de backup. Deseja continuar?')) {
           e.target.value = ''
           return
@@ -1164,7 +1188,11 @@ export default function Schedule({
           try {
               const backupData = JSON.parse(event.target?.result as string)
               setLoading(true)
-              const res = await importMonthlySchedule(selectedMonth + 1, selectedYear, selectedUnitId, backupData)
+              const __m = Number(selectedMonth)
+              const __y = Number(selectedYear)
+              const sendMonth = Number.isInteger(__m) ? __m + 1 : new Date().getMonth() + 1
+              const sendYear  = Number.isInteger(__y) && __y >= 2000 && __y <= 2100 ? __y : new Date().getFullYear()
+              const res = await importMonthlySchedule(sendMonth, sendYear, selectedUnitId, backupData)
               if (res.success) {
                   alert(res.message)
                   clearCache()

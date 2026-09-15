@@ -18,7 +18,11 @@ export default function ScheduledStaffReportButton({ selectedMonth, selectedYear
   const handleOpenReport = async () => {
     setLoading(true)
     try {
-      const res = await getMonthlyScheduledStaffReport(selectedMonth, selectedYear)
+      const __m = Number(selectedMonth)
+      const __y = Number(selectedYear)
+      const sendMonth = Number.isInteger(__m) && __m >= 1 && __m <= 12 ? __m : new Date().getMonth() + 1
+      const sendYear  = Number.isInteger(__y) && __y >= 2000 && __y <= 2100 ? __y : new Date().getFullYear()
+      const res = await getMonthlyScheduledStaffReport(sendMonth, sendYear)
       if (res.success) {
         setReportData(res.data)
       } else {
