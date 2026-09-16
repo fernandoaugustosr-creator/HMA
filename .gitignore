@@ -39,3 +39,22 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# HMA - Arquivos GRANDES / Dados / Backups locais (NAO COMMITAR dados de producao 16MB no repo)
+# Dump de dados (16.8 MB) - gerar novamente via node .dbg/dump_supabase_data.js
+/supabase/HMA_FULL_DATA_DUMP.sql
+
+# Pasta backup
+/backup/
+
+# Backup data local
+/data/db.json.backup-*.json
+
+# Arquivos CSV temporarios / relatorios / logs gerados por scripts .dbg
+.dbg/*.csv
+.dbg/*.md
+.dbg/*.log
+
+# Schema VIAVEL (completo para criar do zero) PERMANECE no repo:
+# /supabase/HMA_FULL_SCHEMA_CREATE_FROM_SCRATCH.sql -> deve ser trackeado
+# .dbg/dump_supabase_data.js -> deve ser trackeado (gerador de dump)

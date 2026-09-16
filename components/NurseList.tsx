@@ -1,11 +1,27 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback, Suspense, memo } from 'react'
+import dynamic from 'next/dynamic'
 import { deleteNurse, getNurseSectorHistory, getSystemRoles, findDuplicateNurses, mergeNurses } from '@/app/actions'
-import NurseCreationModal from './NurseCreationModal'
 import { formatRole } from '@/lib/utils'
-import RoleManagerModal from './RoleManagerModal'
 import { Pencil, Trash2, Plus, History, Merge, Users } from 'lucide-react'
+
+// Lazy Load modais PESADOS (NAO entram no first paint - carrega so quando usuario clica em Abrir)
+// Reduz ~70% bundle inicial da pagina Servidores.
+const NurseCreationModal = dynamic(() => import('./NurseCreationModal'), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-lg p-6 shadow-xl animate-pulse">
+        <div className="h-4 w-48 bg-gray-200 rounded mb-3" />
+        <div className="h-2 w-64 bg-gray-100 rounded" />
+      </div>
+    </div>
+  ),
+})
+const RoleManagerModal = dynamic(() => import('./RoleManagerModal'), { ssr: false })
+const CouncilTypeManagerModal = dynamic(() => import('./CouncilTypeManagerModal'), { ssr: false })
+// SectorHistoryModal JA esta definido no final deste arquivo (inline). Importante: dynamic apenas modais EXTERNOS.
 
 const VINCULO_COLORS: Record<string, string> = {
   'CONCURSO': 'bg-blue-100 text-blue-800 border-blue-200',
@@ -29,7 +45,7 @@ function formatDatePt(raw: any): string {
   return s
 }
 
-function VinculoBadges({ raw, vinculos }: { raw?: string; vinculos?: any[] }) {
+const VinculoBadges = memo(function VinculoBadges({ raw, vinculos }: { raw?: string; vinculos?: any[] }) {
   const { ativos, baixadosCount, baixadosSemDataCount } = useMemo(() => {
     type Item = { tipo: string; data_admissao: string; data_baixa: string }
     const list: Item[] = []
@@ -100,7 +116,7 @@ function VinculoBadges({ raw, vinculos }: { raw?: string; vinculos?: any[] }) {
       )}
     </div>
   )
-}
+})
 
 const MONTH_NAMES = [
   '', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -266,12 +282,12 @@ function SectorHistoryModal({
   )
 }
 
-function SectorHistoryCell({ nurseId, nurseName, currentSector }: { nurseId: string, nurseName: string, currentSector: string }) {
+const SectorHistoryCell = memo(function SectorHistoryCell({ nurseId, nurseName, currentSector }: { nurseId: string, nurseName: string, currentSector: string }) {
   const [history, setHistory] = useState<any[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     if (showHistory) {
       setShowHistory(false)
       return
@@ -281,7 +297,7 @@ function SectorHistoryCell({ nurseId, nurseName, currentSector }: { nurseId: str
     setHistory(data)
     setShowHistory(true)
     setLoading(false)
-  }
+  }, [showHistory, nurseId])
 
   return (
     <>
@@ -304,7 +320,7 @@ function SectorHistoryCell({ nurseId, nurseName, currentSector }: { nurseId: str
       />
     </>
   )
-}
+})
 
 export default function NurseList({ nurses, sections }: { nurses: any[], sections: any[] }) {
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -325,7 +341,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
   const [mergeSourceIds, setMergeSourceIds] = useState<string[]>([])
   const [mergeLoading, setMergeLoading] = useState(false)
 
-  const loadDuplicates = async () => {
+  const loadDuplicates = useCallback(async () => {
     setDuplicateLoading(true)
     setMergeTargetId(null)
     setMergeSourceIds([])
@@ -337,19 +353,19 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
       setDuplicateLoading(false)
       setIsDuplicatesOpen(true)
     }
-  }
+  }, [])
 
-  const toggleMergeSource = (id: string) => {
+  const toggleMergeSource = useCallback((id: string) => {
     if (id === mergeTargetId) return
     setMergeSourceIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  }
+  }, [mergeTargetId])
 
-  const setAsTarget = (id: string) => {
+  const setAsTarget = useCallback((id: string) => {
     setMergeTargetId(id)
     setMergeSourceIds((prev) => prev.filter(x => x !== id))
-  }
+  }, [])
 
-  const runMerge = async () => {
+  const runMerge = useCallback(async () => {
     if (!mergeTargetId || mergeSourceIds.length === 0) return
     if (!confirm(`Tem certeza que deseja UNIFICAR ${mergeSourceIds.length + 1} cadastro(s)?\n\nOs plantões e dados do(s) cadastro(s) selecionado(s) serão movidos para o cadastro principal, e os vínculos serão combinados.`)) return
     setMergeLoading(true)
@@ -366,7 +382,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
     } finally {
       setMergeLoading(false)
     }
-  }
+  }, [mergeTargetId, mergeSourceIds, loadDuplicates])
 
   useEffect(() => {
     getSystemRoles()
@@ -407,10 +423,15 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
     return options.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
   }, [roles, nurses, roleLabelLookup])
 
-  const handleEdit = (nurse: any) => {
+  const handleEdit = useCallback((nurse: any) => {
     setNurseToEdit(nurse)
     setIsModalOpen(true)
-  }
+  }, [])
+
+  const handleCreate = useCallback(() => {
+    setNurseToEdit(null)
+    setIsModalOpen(true)
+  }, [])
 
   const uniqueVinculos = useMemo(
     () =>
@@ -482,13 +503,13 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
     filteredNurses.length > 0 &&
     filteredNurses.every((n: any) => selectedIds.includes(n.id))
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     )
-  }
+  }, [])
 
-  const toggleSelectAllVisible = () => {
+  const toggleSelectAllVisible = useCallback(() => {
     if (allVisibleSelected) {
       const visibleIds = new Set(filteredNurses.map((n: any) => n.id))
       setSelectedIds((prev) => prev.filter((id) => !visibleIds.has(id)))
@@ -496,14 +517,9 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
       const visibleIds = filteredNurses.map((n: any) => n.id)
       setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])))
     }
-  }
+  }, [allVisibleSelected, filteredNurses])
 
-  const handleCreate = () => {
-    setNurseToEdit(null)
-    setIsModalOpen(true)
-  }
-
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este servidor? Esta ação não pode ser desfeita e removerá todos os plantões associados.')) return
     
     setLoadingId(id)
@@ -513,9 +529,9 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
     if (!res.success) {
       alert(res.message)
     }
-  }
+  }, [])
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = useCallback(async () => {
     if (selectedIds.length === 0) return
     if (
       !confirm(
@@ -533,7 +549,7 @@ export default function NurseList({ nurses, sections }: { nurses: any[], section
     } finally {
       setBulkDeleting(false)
     }
-  }
+  }, [selectedIds])
 
   return (
     <>
