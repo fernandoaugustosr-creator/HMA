@@ -32,14 +32,18 @@ const maskPtDate = (raw: string): string => {
 const parsePtDateToIso = (raw: string): string => {
   const v = String(raw || '').trim()
   if (!v) return ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v.slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const yy = Number(v.slice(0, 4)), mm = Number(v.slice(5, 7)), dd = Number(v.slice(8, 10))
+    if (yy >= 1900 && yy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) return v.slice(0, 10)
+    return ''
+  }
   const m = v.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
-  if (!m) return v.slice(0, 10)
+  if (!m) return ''
   let dd = Number(m[1])
   let mm = Number(m[2])
   let yy = Number(m[3])
   if (yy < 100) yy = yy < 40 ? 2000 + yy : 1900 + yy
-  if (!(mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yy >= 1900 && yy <= 2100)) return v.slice(0, 10)
+  if (!(mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yy >= 1900 && yy <= 2100)) return ''
   return `${yy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
 }
 
@@ -48,9 +52,15 @@ const formatIsoToPtDate = (iso: string): string => {
   if (!v) return ''
   if (v === 'SEM_DATA') return ''
   const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  if (m) {
+    const yy = Number(m[1]), mm = Number(m[2]), dd = Number(m[3])
+    if (yy >= 1900 && yy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      return `${m[3]}/${m[2]}/${m[1]}`
+    }
+    return '' // data ISO absurdamente inválida → apaga (não deixa aparecer 8991 no input)
+  }
   if (/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/.test(v)) return v
-  return v
+  return ''
 }
 
 interface NurseCreationModalProps {

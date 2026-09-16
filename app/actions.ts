@@ -1355,8 +1355,13 @@ const _isoVinculoDate = (v: any): string => {
   const raw = String(v || '').trim()
   if (!raw) return ''
   if (raw.toUpperCase() === 'SEM_DATA') return 'SEM_DATA'
-  // Já é ISO (AAAA-MM-DD)?
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.slice(0, 10)
+  // Já é ISO (AAAA-MM-DD)? Valida mês/dia/ano.
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (iso) {
+    const yy = Number(iso[1]), mm = Number(iso[2]), dd = Number(iso[3])
+    if (yy >= 1900 && yy <= 2100 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) return raw.slice(0, 10)
+    return '' // ISO inválida (ex: 8991-21-20) → apaga
+  }
   // PT-BR DD/MM/AAAA?
   const m = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
   if (m) {
@@ -1368,7 +1373,7 @@ const _isoVinculoDate = (v: any): string => {
       return `${yy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
     }
   }
-  return raw.slice(0, 10)
+  return '' // Qualquer outro formato inválido → apaga (não polui banco)
 }
 
 export async function createNurseVinculo(
