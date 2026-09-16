@@ -450,24 +450,24 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
 
         // FLUSH: Garante que TODO display map ainda não commitado (user digitou e clicou em salvar sem dar blur/Enter)
         // seja salvo como ISO no estado oficial nurseVinculos ANTES do loop de create/update/delete.
-        for (const v of nurseVinculos) {
+        for (let v of nurseVinculos) {
           if (!v.id || v._pendingDelete) continue
           const admPt = displayDataAdmissaoMap[v.id]
           if (admPt !== undefined) {
             const iso = parsePtDateToIso(admPt)
             if (iso !== v.data_admissao) {
-              // eslint-disable-next-line no-param-reassign
-              v = { ...v, data_admissao: iso, _dirty: true }
-              setNurseVinculos(prev => prev.map(x => (x.id === v.id ? v : x)))
+              const novo: NurseVinculoRow = { ...v, data_admissao: iso, _dirty: true }
+              v = novo
+              setNurseVinculos(prev => prev.map(x => (x.id === v.id ? novo : x)))
             }
           }
           const baixaPt = displayDataBaixaMap[v.id]
           if (baixaPt !== undefined) {
             const iso = parsePtDateToIso(baixaPt)
             if (iso !== v.data_baixa) {
-              // eslint-disable-next-line no-param-reassign
-              v = { ...v, data_baixa: iso, _dirty: true }
-              setNurseVinculos(prev => prev.map(x => (x.id === v.id ? v : x)))
+              const novo: NurseVinculoRow = { ...v, data_baixa: iso, _dirty: true }
+              v = novo
+              setNurseVinculos(prev => prev.map(x => (x.id === v.id ? novo : x)))
             }
           }
         }
