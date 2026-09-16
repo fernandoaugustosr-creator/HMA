@@ -389,32 +389,53 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
 
       if (result.success && savedNurseId) {
         setVinculoSaving(true)
+        let vinculoFailures = 0
         for (const v of nurseVinculos) {
           try {
             if (v._pendingDelete && v.id && !v.id.startsWith('LEGADO-') && !v.id.startsWith('NEW-')) {
-              await deleteNurseVinculo(v.id)
+              const r = await deleteNurseVinculo(v.id)
+              if (!r.success) { console.error('[NurseCreationModal] delete falhou', r); vinculoFailures++ }
               continue
             }
             if (v._pendingDelete) continue
             if (v.id.startsWith('NEW-') || v.id.startsWith('LEGADO-') || !v.id) {
-              await createNurseVinculo(savedNurseId, {
+              const r = await createNurseVinculo(savedNurseId, {
                 tipo_vinculo: v.tipo_vinculo,
                 data_admissao: v.data_admissao,
                 data_baixa: v.data_baixa,
               })
+              if (!r.success) {
+                console.error('[NurseCreationModal] create vinculo falhou', v, r)
+                vinculoFailures++
+              } else {
+                console.log('[NurseCreationModal] create vinculo OK', r.id)
+              }
               continue
             }
             if (v._dirty) {
-              await updateNurseVinculo(v.id, {
+              const r = await updateNurseVinculo(v.id, {
                 tipo_vinculo: v.tipo_vinculo,
                 data_admissao: v.data_admissao,
                 data_baixa: v.data_baixa,
               })
+              if (!r.success) {
+                console.error('[NurseCreationModal] update vinculo falhou', v, r)
+                vinculoFailures++
+              } else {
+                console.log('[NurseCreationModal] update vinculo OK')
+              }
             }
-          } catch {}
+          } catch (e) {
+            console.error('[NurseCreationModal] exceção em vínculo:', v, e)
+            vinculoFailures++
+          }
+        }
+        if (vinculoFailures > 0) {
+          result = { success: false, message: `Falhou ${vinculoFailures} vínculo(s) ao salvar. Ver console (F12). Abra SQL Editor e rode o HMA_FULL_SCHEMA_CREATE_FROM_SCRATCH.sql se tabela nurse_vinculos não existir.` }
         }
       }
     } catch (e: any) {
+      console.error('[NurseCreationModal] handleSubmit exceção:', e)
       if (!result || !result.success) {
         // keep original result
       } else {

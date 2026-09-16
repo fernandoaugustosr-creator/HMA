@@ -1351,6 +1351,26 @@ export async function getNurseVinculos(nurseId?: string): Promise<NurseVinculo[]
   return (data || []) as NurseVinculo[]
 }
 
+const _isoVinculoDate = (v: any): string => {
+  const raw = String(v || '').trim()
+  if (!raw) return ''
+  if (raw.toUpperCase() === 'SEM_DATA') return 'SEM_DATA'
+  // Já é ISO (AAAA-MM-DD)?
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.slice(0, 10)
+  // PT-BR DD/MM/AAAA?
+  const m = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
+  if (m) {
+    let dd = Number(m[1])
+    let mm = Number(m[2])
+    let yy = Number(m[3])
+    if (yy < 100) yy = yy < 40 ? 2000 + yy : 1900 + yy
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yy >= 1900 && yy <= 2100) {
+      return `${yy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
+    }
+  }
+  return raw.slice(0, 10)
+}
+
 export async function createNurseVinculo(
   nurseId: string,
   payload: { tipo_vinculo: string; data_admissao?: string; data_baixa?: string }
@@ -1358,14 +1378,20 @@ export async function createNurseVinculo(
   try { await checkAdmin() } catch { return { success: false, message: 'Acesso negado.' } }
   if (!nurseId) return { success: false, message: 'Servidor não informado.' }
   const tipo = String(payload.tipo_vinculo || '').trim().toUpperCase()
-  if (!tipo) return { success: false, message: 'Informe o tipo de vínculo.' }
+  if (!tipo) {
+    console.error('[createNurseVinculo] tipo_vinculo VAZIO')
+    return { success: false, message: 'Informe o tipo de vínculo.' }
+  }
+  const dataAdmissao = _isoVinculoDate(payload.data_admissao)
+  const dataBaixa = _isoVinculoDate(payload.data_baixa)
 
   const row = {
     nurse_id: nurseId,
     tipo_vinculo: tipo,
-    data_admissao: String(payload.data_admissao || '').slice(0, 10),
-    data_baixa: String(payload.data_baixa || '').slice(0, 10),
+    data_admissao: dataAdmissao,
+    data_baixa: dataBaixa,
   }
+  console.log('[createNurseVinculo] INSERT:', JSON.stringify(row))
 
   if (isLocalMode()) {
     const db = readDb()
@@ -1381,7 +1407,11 @@ export async function createNurseVinculo(
   const sb = createClient()
   await _ensureNurseVinculosTable(sb)
   const { data, error } = await sb.from('nurse_vinculos').insert([row]).select('id').single()
-  if (error) return { success: false, message: error.message || 'Erro ao criar vínculo.' }
+  if (error) {
+    console.error('[createNurseVinculo] Supabase error:', JSON.stringify({ code: error.code, message: error.message, details: (error as any).details, hint: (error as any).hint }))
+    return { success: false, message: error.message || 'Erro ao criar vínculo.' }
+  }
+  console.log('[createNurseVinculo] OK id=' + data?.id)
   revalidatePath('/servidores')
   revalidatePath('/')
   return { success: true, id: data?.id, message: 'Vínculo adicionado.' }
@@ -1395,8 +1425,9 @@ export async function updateNurseVinculo(
   if (!vinculoId) return { success: false, message: 'Vínculo não informado.' }
   const patch: any = { updated_at: new Date().toISOString() }
   if (payload.tipo_vinculo !== undefined) patch.tipo_vinculo = String(payload.tipo_vinculo).trim().toUpperCase()
-  if (payload.data_admissao !== undefined) patch.data_admissao = String(payload.data_admissao || '').slice(0, 10)
-  if (payload.data_baixa !== undefined) patch.data_baixa = String(payload.data_baixa || '').slice(0, 10)
+  if (payload.data_admissao !== undefined) patch.data_admissao = _isoVinculoDate(payload.data_admissao)
+  if (payload.data_baixa !== undefined) patch.data_baixa = _isoVinculoDate(payload.data_baixa)
+  console.log('[updateNurseVinculo] id=' + vinculoId + ' UPDATE:', JSON.stringify(patch))
 
   if (isLocalMode()) {
     const db = readDb()
@@ -1411,7 +1442,10 @@ export async function updateNurseVinculo(
   }
   const sb = createClient()
   const { error } = await sb.from('nurse_vinculos').update(patch).eq('id', vinculoId)
-  if (error) return { success: false, message: error.message || 'Erro ao atualizar vínculo.' }
+  if (error) {
+    console.error('[updateNurseVinculo] Supabase error:', JSON.stringify({ code: error.code, message: error.message, details: (error as any).details, hint: (error as any).hint }))
+    return { success: false, message: error.message || 'Erro ao atualizar vínculo.' }
+  }
   revalidatePath('/servidores')
   revalidatePath('/')
   return { success: true, message: 'Vínculo atualizado.' }
