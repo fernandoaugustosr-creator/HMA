@@ -18,6 +18,41 @@ const NURSE_VINCULO_TYPES = [
   'OUTRO',
 ]
 
+const maskPtDate = (raw: string): string => {
+  const only = String(raw || '').replace(/\D+/g, '').slice(0, 8)
+  const d = only.slice(0, 2)
+  const m = only.slice(2, 4)
+  const y = only.slice(4, 8)
+  if (!d) return ''
+  if (only.length <= 2) return d
+  if (only.length <= 4) return `${d}/${m}`
+  return `${d}/${m}/${y}`
+}
+
+const parsePtDateToIso = (raw: string): string => {
+  const v = String(raw || '').trim()
+  if (!v) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v.slice(0, 10)
+  const m = v.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/)
+  if (!m) return v.slice(0, 10)
+  let dd = Number(m[1])
+  let mm = Number(m[2])
+  let yy = Number(m[3])
+  if (yy < 100) yy = yy < 40 ? 2000 + yy : 1900 + yy
+  if (!(mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yy >= 1900 && yy <= 2100)) return v.slice(0, 10)
+  return `${yy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
+}
+
+const formatIsoToPtDate = (iso: string): string => {
+  const v = String(iso || '').trim()
+  if (!v) return ''
+  if (v === 'SEM_DATA') return ''
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  if (/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/.test(v)) return v
+  return v
+}
+
 interface NurseCreationModalProps {
   isOpen: boolean
   onClose: () => void
@@ -95,8 +130,8 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
       id: `NEW-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       nurse_id: nurseToEdit?.id || '',
       tipo_vinculo: tipo,
-      data_admissao: String(newDataAdmissao || '').slice(0, 10),
-      data_baixa: String(newDataBaixa || '').slice(0, 10),
+      data_admissao: parsePtDateToIso(newDataAdmissao),
+      data_baixa: parsePtDateToIso(newDataBaixa),
       _isNew: true,
       _dirty: true,
     }
@@ -109,7 +144,17 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   }
 
   const updateVinculoField = (id: string, field: keyof NurseVinculoRow, value: any) => {
-    setNurseVinculos(prev => prev.map(v => v.id === id ? { ...v, [field]: value, _dirty: true } : v))
+    setNurseVinculos(prev => prev.map(v => {
+      if (v.id !== id) return v
+      if (field === 'data_admissao' || field === 'data_baixa') {
+        if (String(value || '').trim().toUpperCase() === 'SEM_DATA') {
+          return { ...v, data_baixa: 'SEM_DATA' as any, _dirty: true }
+        }
+        const iso = parsePtDateToIso(value)
+        return { ...v, [field]: iso, _dirty: true }
+      }
+      return { ...v, [field]: value, _dirty: true }
+    }))
   }
 
   const darBaixaHoje = (id: string) => {
@@ -701,19 +746,30 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                         </div>
                         <div className="col-span-4">
                           <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
-                            <CalendarIcon size={11} className="inline mr-1 -mt-0.5" />
                             Data Admissão
                           </label>
                           <input
-                            type="date"
-                            value={activeVinculo.data_admissao}
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="dd/mm/aaaa"
+                            maxLength={10}
+                            value={formatIsoToPtDate(activeVinculo.data_admissao)}
+                            onInput={(e: any) => {
+                              const target = e.target
+                              const pos = target.selectionStart
+                              const masked = maskPtDate(target.value)
+                              target.value = masked
+                              updateVinculoField(activeVinculo.id, 'data_admissao', masked)
+                              requestAnimationFrame(() => {
+                                try { target.setSelectionRange(pos, pos) } catch {}
+                              })
+                            }}
                             onChange={(e) => updateVinculoField(activeVinculo.id, 'data_admissao', e.target.value)}
-                            className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs"
+                            className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400"
                           />
                         </div>
                         <div className="col-span-4">
                           <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
-                            <CalendarIcon size={11} className="inline mr-1 -mt-0.5" />
                             Data Baixa
                           </label>
                           {isBaixaSemData(activeVinculo) ? (
@@ -732,11 +788,24 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                             </div>
                           ) : (
                             <input
-                              type="date"
-                              value={activeVinculo.data_baixa}
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="dd/mm/aaaa"
+                              maxLength={10}
+                              value={formatIsoToPtDate(activeVinculo.data_baixa)}
+                              onInput={(e: any) => {
+                                const target = e.target
+                                const pos = target.selectionStart
+                                const masked = maskPtDate(target.value)
+                                target.value = masked
+                                updateVinculoField(activeVinculo.id, 'data_baixa', masked)
+                                requestAnimationFrame(() => {
+                                  try { target.setSelectionRange(pos, pos) } catch {}
+                                })
+                              }}
                               onChange={(e) => updateVinculoField(activeVinculo.id, 'data_baixa', e.target.value)}
                               className={[
-                                'mt-0.5 block w-full border rounded-md shadow-sm p-1.5 bg-white text-black text-xs',
+                                'mt-0.5 block w-full border rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400',
                                 activeVinculo.data_baixa ? 'border-red-300 bg-red-50/50' : 'border-gray-300'
                               ].join(' ')}
                             />
@@ -805,27 +874,49 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                   </div>
                   <div className="col-span-4">
                     <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
-                      <CalendarIcon size={11} className="inline mr-1 -mt-0.5" />
                       Data Admissão
                     </label>
                     <input
-                      type="date"
-                      value={newDataAdmissao}
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="dd/mm/aaaa"
+                      maxLength={10}
+                      value={maskPtDate(newDataAdmissao)}
+                      onInput={(e: any) => {
+                        const target = e.target
+                        const pos = target.selectionStart
+                        const masked = maskPtDate(target.value)
+                        setNewDataAdmissao(masked)
+                        requestAnimationFrame(() => {
+                          try { target.setSelectionRange(pos, pos) } catch {}
+                        })
+                      }}
                       onChange={(e) => setNewDataAdmissao(e.target.value)}
-                      className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs"
+                      className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400"
                     />
                   </div>
                   <div className="col-span-4 flex items-end gap-1.5">
                     <div className="flex-1 min-w-0">
                       <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
-                        <CalendarIcon size={11} className="inline mr-1 -mt-0.5" />
                         Data Baixa (opcional)
                       </label>
                       <input
-                        type="date"
-                        value={newDataBaixa}
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="dd/mm/aaaa"
+                        maxLength={10}
+                        value={maskPtDate(newDataBaixa)}
+                        onInput={(e: any) => {
+                          const target = e.target
+                          const pos = target.selectionStart
+                          const masked = maskPtDate(target.value)
+                          setNewDataBaixa(masked)
+                          requestAnimationFrame(() => {
+                            try { target.setSelectionRange(pos, pos) } catch {}
+                          })
+                        }}
                         onChange={(e) => setNewDataBaixa(e.target.value)}
-                        className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs"
+                        className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400"
                       />
                     </div>
                     <button
