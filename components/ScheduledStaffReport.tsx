@@ -20,6 +20,7 @@ interface ScheduledStaffReportProps {
       sector: string
       corenExpiryDate: string
       birthDate: string
+      admissionDate: string
       phone: string
       address: string
       houseNumber: string
@@ -32,7 +33,7 @@ interface ScheduledStaffReportProps {
   onClose: () => void
 }
 
-type ColumnKey = 'name' | 'role' | 'councilType' | 'councilNumber' | 'sector' | 'corenExpiryDate' | 'birthDate' | 'phone' | 'address' | 'houseNumber' | 'city' | 'email'
+type ColumnKey = 'name' | 'role' | 'councilType' | 'councilNumber' | 'sector' | 'corenExpiryDate' | 'birthDate' | 'admissionDate' | 'phone' | 'address' | 'houseNumber' | 'city' | 'email'
 
 interface ColumnDef {
   key: ColumnKey
@@ -107,6 +108,15 @@ const COLUMNS: ColumnDef[] = [
     headerClass: 'px-4 py-2 text-center',
     bodyClass: 'px-4 py-4 border-y border-gray-100 text-center font-bold text-gray-700',
     cellValue: (row) => row.birthDate
+  },
+  {
+    key: 'admissionDate',
+    label: 'Data Adm.',
+    align: 'center',
+    defaultSelected: true,
+    headerClass: 'px-4 py-2 text-center',
+    bodyClass: 'px-4 py-4 border-y border-gray-100 text-center font-bold text-gray-700',
+    cellValue: (row) => row.admissionDate
   },
   {
     key: 'phone',

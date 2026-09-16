@@ -2705,11 +2705,20 @@ function _enrichNursesWithActiveVinculosHelper(
     const principal = vinculosAtivos[0]
 
     let vinculoField = String(n?.vinculo ?? '').trim()
+    let dataAdmissao = String((n as any)?.data_admissao ?? (n as any)?.admission_date ?? (n as any)?.dataAdmissao ?? '').trim()
     if (!vinculoField && principal) {
       const tv = String((principal as any).tipo_vinculo ?? '').trim()
       const mat = String((principal as any).matricula ?? '').trim()
+      const da = String((principal as any).data_admissao ?? '').trim()
       if (tv) vinculoField = tv
       if (mat && !vinculoField) vinculoField = mat
+      if (da && !dataAdmissao) dataAdmissao = da
+    }
+    for (const v of vinculosAtivos) {
+      const da = String((v as any).data_admissao ?? '').trim()
+      if (!da) continue
+      if (!dataAdmissao) { dataAdmissao = da; continue }
+      if (da < dataAdmissao) dataAdmissao = da
     }
 
     const vinculosExistentes = Array.isArray((n as any).vinculos) ? (n as any).vinculos : []
@@ -2727,6 +2736,9 @@ function _enrichNursesWithActiveVinculosHelper(
       ...n,
       vinculo: vinculoField,
       vinculos: todosVinculos,
+      data_admissao: dataAdmissao,
+      dataAdmissao: dataAdmissao,
+      admission_date: dataAdmissao,
       _vinculos_ativos_count: vinculosAtivos.length,
     })
   }
@@ -3249,6 +3261,7 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
       sector: string
       corenExpiryDate: string
       birthDate: string
+      admissionDate: string
       phone: string
       address: string
       houseNumber: string
@@ -3282,6 +3295,9 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
         crm: '',
         coren_expiry_date: '',
         birth_date: '',
+        data_admissao: '',
+        dataAdmissao: '',
+        admission_date: '',
         phone: '',
         address: '',
         house_number: '',
@@ -3310,6 +3326,11 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
         sector: sectorTitle,
         corenExpiryDate: formatDate(baseNurse.coren_expiry_date),
         birthDate: formatDate(baseNurse.birth_date),
+        admissionDate:
+          formatDate(String(baseNurse.data_admissao || '').trim()) ||
+          formatDate(String(baseNurse.admission_date || '').trim()) ||
+          formatDate(String(baseNurse.dataAdmissao || '').trim()) ||
+          '-',
         phone: String(baseNurse.phone || '').trim() || '-',
         address: String(baseNurse.address || '').trim() || '-',
         houseNumber: String(baseNurse.house_number || '').trim() || '-',
@@ -3352,6 +3373,11 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
           sector: unitOrSectionTitle,
           corenExpiryDate: formatDate(nurse.coren_expiry_date),
           birthDate: formatDate(nurse.birth_date),
+          admissionDate:
+            formatDate(String(nurse.data_admissao || '').trim()) ||
+            formatDate(String(nurse.admission_date || '').trim()) ||
+            formatDate(String(nurse.dataAdmissao || '').trim()) ||
+            '-',
           phone: String(nurse.phone || '').trim() || '-',
           address: String(nurse.address || '').trim() || '-',
           houseNumber: String(nurse.house_number || '').trim() || '-',
