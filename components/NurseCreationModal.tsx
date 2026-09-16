@@ -136,12 +136,14 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   const addNewVinculo = () => {
     const tipo = String(newTipoVinculo || '').trim().toUpperCase()
     if (!tipo) return
+    const isoAdm = parsePtDateToIso(newDataAdmissao)
+    const isoBaixa = parsePtDateToIso(newDataBaixa)
     const novo: NurseVinculoRow = {
       id: `NEW-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       nurse_id: nurseToEdit?.id || '',
       tipo_vinculo: tipo,
-      data_admissao: parsePtDateToIso(newDataAdmissao),
-      data_baixa: parsePtDateToIso(newDataBaixa),
+      data_admissao: isoAdm,
+      data_baixa: isoBaixa,
       _isNew: true,
       _dirty: true,
     }
@@ -157,11 +159,11 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     setNurseVinculos(prev => prev.map(v => {
       if (v.id !== id) return v
       if (field === 'data_admissao' || field === 'data_baixa') {
-        if (String(value || '').trim().toUpperCase() === 'SEM_DATA') {
+        const rawPt = maskPtDate(value)
+        if (String(rawPt || '').trim().toUpperCase() === 'SEM_DATA') {
           return { ...v, data_baixa: 'SEM_DATA' as any, _dirty: true }
         }
-        const iso = parsePtDateToIso(value)
-        return { ...v, [field]: iso, _dirty: true }
+        return { ...v, [field]: rawPt, _dirty: true }
       }
       return { ...v, [field]: value, _dirty: true }
     }))
@@ -785,18 +787,12 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                             placeholder="dd/mm/aaaa"
                             maxLength={10}
                             value={formatIsoToPtDate(activeVinculo.data_admissao)}
-                            onInput={(e: any) => {
-                              const target = e.target
-                              const pos = target.selectionStart
-                              const masked = maskPtDate(target.value)
-                              target.value = masked
-                              updateVinculoField(activeVinculo.id, 'data_admissao', masked)
-                              requestAnimationFrame(() => {
-                                try { target.setSelectionRange(pos, pos) } catch {}
-                              })
+                            onChange={(e) => {
+                              const digitado = e.target.value
+                              const mascarado = maskPtDate(digitado)
+                              updateVinculoField(activeVinculo.id, 'data_admissao', mascarado)
                             }}
-                            onChange={(e) => updateVinculoField(activeVinculo.id, 'data_admissao', e.target.value)}
-                            className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400"
+                            className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                           />
                         </div>
                         <div className="col-span-4">
@@ -824,19 +820,13 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                               placeholder="dd/mm/aaaa"
                               maxLength={10}
                               value={formatIsoToPtDate(activeVinculo.data_baixa)}
-                              onInput={(e: any) => {
-                                const target = e.target
-                                const pos = target.selectionStart
-                                const masked = maskPtDate(target.value)
-                                target.value = masked
-                                updateVinculoField(activeVinculo.id, 'data_baixa', masked)
-                                requestAnimationFrame(() => {
-                                  try { target.setSelectionRange(pos, pos) } catch {}
-                                })
+                              onChange={(e) => {
+                                const digitado = e.target.value
+                                const mascarado = maskPtDate(digitado)
+                                updateVinculoField(activeVinculo.id, 'data_baixa', mascarado)
                               }}
-                              onChange={(e) => updateVinculoField(activeVinculo.id, 'data_baixa', e.target.value)}
                               className={[
-                                'mt-0.5 block w-full border rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400',
+                                'mt-0.5 block w-full border rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
                                 activeVinculo.data_baixa ? 'border-red-300 bg-red-50/50' : 'border-gray-300'
                               ].join(' ')}
                             />
@@ -912,18 +902,13 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                       inputMode="numeric"
                       placeholder="dd/mm/aaaa"
                       maxLength={10}
-                      value={maskPtDate(newDataAdmissao)}
-                      onInput={(e: any) => {
-                        const target = e.target
-                        const pos = target.selectionStart
-                        const masked = maskPtDate(target.value)
-                        setNewDataAdmissao(masked)
-                        requestAnimationFrame(() => {
-                          try { target.setSelectionRange(pos, pos) } catch {}
-                        })
+                      value={newDataAdmissao}
+                      onChange={(e) => {
+                        const digitado = e.target.value
+                        const mascarado = maskPtDate(digitado)
+                        setNewDataAdmissao(mascarado)
                       }}
-                      onChange={(e) => setNewDataAdmissao(e.target.value)}
-                      className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400"
+                      className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
                   <div className="col-span-4 flex items-end gap-1.5">
@@ -936,18 +921,13 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                         inputMode="numeric"
                         placeholder="dd/mm/aaaa"
                         maxLength={10}
-                        value={maskPtDate(newDataBaixa)}
-                        onInput={(e: any) => {
-                          const target = e.target
-                          const pos = target.selectionStart
-                          const masked = maskPtDate(target.value)
-                          setNewDataBaixa(masked)
-                          requestAnimationFrame(() => {
-                            try { target.setSelectionRange(pos, pos) } catch {}
-                          })
+                        value={newDataBaixa}
+                        onChange={(e) => {
+                          const digitado = e.target.value
+                          const mascarado = maskPtDate(digitado)
+                          setNewDataBaixa(mascarado)
                         }}
-                        onChange={(e) => setNewDataBaixa(e.target.value)}
-                        className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400"
+                        className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
                     <button
