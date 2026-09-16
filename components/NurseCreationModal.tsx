@@ -115,6 +115,45 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
   const [newDataAdmissao, setNewDataAdmissao] = useState<string>('')
   const [newDataBaixa, setNewDataBaixa] = useState<string>('')
   const [vinculoSaving, setVinculoSaving] = useState<boolean>(false)
+  const [displayDataAdmissaoMap, setDisplayDataAdmissaoMap] = useState<Record<string, string>>({})
+  const [displayDataBaixaMap, setDisplayDataBaixaMap] = useState<Record<string, string>>({})
+
+  const setDisplayForVinculo = (vinculoId: string, data_admissao?: any, data_baixa?: any) => {
+    if (!vinculoId) return
+    setDisplayDataAdmissaoMap((prev) => ({
+      ...prev,
+      [vinculoId]: formatIsoToPtDate(String(data_admissao || '')),
+    }))
+    setDisplayDataBaixaMap((prev) => ({
+      ...prev,
+      [vinculoId]: formatIsoToPtDate(String(data_baixa || '')),
+    }))
+  }
+
+  const _commitDisplayToVinculo = (vinculoId: string, field: 'data_admissao' | 'data_baixa') => {
+    if (!vinculoId) return
+    const map = field === 'data_admissao' ? displayDataAdmissaoMap : displayDataBaixaMap
+    const displayVal = map[vinculoId] ?? ''
+    const iso = parsePtDateToIso(displayVal)
+    setNurseVinculos((prev) =>
+      prev.map((v) => (v.id === vinculoId ? { ...v, [field]: iso, _dirty: true } : v))
+    )
+  }
+
+  useEffect(() => {
+    if (activeVinculo) {
+      const needAdm = displayDataAdmissaoMap[activeVinculo.id] === undefined
+      const needBaixa = displayDataBaixaMap[activeVinculo.id] === undefined
+      if (needAdm || needBaixa) {
+        setDisplayForVinculo(
+          activeVinculo.id,
+          needAdm ? activeVinculo.data_admissao : undefined,
+          needBaixa ? activeVinculo.data_baixa : undefined
+        )
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeVinculoId, activeVinculo?.id])
 
   const activeVinculo = useMemo(
     () => nurseVinculos.find(v => v.id === activeVinculoId && !v._pendingDelete),
@@ -159,26 +198,33 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     setNurseVinculos(prev => prev.map(v => {
       if (v.id !== id) return v
       if (field === 'data_admissao' || field === 'data_baixa') {
-        const rawPt = maskPtDate(value)
-        if (String(rawPt || '').trim().toUpperCase() === 'SEM_DATA') {
+        if (String(value || '').trim().toUpperCase() === 'SEM_DATA') {
           return { ...v, data_baixa: 'SEM_DATA' as any, _dirty: true }
         }
-        return { ...v, [field]: rawPt, _dirty: true }
+        const iso = parsePtDateToIso(value)
+        return { ...v, [field]: iso, _dirty: true }
       }
       return { ...v, [field]: value, _dirty: true }
     }))
   }
 
   const darBaixaHoje = (id: string) => {
-    updateVinculoField(id, 'data_baixa', _today())
+    const isoHoje = _today()
+    updateVinculoField(id, 'data_baixa', isoHoje)
+    setDisplayDataBaixaMap((prev) => ({ ...prev, [id]: formatIsoToPtDate(isoHoje) }))
   }
 
   const darBaixaSemData = (id: string) => {
-    updateVinculoField(id, 'data_baixa', SEM_DATA)
+    setNurseVinculos(prev => prev.map(v => {
+      if (v.id !== id) return v
+      return { ...v, data_baixa: SEM_DATA as any, _dirty: true }
+    }))
+    setDisplayDataBaixaMap((prev) => ({ ...prev, [id]: '' }))
   }
 
   const reativarVinculo = (id: string) => {
     updateVinculoField(id, 'data_baixa', '')
+    setDisplayDataBaixaMap((prev) => ({ ...prev, [id]: '' }))
   }
 
   const marcarExcluirVinculo = (id: string) => {
@@ -401,6 +447,33 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
 
       if (result.success && savedNurseId) {
         setVinculoSaving(true)
+
+        // FLUSH: Garante que TODO display map ainda não commitado (user digitou e clicou em salvar sem dar blur/Enter)
+        // seja salvo como ISO no estado oficial nurseVinculos ANTES do loop de create/update/delete.
+        for (const v of nurseVinculos) {
+          if (!v.id || v._pendingDelete) continue
+          const admPt = displayDataAdmissaoMap[v.id]
+          if (admPt !== undefined) {
+            const iso = parsePtDateToIso(admPt)
+            if (iso !== v.data_admissao) {
+              // eslint-disable-next-line no-param-reassign
+              v = { ...v, data_admissao: iso, _dirty: true }
+              setNurseVinculos(prev => prev.map(x => (x.id === v.id ? v : x)))
+            }
+          }
+          const baixaPt = displayDataBaixaMap[v.id]
+          if (baixaPt !== undefined) {
+            const iso = parsePtDateToIso(baixaPt)
+            if (iso !== v.data_baixa) {
+              // eslint-disable-next-line no-param-reassign
+              v = { ...v, data_baixa: iso, _dirty: true }
+              setNurseVinculos(prev => prev.map(x => (x.id === v.id ? v : x)))
+            }
+          }
+        }
+        // Espera 1 tick (React batch setState) para nurseVinculos refletir os flushes acima.
+        await new Promise(res => setTimeout(res, 0))
+
         let vinculoFailures = 0
         for (const v of nurseVinculos) {
           try {
@@ -786,11 +859,17 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                             inputMode="numeric"
                             placeholder="dd/mm/aaaa"
                             maxLength={10}
-                            value={formatIsoToPtDate(activeVinculo.data_admissao)}
+                            value={displayDataAdmissaoMap[activeVinculo.id] ?? ''}
                             onChange={(e) => {
                               const digitado = e.target.value
                               const mascarado = maskPtDate(digitado)
-                              updateVinculoField(activeVinculo.id, 'data_admissao', mascarado)
+                              setDisplayDataAdmissaoMap((prev) => ({ ...prev, [activeVinculo.id]: mascarado }))
+                            }}
+                            onBlur={() => _commitDisplayToVinculo(activeVinculo.id, 'data_admissao')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === 'Tab') {
+                                _commitDisplayToVinculo(activeVinculo.id, 'data_admissao')
+                              }
                             }}
                             className="mt-0.5 block w-full border border-gray-300 rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                           />
@@ -819,11 +898,17 @@ ADD COLUMN IF NOT EXISTS snapshot_vinculos_json TEXT DEFAULT '';
                               inputMode="numeric"
                               placeholder="dd/mm/aaaa"
                               maxLength={10}
-                              value={formatIsoToPtDate(activeVinculo.data_baixa)}
+                              value={displayDataBaixaMap[activeVinculo.id] ?? ''}
                               onChange={(e) => {
                                 const digitado = e.target.value
                                 const mascarado = maskPtDate(digitado)
-                                updateVinculoField(activeVinculo.id, 'data_baixa', mascarado)
+                                setDisplayDataBaixaMap((prev) => ({ ...prev, [activeVinculo.id]: mascarado }))
+                              }}
+                              onBlur={() => _commitDisplayToVinculo(activeVinculo.id, 'data_baixa')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === 'Tab') {
+                                  _commitDisplayToVinculo(activeVinculo.id, 'data_baixa')
+                                }
                               }}
                               className={[
                                 'mt-0.5 block w-full border rounded-md shadow-sm p-1.5 bg-white text-black text-xs font-semibold placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
