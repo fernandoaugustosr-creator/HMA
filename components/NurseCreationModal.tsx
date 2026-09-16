@@ -140,6 +140,11 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     )
   }
 
+  const activeVinculo = useMemo(
+    () => nurseVinculos.find(v => v.id === activeVinculoId && !v._pendingDelete),
+    [nurseVinculos, activeVinculoId]
+  )
+
   useEffect(() => {
     if (activeVinculo) {
       const needAdm = displayDataAdmissaoMap[activeVinculo.id] === undefined
@@ -154,11 +159,6 @@ export default function NurseCreationModal({ isOpen, onClose, onSuccess, default
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeVinculoId, activeVinculo?.id])
-
-  const activeVinculo = useMemo(
-    () => nurseVinculos.find(v => v.id === activeVinculoId && !v._pendingDelete),
-    [nurseVinculos, activeVinculoId]
-  )
 
   const _today = () => new Date().toISOString().slice(0, 10)
   const SEM_DATA = 'SEM_DATA'
