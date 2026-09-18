@@ -2716,19 +2716,71 @@ export async function loginSamu(prevState: any, formData: FormData) {
   return loginWithPortal(prevState, formData, SAMU_PORTAL)
 }
 
+function _extractEarliestDataAdmissaoFromVinculos(vinculos: any[] | undefined | null): string {
+  if (!Array.isArray(vinculos)) return ''
+  let best = ''
+  for (const v of vinculos) {
+    const da = String((v as any)?.data_admissao ?? (v as any)?.dataAdmissao ?? (v as any)?.admission_date ?? '').trim()
+    if (!da) continue
+    if (!best) { best = da; continue }
+    if (da < best) best = da
+  }
+  return best
+}
+
+function _applySnapshotPatchAndExtractDataAdm(
+  base: any,
+  snapNome: string,
+  snapCargo: string,
+  snapVinculo: string,
+  snapVinculosJson: string
+) {
+  let vinculosParsed: any[] = Array.isArray((base as any)?.vinculos) ? (base as any).vinculos : []
+  if (snapVinculosJson) {
+    try {
+      const p = JSON.parse(snapVinculosJson)
+      if (Array.isArray(p)) vinculosParsed = p
+    } catch {}
+  }
+
+  let dataAdmissao = String(
+    (base as any)?.data_admissao ??
+    (base as any)?.dataAdmissao ??
+    (base as any)?.admission_date ??
+    ''
+  ).trim()
+  if (!dataAdmissao) dataAdmissao = _extractEarliestDataAdmissaoFromVinculos(vinculosParsed)
+
+  const patched: any = {
+    ...base,
+    id: base?.id ?? '',
+    name: snapNome || base?.name || '',
+    role: snapCargo || base?.role || '',
+    vinculo: snapVinculo || base?.vinculo || '',
+    vinculos: vinculosParsed,
+    data_admissao: dataAdmissao,
+    dataAdmissao: dataAdmissao,
+    admission_date: dataAdmissao,
+  }
+  return patched
+}
+
 function _enrichNursesWithActiveVinculosHelper(
   nursesInput: any[],
   vinculosInput: any[],
   rosterNurseIds?: Set<string>
 ) {
-  const vinculosByNurse = new Map<string, any[]>()
+  const vinculosAtivosByNurse = new Map<string, any[]>()
+  const vinculosTodosByNurse = new Map<string, any[]>()
   for (const v of vinculosInput || []) {
-    const baixa = String((v as any).data_baixa ?? '').trim()
-    if (baixa) continue
     const nid = String((v as any).nurse_id ?? '')
     if (!nid) continue
-    if (!vinculosByNurse.has(nid)) vinculosByNurse.set(nid, [])
-    vinculosByNurse.get(nid)!.push({ ...v })
+    if (!vinculosTodosByNurse.has(nid)) vinculosTodosByNurse.set(nid, [])
+    vinculosTodosByNurse.get(nid)!.push({ ...v })
+    const baixa = String((v as any).data_baixa ?? '').trim()
+    if (baixa) continue
+    if (!vinculosAtivosByNurse.has(nid)) vinculosAtivosByNurse.set(nid, [])
+    vinculosAtivosByNurse.get(nid)!.push({ ...v })
   }
 
   const result = new Map<string, any>()
@@ -2740,7 +2792,8 @@ function _enrichNursesWithActiveVinculosHelper(
       result.set(nid, { ...n })
       continue
     }
-    const vinculosAtivos = vinculosByNurse.get(nid) || []
+    const vinculosAtivos = vinculosAtivosByNurse.get(nid) || []
+    const todosVinculosDb = vinculosTodosByNurse.get(nid) || []
     const principal = vinculosAtivos[0]
 
     let vinculoField = String(n?.vinculo ?? '').trim()
@@ -2753,7 +2806,7 @@ function _enrichNursesWithActiveVinculosHelper(
       if (mat && !vinculoField) vinculoField = mat
       if (da && !dataAdmissao) dataAdmissao = da
     }
-    for (const v of vinculosAtivos) {
+    for (const v of todosVinculosDb) {
       const da = String((v as any).data_admissao ?? '').trim()
       if (!da) continue
       if (!dataAdmissao) { dataAdmissao = da; continue }
@@ -2813,7 +2866,6 @@ async function _enrichNursesWithActiveVinculos(
         .from('nurse_vinculos')
         .select('*')
         .in('nurse_id', part)
-        .is('data_baixa', null)
         .order('created_at', { ascending: true })
         .range(0, 99999)
       if (!error && data) all.push(...data)
@@ -2925,21 +2977,7 @@ export async function getMonthlyManagementReport(month: number, year: number) {
       const snapVinculosJson = String((r as any).snapshot_vinculos_json || '').trim()
       if (!snapNome && !snapCargo && !snapVinculo && !snapVinculosJson) continue
       const base = nurseMap.get(nid) || { id: nid, name: '', role: '', vinculo: '', vinculos: [] }
-      let vinculosParsed: any[] = Array.isArray((base as any).vinculos) ? (base as any).vinculos : []
-      if (snapVinculosJson) {
-        try {
-          const p = JSON.parse(snapVinculosJson)
-          if (Array.isArray(p)) vinculosParsed = p
-        } catch {}
-      }
-      const patched = {
-        ...base,
-        id: base.id,
-        name: snapNome || base.name,
-        role: snapCargo || base.role,
-        vinculo: snapVinculo || base.vinculo || '',
-        vinculos: vinculosParsed
-      }
+      const patched = _applySnapshotPatchAndExtractDataAdm(base, snapNome, snapCargo, snapVinculo, snapVinculosJson)
       rosterPatchedNurses.set(nid, patched)
     }
     // Sobrepõe o nurseMap com versões com snapshot
@@ -3202,21 +3240,7 @@ export async function getMonthlyScheduledStaffReport(month: number, year: number
       const snapVinculosJson = String((r as any).snapshot_vinculos_json || '').trim()
       if (snapNome || snapCargo || snapVinculo || snapVinculosJson) {
         const base = nurseMap.get(nid) || { id: nid, name: '', role: '', vinculo: '', vinculos: [] }
-        let vinculosParsed: any[] = (base as any).vinculos || []
-        if (snapVinculosJson) {
-          try {
-            const p = JSON.parse(snapVinculosJson)
-            if (Array.isArray(p)) vinculosParsed = p
-          } catch {}
-        }
-        const patched = {
-          ...base,
-          id: base.id,
-          name: snapNome || base.name,
-          role: snapCargo || base.role,
-          vinculo: snapVinculo || base.vinculo || '',
-          vinculos: vinculosParsed
-        }
+        const patched = _applySnapshotPatchAndExtractDataAdm(base, snapNome, snapCargo, snapVinculo, snapVinculosJson)
         nurseMap.set(nid, patched)
         snapshotByRosterKey.set(key, { name: snapNome, role: snapCargo, vinculo: snapVinculo, vinculosJson: snapVinculosJson })
       }
@@ -4054,21 +4078,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         const snapVinculosJson = String((r as any).snapshot_vinculos_json || '').trim()
         if (!snapNome && !snapCargo && !snapVinculo && !snapVinculosJson) continue
         const nurseBase = nursesById.get(nid) || { id: nid, name: '', role: '', vinculo: '', vinculos: [] }
-        let vinculosParsed: any[] = nurseBase.vinculos || []
-        if (snapVinculosJson) {
-          try {
-            const parsed = JSON.parse(snapVinculosJson)
-            if (Array.isArray(parsed)) vinculosParsed = parsed
-          } catch {}
-        }
-        const patched: any = {
-          ...nurseBase,
-          id: nurseBase.id,
-          name: snapNome || nurseBase.name,
-          role: snapCargo || nurseBase.role,
-          vinculo: snapVinculo || nurseBase.vinculo || '',
-          vinculos: vinculosParsed
-        }
+        const patched: any = _applySnapshotPatchAndExtractDataAdm(nurseBase, snapNome, snapCargo, snapVinculo, snapVinculosJson)
         nursesById.set(nid, patched)
       }
       const nursesPatched = Array.from(nursesById.values())
@@ -4266,21 +4276,7 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       const snapVinculosJson = String((r as any).snapshot_vinculos_json || '').trim()
       if (!snapNome && !snapCargo && !snapVinculo && !snapVinculosJson) continue
       const nurseBase = nursesByIdSb.get(nid) || { id: nid, name: '', role: '', vinculo: '', vinculos: [] }
-      let vinculosParsed: any[] = (nurseBase as any).vinculos || []
-      if (snapVinculosJson) {
-        try {
-          const parsed = JSON.parse(snapVinculosJson)
-          if (Array.isArray(parsed)) vinculosParsed = parsed
-        } catch {}
-      }
-      const patched: any = {
-        ...nurseBase,
-        id: nurseBase.id,
-        name: snapNome || nurseBase.name,
-        role: snapCargo || nurseBase.role,
-        vinculo: snapVinculo || nurseBase.vinculo || '',
-        vinculos: vinculosParsed
-      }
+      const patched: any = _applySnapshotPatchAndExtractDataAdm(nurseBase, snapNome, snapCargo, snapVinculo, snapVinculosJson)
       nursesByIdSb.set(nid, patched)
     }
     const nursesPatchedSb = Array.from(nursesByIdSb.values())
