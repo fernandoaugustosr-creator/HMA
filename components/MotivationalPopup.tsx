@@ -50,9 +50,9 @@ export default function MotivationalPopup({
         <div className="absolute -bottom-24 -left-20 h-60 w-60 rounded-full bg-indigo-400/20 blur-3xl" />
 
         <div className="relative px-8 pt-8 pb-6 text-center">
-          {/* 🏥 LOGO HMA - PROPORCIONAL (DESFEITA A ALTURA 500x50, VOLTOU A 96/112px C/ BORDA BRANCA */}
-          <div className="mx-auto mb-4 bg-white rounded-2xl border-2 border-white/60 shadow-lg shadow-blue-950/30 p-2">
-            <Image src={logoHma} alt="Logo HMA" width={220} height={220} className="h-24 w-auto md:h-28 object-contain" priority />
+          {/* 🏥 LOGO HMA - CENTRALIZADO DENTRO DO CARD BRANCO */}
+          <div className="mx-auto mb-4 bg-white rounded-2xl border-2 border-white/60 shadow-lg shadow-blue-950/30 p-2 max-w-[260px] w-full flex items-center justify-center text-center">
+            <Image src={logoHma} alt="Logo HMA" width={220} height={220} className="h-24 w-auto md:h-28 object-contain mx-auto block" priority />
           </div>
 
           {/* 🏥 NOME COMPLETO ABAIXO DA LOGO */}
