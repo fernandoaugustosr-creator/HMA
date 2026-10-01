@@ -2261,18 +2261,12 @@ export default function Schedule({
         const monthEnd = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
         data.timeOffs.forEach(t => {
+            // ===== FIX: FOLGAS NORMAIS (menu "Faltas e Folgas > Folgas") NUNCA APARECEM NA ESCALA.
+            // Apenas FÉRIAS, LICENÇA SAÚDE, LICENÇA MATERNIDADE e CESSÃO aparecem nas escalas.
+            // Resolve bug Eva aparecendo em setor errado + folgas em rodapé.
+            if (String(t.type || '') === 'folga') return
+
             if (t.end_date < monthStart || t.start_date > monthEnd) return
-            // Filter by unit if selected (Strict isolation: only show leaves for this unit)
-            // If unit is selected, show leaves with that unit_id.
-            // If global leaves (unit_id null) should be shown everywhere, keep them. 
-            // But user said "NOMENTE NESSA ESCALA". So if I am in Unit A, I only see Unit A leaves?
-            // What if a leave was created before this feature (unit_id null)? It should probably show.
-            // So: show if t.unit_id matches OR t.unit_id is null/undefined.
-            // BUT user said "NAO VAI APARECER NAS OUTRAS". This implies strictness.
-            // If I create in Unit A, it has Unit A ID.
-            // If I create in Global, it has Null ID.
-            // If I am in Unit B, I should NOT see Unit A.
-            // So: if (selectedUnitId && t.unit_id && t.unit_id !== selectedUnitId) return.
             if (selectedUnitId && t.unit_id && t.unit_id !== selectedUnitId) return
 
             const startStr = t.start_date < monthStart ? monthStart : t.start_date
@@ -2316,15 +2310,18 @@ export default function Schedule({
     })
 
     const grouped = new Map<string, Set<string>>()
-    const validTypes = new Set(['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'])
+    // ===== FIX: SÓ FÉRIAS / LICENÇAS APARECEM NO RODAPÉ DA ESCALA. FOLGAS MENU "Faltas e Folgas > Folgas" REMOVIDAS!
+    const validTypes = new Set(['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'])
 
     ;(data.timeOffs || []).forEach((t: any) => {
       const type = String(t?.type || '')
+      // ===== FIX DUPLO: remover folga também daqui (garantia extra)
+      if (type === 'folga') return
       if (!validTypes.has(type)) return
       if (!t?.start_date || !t?.end_date) return
       if (t.end_date < monthStart || t.start_date > monthEnd) return
 
-      // Filtro por unidade: se vier com unit_id preenchido, respeita; se for global (null), também exibe.
+      // Filtro por unidade: se vier com unit_id preenchido, respeita; global null também exibe.
       if (selectedUnitId && t.unit_id && String(t.unit_id) !== String(selectedUnitId)) return
 
       const nurseName = nurseNameById.get(String(t.nurse_id)) || String((t as any).nurse_name || '')
@@ -2335,7 +2332,8 @@ export default function Schedule({
       grouped.get(type)!.add(label)
     })
 
-    const order = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga']
+    // ===== FIX: ORDEM SEM FOLGA
+    const order = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao']
     return order
       .map((type) => {
         const names = Array.from(grouped.get(type) || [])
@@ -2346,7 +2344,6 @@ export default function Schedule({
             type === 'ferias' ? 'FÉRIAS' :
             type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
             type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' :
-            type === 'folga' ? 'FOLGA' :
             'CESSÃO',
           names: names.join(', ')
         }
@@ -2733,8 +2730,9 @@ export default function Schedule({
                 let cellClass = "border border-black px-0 py-0 h-5 w-6 print:h-5 print:w-4 text-center text-[10px] print:text-[10px] leading-none relative text-black font-bold print:font-normal"
                 let content = null
 
-                // Priority: Special Leaves > Shift > Absence > Generic Folga (implicit)
-                 const isSpecialLeave = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].includes(timeOff.type)
+                // Priority: Special Leaves (Ferias / Licencas / Cessao) > Shift > Absence
+                 // ===== FIX: FOLGAS NORMAIS DO MENU FALTAS E FOLGAS NAO ENTRAM MAIS NA ESCALA
+                 const isSpecialLeave = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'].includes(timeOff.type)
 
                  if (isSpecialLeave) {
                    const isPending = timeOff.status === 'pending'
@@ -2757,10 +2755,6 @@ export default function Schedule({
                        cellClass += " bg-cyan-100 font-bold text-cyan-800" + pendingClass
                        content = "CED" + pendingSuffix
                    }
-                   else if (timeOff.type === 'folga') {
-                       cellClass += " bg-blue-100 font-bold text-blue-800" + pendingClass
-                       content = "FO" + pendingSuffix
-                   }
                  }
                  else if (shift) {
                    if (shift.shift_type === 'day') content = 'D'
@@ -2781,8 +2775,9 @@ export default function Schedule({
                 // Highlight weekends (Gray background for entire column, overridden by specific statuses if needed, but image shows gray prevails or mixes)
                 // In image, weekend cells are gray. If there is a shift, it's just text on gray.
                 if (isWeekend) {
-                   // Apply gray if it's NOT a special colored leave
-                   const hasSpecialColor = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'].includes(timeOff.type)
+                   // Apply gray if it's NOT a special colored leave (Ferias / Licenca / Cessao)
+                   // ===== FIX: FOLGAS NAO aparecem na escala. Removido tipo 'folga' do hasSpecialColor.
+                   const hasSpecialColor = timeOff && ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'].includes(timeOff.type)
                    
                    if (!hasSpecialColor) {
                        cellClass += " bg-[#3b5998]"
