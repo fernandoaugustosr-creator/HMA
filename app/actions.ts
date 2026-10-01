@@ -5349,37 +5349,62 @@ type NurseSnapshot = {
   snapshot_vinculo: string
   snapshot_vinculos_json: string
 }
-async function _buildNurseSnapshot(nurseId: string): Promise<NurseSnapshot> {
+async function _buildNurseSnapshot(nurseId: string, vinculoId?: string | null): Promise<NurseSnapshot> {
   const empty: NurseSnapshot = { snapshot_name: '', snapshot_role: '', snapshot_vinculo: '', snapshot_vinculos_json: '' }
   if (!nurseId) return empty
+  const vinIdStr = vinculoId ? String(vinculoId) : null
   try {
     let nurse: any = null
-    let vinculosAtivos: any[] = []
+    let vinculosTodos: any[] = []
     if (isLocalMode()) {
       const db = readDb()
       nurse = db.nurses.find((n: any) => n.id === nurseId) || null
-      const allVinculos = db.nurse_vinculos || []
-      vinculosAtivos = allVinculos.filter((v: any) => v.nurse_id === nurseId && !v.data_baixa)
+      vinculosTodos = (db.nurse_vinculos || []).filter((v: any) => v.nurse_id === nurseId)
     } else {
       const sb = createClient()
       const { data } = await sb.from('nurses').select('*').eq('id', nurseId).maybeSingle()
       nurse = data || null
       try {
-        const { data: vdata } = await sb.from('nurse_vinculos').select('*').eq('nurse_id', nurseId).is('data_baixa', null)
-        vinculosAtivos = (vdata || []).filter((v: any) => !v.data_baixa || v.data_baixa === '')
+        const { data: vdata } = await sb.from('nurse_vinculos').select('*').eq('nurse_id', nurseId).limit(9999)
+        vinculosTodos = vdata || []
       } catch {}
     }
     if (!nurse) return empty
-    const snapshot_vinculo = vinculosAtivos.length > 0
-      ? Array.from(new Set(vinculosAtivos.map((v: any) => String(v.tipo_vinculo || '').toUpperCase()).filter(Boolean))).join(' / ')
-      : String(nurse.vinculo || '')
-    const snapshot_vinculos_json = vinculosAtivos.length > 0
-      ? JSON.stringify(vinculosAtivos.map((v: any) => ({
-          tipo_vinculo: String(v.tipo_vinculo || ''),
-          data_admissao: String(v.data_admissao || ''),
-          data_baixa: String(v.data_baixa || '')
-        })))
-      : ''
+
+    const vinculosAtivos = vinculosTodos.filter((v: any) => !v.data_baixa || String(v.data_baixa).trim() === '')
+    const vinculoEscolhido = vinIdStr
+      ? vinculosTodos.find((v: any) => String(v.id || '') === vinIdStr) || null
+      : null
+
+    let snapshot_vinculo = ''
+    let snapshot_vinculos_json = ''
+    if (vinculoEscolhido) {
+      // Caso 1: usuário selecionou um VINCULO ESPECÍFICO no modal (1 linha por vínculo)
+      // -> snapshot VAI SER APENAS ESSE VÍNCULO (ex: "SELETIVO" ou "CONCURSO") mesmo que tenha mais de 1.
+      snapshot_vinculo = String(vinculoEscolhido.tipo_vinculo || vinculoEscolhido.vinculo || '').toUpperCase().trim()
+      snapshot_vinculos_json = JSON.stringify([{
+        id: String(vinculoEscolhido.id || ''),
+        tipo_vinculo: String(vinculoEscolhido.tipo_vinculo || ''),
+        data_admissao: String(vinculoEscolhido.data_admissao || ''),
+        data_baixa: String(vinculoEscolhido.data_baixa || ''),
+        active: !vinculoEscolhido.data_baixa || String(vinculoEscolhido.data_baixa).trim() === ''
+      }])
+    } else if (vinculosAtivos.length > 0) {
+      // Caso 2: nenhum vínculo especificado (fallback) -> junta todos ativos (antigo comportamento)
+      snapshot_vinculo = Array.from(new Set(vinculosAtivos.map((v: any) => String(v.tipo_vinculo || '').toUpperCase()).filter(Boolean))).join(' / ')
+      snapshot_vinculos_json = JSON.stringify(vinculosAtivos.map((v: any) => ({
+        id: String(v.id || ''),
+        tipo_vinculo: String(v.tipo_vinculo || ''),
+        data_admissao: String(v.data_admissao || ''),
+        data_baixa: String(v.data_baixa || ''),
+        active: true
+      })))
+    } else {
+      // Caso 3: sem vínculos nenhum no 1:N -> coluna antiga nurse.vinculo (fallback legado)
+      snapshot_vinculo = String(nurse.vinculo || '')
+      snapshot_vinculos_json = ''
+    }
+
     return {
       snapshot_name: String(nurse.name || ''),
       snapshot_role: String(nurse.role || ''),
@@ -5392,16 +5417,17 @@ async function _buildNurseSnapshot(nurseId: string): Promise<NurseSnapshot> {
 }
 
 export async function assignNurseToRoster(
-  nurseId: string, 
-  sectionId: string, 
-  unitId: string | null, 
-  month: number, 
-  year: number, 
-  observation?: string, 
+  nurseId: string,
+  sectionId: string,
+  unitId: string | null,
+  month: number,
+  year: number,
+  observation?: string,
   createdAt?: string,
   allowDuplicate: boolean = false,
   listOrder?: number | null,
-  skipRevalidate: boolean = false
+  skipRevalidate: boolean = false,
+  vinculoId?: string | null
 ) {
   try {
     await checkScaleEditor(unitId)
@@ -5434,7 +5460,7 @@ export async function assignNurseToRoster(
   // Only update the specific month (no propagation)
   const monthsToUpdate = [__m]
   let lastInsertedId: string | undefined = undefined
-  const snapshot = await _buildNurseSnapshot(nurseId)
+  const snapshot = await _buildNurseSnapshot(nurseId, vinculoId ?? null)
 
   if (isLocalMode()) {
     const db = readDb()

@@ -286,7 +286,7 @@ export default function Schedule({
   const [renameHiddenSectionTitle, setRenameHiddenSectionTitle] = useState('')
   
   // Double Shift Modal State
-  const [doubleShiftModal, setDoubleShiftModal] = useState<{ isOpen: boolean, nurseId: string, sectionId: string, rosterId?: string } | null>(null)
+  const [doubleShiftModal, setDoubleShiftModal] = useState<{ isOpen: boolean, nurseId: string, sectionId: string, rosterId?: string, vinculoId?: string | null, tipoVinculo?: string | null, isInsertion?: boolean, insertionPosition?: number, insertionOrderedIds?: string[] } | null>(null)
   
   // Unit Management State
   const [isAddingUnit, setIsAddingUnit] = useState(false)
@@ -1287,7 +1287,7 @@ export default function Schedule({
     await fetchData(true)
   }
 
-  const handleReassign = (rosterId: string, newId: string) => {
+  const handleReassign = (rosterId: string, newId: string, vinculoId?: string | null, tipoVinculo?: string | null) => {
     if (isScheduleReleased) return
     const rosterItem = data.roster.find(r => r.id === rosterId)
     if (!rosterItem) {
@@ -1295,14 +1295,16 @@ export default function Schedule({
         return
     }
 
-    if (rosterItem.nurse_id === newId) return
-    
-    // Open Modal to confirm bond type
-    setDoubleShiftModal({ 
-        isOpen: true, 
-        nurseId: newId, 
+    if (rosterItem.nurse_id === newId && !vinculoId) return
+
+    // Open Modal to confirm bond type + armazena VINCULO selecionado
+    setDoubleShiftModal({
+        isOpen: true,
+        nurseId: newId,
         sectionId: rosterItem.section_id,
-        rosterId: rosterId 
+        rosterId: rosterId,
+        vinculoId: vinculoId ?? null,
+        tipoVinculo: tipoVinculo ?? null
     })
   }
 
@@ -1519,10 +1521,10 @@ export default function Schedule({
     setRenameHiddenSectionTitle('')
   }
 
-  const handleAssignNurse = async (nurseId: string, sectionId: string) => {
+  const handleAssignNurse = async (nurseId: string, sectionId: string, vinculoId?: string | null, tipoVinculo?: string | null) => {
     if (isScheduleReleased) return
     if (!nurseId) return
-    setDoubleShiftModal({ isOpen: true, nurseId, sectionId })
+    setDoubleShiftModal({ isOpen: true, nurseId, sectionId, vinculoId: vinculoId ?? null, tipoVinculo: tipoVinculo ?? null })
   }
 
   const handleInsertProfessional = (sectionId: string, index: number, direction: 'above' | 'below', currentOrderedIds: string[]) => {
@@ -1586,16 +1588,18 @@ export default function Schedule({
     }
   }
 
-  const onNurseSelected = async (nurseId: string) => {
+  const onNurseSelected = async (nurseId: string, vinculoId?: string | null, tipoVinculo?: string | null) => {
     if (!insertionData) return
     setIsNurseModalOpen(false)
-    
+
     // Open the DoubleShiftModal to choose the bond type (1ED, AB, or Normal)
+    // -> AGORA PASSAMOS TAMBEM VINCULO selecionado no modal NurseSelectionModal!
     setDoubleShiftModal({
       isOpen: true,
       nurseId,
       sectionId: insertionData.sectionId,
-      // We'll pass the position info in a way that finalizeAssignNurse can use it
+      vinculoId: vinculoId ?? null,
+      tipoVinculo: tipoVinculo ?? null,
       isInsertion: true,
       insertionPosition: insertionData.position,
       insertionOrderedIds: insertionData.orderedIds
@@ -1609,10 +1613,10 @@ export default function Schedule({
     setIsReassignModalOpen(true)
   }
 
-  const onReassignSelected = async (nurseId: string) => {
+  const onReassignSelected = async (nurseId: string, vinculoId?: string | null, tipoVinculo?: string | null) => {
     if (!reassignData) return
     setIsReassignModalOpen(false)
-    await handleReassign(reassignData.rosterId, nurseId)
+    await handleReassign(reassignData.rosterId, nurseId, vinculoId ?? null, tipoVinculo ?? null)
     setReassignData(null)
   }
 
@@ -1637,25 +1641,26 @@ export default function Schedule({
 
   const finalizeAssignNurse = async (observation: string) => {
     if (!doubleShiftModal) return
-    const { nurseId, sectionId, rosterId, isInsertion, insertionPosition, insertionOrderedIds } = doubleShiftModal as any
+    const { nurseId, sectionId, rosterId, isInsertion, insertionPosition, insertionOrderedIds, vinculoId } = doubleShiftModal as any
     setDoubleShiftModal(null)
     setInsertionData(null)
-    
+
     setLoading(true)
     try {
         if (isInsertion) {
             // INSERTION LOGIC (using the new buttons)
             const res = await assignNurseToRoster(
-                nurseId, 
-                sectionId, 
-                selectedUnitId, 
-                Number(selectedMonth) + 1, 
-                Number(selectedYear), 
-                observation, 
-                undefined, 
+                nurseId,
+                sectionId,
+                selectedUnitId,
+                Number(selectedMonth) + 1,
+                Number(selectedYear),
+                observation,
+                undefined,
                 true, // allow duplicate
                 null, // listOrder (initially null)
-                true  // skipRevalidate
+                true,  // skipRevalidate
+                vinculoId ?? null // vinculoId ESCOLHIDO NO MODAL NURSESELECTION (LINHA SEPARADA POR VINCULO)
             )
             
             if (res.success && res.rosterId) {
@@ -1698,16 +1703,17 @@ export default function Schedule({
              // Step 3: Add the new nurse (this puts them at the end initially)
              const allowDuplicate = observation.includes('ED')
              const addRes = await assignNurseToRoster(
-                 nurseId, 
-                 sectionId, 
-                 selectedUnitId, 
-                 Number(selectedMonth) + 1, 
-                 Number(selectedYear), 
-                 observation, 
-                 rosterItem.created_at, 
+                 nurseId,
+                 sectionId,
+                 selectedUnitId,
+                 Number(selectedMonth) + 1,
+                 Number(selectedYear),
+                 observation,
+                 rosterItem.created_at,
                  allowDuplicate,
                  null, // listOrder
-                 true  // skipRevalidate
+                 true,  // skipRevalidate
+                 vinculoId ?? null // vinculoId ESCOLHIDO NO MODAL NURSESELECTION (REATRIBUICAO / SUBSTITUICAO)
              )
              
              if (addRes.success && (addRes as any).rosterId) {
