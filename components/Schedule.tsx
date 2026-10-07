@@ -2316,18 +2316,14 @@ export default function Schedule({
     })
 
     const grouped = new Map<string, Set<string>>()
-    // ===== FIX: SÓ FÉRIAS / LICENÇAS APARECEM NO RODAPÉ DA ESCALA. FOLGAS MENU "Faltas e Folgas > Folgas" REMOVIDAS!
-    const validTypes = new Set(['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'])
+    const validTypes = new Set(['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'])
 
     ;(data.timeOffs || []).forEach((t: any) => {
       const type = String(t?.type || '')
-      // ===== FIX DUPLO: remover folga também daqui (garantia extra)
-      if (type === 'folga') return
       if (!validTypes.has(type)) return
       if (!t?.start_date || !t?.end_date) return
       if (t.end_date < monthStart || t.start_date > monthEnd) return
 
-      // Filtro por unidade: se vier com unit_id preenchido, respeita; global null também exibe.
       if (selectedUnitId && t.unit_id && String(t.unit_id) !== String(selectedUnitId)) return
 
       const nurseName = nurseNameById.get(String(t.nurse_id)) || String((t as any).nurse_name || '')
@@ -2338,8 +2334,7 @@ export default function Schedule({
       grouped.get(type)!.add(label)
     })
 
-    // ===== FIX: ORDEM SEM FOLGA
-    const order = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao']
+    const order = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga']
     return order
       .map((type) => {
         const names = Array.from(grouped.get(type) || [])
@@ -2350,7 +2345,8 @@ export default function Schedule({
             type === 'ferias' ? 'FÉRIAS' :
             type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
             type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' :
-            'CESSÃO',
+            type === 'cessao' ? 'CESSÃO' :
+            'FOLGA',
           names: names.join(', ')
         }
       })
