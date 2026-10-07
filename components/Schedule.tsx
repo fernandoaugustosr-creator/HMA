@@ -2699,7 +2699,8 @@ export default function Schedule({
                       )
                     }
                     if (displayDynamicField === 'vinculo') {
-                      const v = String(val || '-')
+                      const effectiveVinculo = String(((source as any)?.snapshot_vinculo ?? source.vinculo) ?? '')
+                      const v = ((String(nurse.observation ?? '').includes('1ED') && !effectiveVinculo.toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (effectiveVinculo || '-'))
                       return (
                         <>
                           <span className="font-bold print:hidden">{v}</span>
@@ -2992,8 +2993,10 @@ export default function Schedule({
     if (!s || s === '-') return '-'
     if (s.includes('ESCALA DUPLA')) return 'E.D.'
     if (s.includes('ESCALA DESCOBERTA')) return 'DESC.'
-    if (s.includes('SELETIVO')) return 'SEL.'
+    // ===== ORDEM CORRETA PRIORIDADE: PRIMEIRO checamos CONCURSO (pois se string agregado) antes do que SELETIVO).
+    // Assim se snapshot for null + string agregada com os dois, retorna CONC. nao SEL. (caso linha antiga sem snapshot) =====
     if (s.includes('CONCURSO')) return 'CONC.'
+    if (s.includes('SELETIVO')) return 'SEL.'
     if (s.includes('TERCEIRIZ')) return 'TER.'
     if (s.includes('CELETISTA')) return 'CEL.'
     return s.slice(0, 8)
