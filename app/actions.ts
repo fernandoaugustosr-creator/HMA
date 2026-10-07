@@ -4027,7 +4027,15 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
       })
       
       const nurseIds = new Set((roster || []).map((r: any) => r.nurse_id).filter(Boolean))
-      const nurses = (db.nurses || []).filter((n: any) => nurseIds.has(String(n.id)))
+      const rawNurses = (db.nurses || []).filter((n: any) => nurseIds.has(String(n.id)))
+      let enrichedNurses = rawNurses
+      try {
+        const enrichedMap = await _enrichNursesWithActiveVinculos(rawNurses, nurseIds)
+        enrichedNurses = Array.from(enrichedMap.values()) as any[]
+      } catch (e) {
+        console.warn('[getMonthlyScheduleData local] enrichment vinculos falhou, usando nurses brutos.', e?.message || String(e))
+      }
+      const nurses = enrichedNurses
       const rosterIdsForContext = new Set((roster || []).map((r: any) => r.id).filter(Boolean))
       const shifts = db.shifts.filter((s: any) => {
         const date = s.shift_date || s.date
@@ -4185,7 +4193,14 @@ export async function getMonthlyScheduleData(month: number, year: number, unitId
         .order('name')
         .range(0, 1000)
       if (nursesError) console.error('Error fetching nurses:', nursesError)
-      nurses = nursesData || []
+      const rawNurses = nursesData || []
+      nurses = rawNurses
+      try {
+        const enrichedMap = await _enrichNursesWithActiveVinculos(rawNurses, new Set(nurseIdList))
+        nurses = Array.from(enrichedMap.values()) as any[]
+      } catch (e) {
+        console.warn('[getMonthlyScheduleData supabase] enrichment vinculos falhou, usando nurses brutos.', e?.message || String(e))
+      }
     }
 
     const timeOffsRaw = timeOffsData || []
@@ -4382,7 +4397,9 @@ export async function getAllNurses() {
     try {
         if (isLocalMode()) {
             const db = readDb()
-            return db.nurses || []
+            const rawNurses = db.nurses || []
+            const enrichedMap = await _enrichNursesWithActiveVinculos(rawNurses)
+            return Array.from(enrichedMap.values()) || rawNurses
         }
         const supabase = createClient()
         // Use a large range and count to ensure we get absolutely everyone
@@ -4397,8 +4414,15 @@ export async function getAllNurses() {
             throw error
         }
         
-        console.log(`getAllNurses: Fetched ${data?.length} of ${count} nurses.`)
-        return data || []
+        const rawNurses = data || []
+        console.log(`getAllNurses: Fetched ${rawNurses.length} of ${count} nurses.`)
+        try {
+            const enrichedMap = await _enrichNursesWithActiveVinculos(rawNurses)
+            return Array.from(enrichedMap.values()) || rawNurses
+        } catch (e) {
+            console.warn('getAllNurses: enrichment nurse_vinculos falhou (possivel tabela nova), retornando nurses brutos.', e?.message || String(e))
+            return rawNurses
+        }
     } catch (e) {
         console.error('Error in getAllNurses:', e)
         return []

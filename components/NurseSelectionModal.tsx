@@ -109,16 +109,24 @@ export default function NurseSelectionModal({ isOpen, onClose, onSelect, nurses,
           })
         })
       } else {
-        // Fallback coluna antiga "vinculo" (string simples) -> 1 linha só
+        // Fallback coluna antiga "vinculo" (string): SE tiver " / " (separador agregado ex: "CONCURSO / SELETIVO")
+        //  => QUEBRAR EM N LINHAS SEPARADAS (1 por item) - retroativo para casos antigos sem JOIN nurse_vinculos!
+        // Senao => 1 linha única.
         const rawTipo = String(nurse.vinculo || '')
-        const badge = tipoVinculoBadge(rawTipo)
-        out.push({
-          key: `n${nurse.id}_fallback_${badge.short}`,
-          nurseId: String(nurse.id),
-          vinculoId: null,
-          tipoVinculoRaw: rawTipo || badge.label,
-          badge,
-          nurse,
+        const SEPARADOR = ' / '
+        const hasSeparator = rawTipo.includes(SEPARADOR)
+        const parts: string[] = hasSeparator ? rawTipo.split(SEPARADOR).map(x => x.trim()).filter(Boolean) : [rawTipo]
+        parts.forEach((part, idx) => {
+          const badge = tipoVinculoBadge(part || rawTipo)
+          const keySuffix = hasSeparator ? `part_${idx}_${badge.short}_${part}` : badge.short
+          out.push({
+            key: `n${nurse.id}_fallback_${keySuffix}`,
+            nurseId: String(nurse.id),
+            vinculoId: null,
+            tipoVinculoRaw: part || badge.label,
+            badge,
+            nurse,
+          })
         })
       }
     })
