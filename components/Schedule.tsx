@@ -2092,7 +2092,7 @@ export default function Schedule({
           if (rosterEntries && rosterEntries.length > 0) {
               return rosterEntries.map(entry => ({
                   ...nurse,
-                  unique_key: entry.id, // Use roster entry ID as unique key
+                  unique_key: entry.id,
                   section_id: entry.section_id,
                   unit_id: entry.unit_id,
                   is_rostered: true,
@@ -2100,7 +2100,11 @@ export default function Schedule({
                   observation: entry.observation,
                   sector: entry.sector,
                   list_order: entry.list_order,
-                  name_star: !!entry.name_star
+                  name_star: !!entry.name_star,
+                  snapshot_name: entry.snapshot_name ?? nurse.name,
+                  snapshot_role: entry.snapshot_role ?? nurse.role,
+                  snapshot_vinculo: entry.snapshot_vinculo ?? nurse.vinculo,
+                  snapshot_vinculos_json: (entry as any).snapshot_vinculos_json ?? null
               }))
           }
           return [{ ...nurse, unique_key: nurse.id, is_rostered: false }]
@@ -2544,20 +2548,20 @@ export default function Schedule({
                         type="button"
                         onClick={() => openReassignModal(nurse.unique_key || '', section.id)}
                         className={`flex-1 min-w-0 bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none uppercase text-center whitespace-nowrap overflow-hidden text-ellipsis ${
-                          (((nurse.vinculo || '').toUpperCase().includes('SELETIVO') || (nurse.vinculo || '').toUpperCase().includes('CELETISTA'))) ? 'text-green-600' :
-                          (((nurse.vinculo || '').toUpperCase().includes('TERCEIRIZADO') || (nurse.vinculo || '').toUpperCase().includes('TERCERIZADO'))) ? 'text-purple-700' :
-                          (nurse.observation || '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
-                          (nurse.observation || '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
+                          (((String(nurse.snapshot_vinculo ?? nurse.vinculo ?? '').toUpperCase().includes('SELETIVO') || String(nurse.snapshot_vinculo ?? nurse.vinculo ?? '').toUpperCase().includes('CELETISTA'))) ? 'text-green-600' :
+                          (((String(nurse.snapshot_vinculo ?? nurse.vinculo ?? '').toUpperCase().includes('TERCEIRIZADO') || String(nurse.snapshot_vinculo ?? nurse.vinculo ?? '').toUpperCase().includes('TERCERIZADO'))) ? 'text-purple-700' :
+                          (String(nurse.observation ?? '').toUpperCase().trim() === '1ED' ? 'text-red-600' :
+                          (String(nurse.observation ?? '').toUpperCase().trim() === '1 ED AB' ? 'text-blue-600' :
                           'text-gray-800'
-                        }`}
+                          ))))}`}
                         title={nurse.name}
                       >
                         {(() => {
-                            const vinculo = (nurse.vinculo || '').toUpperCase().trim()
+                            const vinculo = String((nurse.snapshot_vinculo ?? nurse.vinculo) ?? '').toUpperCase().trim()
                             let suffix = ''
                             if (vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) suffix = ' (SEL)'
                             if (vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) suffix += ' (TER)'
-                            if ((nurse.observation || '').toUpperCase().includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) suffix += ' (AB)'
+                            if ((String(nurse.observation ?? '').toUpperCase().includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA'))) suffix += ' (AB)'
                             return `${nurse.name}${suffix}`
                         })()}
                       </button>
@@ -2573,8 +2577,8 @@ export default function Schedule({
                   ) : null}
                   <div className={`${canEditSelectedUnit && !isScheduleReleased ? 'hidden print:block' : 'block'} text-center w-full`}>
                   {(() => {
-                     const obs = (nurse.observation || '').toUpperCase().trim()
-                     const vinculo = (nurse.vinculo || '').toUpperCase().trim()
+                     const obs = String(nurse.observation ?? '').toUpperCase().trim()
+                     const vinculo = String((nurse.snapshot_vinculo ?? nurse.vinculo) ?? '').toUpperCase().trim()
                      const isSeletivo = vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')
                      const isTerceirizado = vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')
                      
@@ -2603,7 +2607,6 @@ export default function Schedule({
                         {nurse.name}
                          {(vinculo.includes('SELETIVO') || vinculo.includes('CELETISTA')) && <span className="ml-1">(SEL)</span>}
                          {(vinculo.includes('TERCEIRIZADO') || vinculo.includes('TERCERIZADO')) && <span className="ml-1">(TER)</span>}
-                         {/* {obs.includes('1ED') && !isSeletivo && <span className="ml-1">(1ED)</span>} */}
                         {(obs.includes('AB') || vinculo.includes('ATENÇÃO BÁSICA') || vinculo.includes('ATENCAO BASICA')) && <span className="ml-1">(AB)</span>}
                         {displayObs ? displayObs : ''}
                         {nurse.name_star ? (
@@ -2622,7 +2625,8 @@ export default function Schedule({
               </td>
               <td className="border border-black px-0.5 py-0.5 text-center text-[10px] print:text-[8px] uppercase h-5 print:h-5 leading-none overflow-hidden">
                 {(() => {
-                  const v = ((nurse.observation || '').includes('1ED') && !(nurse.vinculo || '').toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (nurse.vinculo || '-')
+                  const effectiveVinculo = String((nurse.snapshot_vinculo ?? nurse.vinculo) ?? '')
+                  const v = ((String(nurse.observation ?? '').includes('1ED') && !effectiveVinculo.toUpperCase().includes('SELETIVO')) ? 'ESCALA DUPLA' : (effectiveVinculo || '-'))
                   return (
                     <>
                       <span className="block whitespace-nowrap overflow-hidden text-ellipsis font-bold print:hidden">{v}</span>
