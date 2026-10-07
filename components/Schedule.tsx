@@ -2320,10 +2320,14 @@ export default function Schedule({
     })
 
     const grouped = new Map<string, Set<string>>()
-    const validTypes = new Set(['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga'])
+    // ===== SOLICITACAO VERBATIM USUARIO: SÓ APARECEM NA ESCALA (CÉLULAS + RODAPÉ) ====
+    // ===== FÉRIAS / LICENÇA SAÚDE / LICENÇA MATERNIDADE / CESSÃO. FOLGAS MENU FALTAS E FOLGAS NÃO APARECEM EM NENHUM LUGAR! =====
+    const validTypes = new Set(['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao'])
 
     ;(data.timeOffs || []).forEach((t: any) => {
       const type = String(t?.type || '')
+      // ===== FOLGAS: BLOQUEIO TOTAL NA ESCALA (nunca mais passa pra cá) =====
+      if (type === 'folga') return
       if (!validTypes.has(type)) return
       if (!t?.start_date || !t?.end_date) return
       if (t.end_date < monthStart || t.start_date > monthEnd) return
@@ -2338,7 +2342,8 @@ export default function Schedule({
       grouped.get(type)!.add(label)
     })
 
-    const order = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao', 'folga']
+    // ===== ORDEM 4 TIPOS EXATOS QUE O USUARIO QUER =====
+    const order = ['ferias', 'licenca_saude', 'licenca_maternidade', 'cessao']
     return order
       .map((type) => {
         const names = Array.from(grouped.get(type) || [])
@@ -2349,8 +2354,7 @@ export default function Schedule({
             type === 'ferias' ? 'FÉRIAS' :
             type === 'licenca_saude' ? 'LICENÇA SAÚDE' :
             type === 'licenca_maternidade' ? 'LICENÇA MATERNIDADE' :
-            type === 'cessao' ? 'CESSÃO' :
-            'FOLGA',
+            'CESSÃO',
           names: names.join(', ')
         }
       })
