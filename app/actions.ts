@@ -5373,10 +5373,19 @@ type NurseSnapshot = {
   snapshot_vinculo: string
   snapshot_vinculos_json: string
 }
-async function _buildNurseSnapshot(nurseId: string, vinculoId?: string | null): Promise<NurseSnapshot> {
+function _normalizeTipoVinculoForMatch(s: any): string {
+  if (!s) return ''
+  return String(s)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .trim()
+}
+async function _buildNurseSnapshot(nurseId: string, vinculoId?: string | null, tipoVinculo?: string | null): Promise<NurseSnapshot> {
   const empty: NurseSnapshot = { snapshot_name: '', snapshot_role: '', snapshot_vinculo: '', snapshot_vinculos_json: '' }
   if (!nurseId) return empty
   const vinIdStr = vinculoId ? String(vinculoId) : null
+  const tipoVinculoNorm = _normalizeTipoVinculoForMatch(tipoVinculo)
   try {
     let nurse: any = null
     let vinculosTodos: any[] = []
@@ -5396,14 +5405,18 @@ async function _buildNurseSnapshot(nurseId: string, vinculoId?: string | null): 
     if (!nurse) return empty
 
     const vinculosAtivos = vinculosTodos.filter((v: any) => !v.data_baixa || String(v.data_baixa).trim() === '')
-    const vinculoEscolhido = vinIdStr
+    const vinculoEscolhidoPorId = vinIdStr
       ? vinculosTodos.find((v: any) => String(v.id || '') === vinIdStr) || null
       : null
+    const vinculoEscolhidoPorTipo = (!vinculoEscolhidoPorId && tipoVinculoNorm)
+      ? vinculosTodos.find((v: any) => _normalizeTipoVinculoForMatch(v.tipo_vinculo || v.vinculo) === tipoVinculoNorm) || null
+      : null
+    const vinculoEscolhido = vinculoEscolhidoPorId || vinculoEscolhidoPorTipo || null
 
     let snapshot_vinculo = ''
     let snapshot_vinculos_json = ''
     if (vinculoEscolhido) {
-      // Caso 1: usuário selecionou um VINCULO ESPECÍFICO no modal (1 linha por vínculo)
+      // Caso 1: usuário selecionou um VINCULO ESPECÍFICO no modal (1 linha por vínculo) ou selecionou tipo no fallback split
       // -> snapshot VAI SER APENAS ESSE VÍNCULO (ex: "SELETIVO" ou "CONCURSO") mesmo que tenha mais de 1.
       snapshot_vinculo = String(vinculoEscolhido.tipo_vinculo || vinculoEscolhido.vinculo || '').toUpperCase().trim()
       snapshot_vinculos_json = JSON.stringify([{
@@ -5412,6 +5425,17 @@ async function _buildNurseSnapshot(nurseId: string, vinculoId?: string | null): 
         data_admissao: String(vinculoEscolhido.data_admissao || ''),
         data_baixa: String(vinculoEscolhido.data_baixa || ''),
         active: !vinculoEscolhido.data_baixa || String(vinculoEscolhido.data_baixa).trim() === ''
+      }])
+    } else if (tipoVinculoNorm) {
+      // Caso 1B: tipo fornecido mas nao achou na tabela nurse_vinculos ainda (fallback coluna antiga ou criado apos) -> usa diretamente o tipo fornecido
+      // Evita cair no caso 2 (junta todos ativos) quando o usuario escolheu [CON] mas nao tem JOIN ainda.
+      snapshot_vinculo = String(tipoVinculo || '').toUpperCase().trim()
+      snapshot_vinculos_json = JSON.stringify([{
+        id: '',
+        tipo_vinculo: String(tipoVinculo || ''),
+        data_admissao: String(nurse.data_admissao || nurse.admission_date || nurse.dataAdmissao || ''),
+        data_baixa: '',
+        active: true
       }])
     } else if (vinculosAtivos.length > 0) {
       // Caso 2: nenhum vínculo especificado (fallback) -> junta todos ativos (antigo comportamento)
@@ -5451,7 +5475,8 @@ export async function assignNurseToRoster(
   allowDuplicate: boolean = false,
   listOrder?: number | null,
   skipRevalidate: boolean = false,
-  vinculoId?: string | null
+  vinculoId?: string | null,
+  tipoVinculo?: string | null
 ) {
   try {
     await checkScaleEditor(unitId)
@@ -5484,7 +5509,7 @@ export async function assignNurseToRoster(
   // Only update the specific month (no propagation)
   const monthsToUpdate = [__m]
   let lastInsertedId: string | undefined = undefined
-  const snapshot = await _buildNurseSnapshot(nurseId, vinculoId ?? null)
+  const snapshot = await _buildNurseSnapshot(nurseId, vinculoId ?? null, tipoVinculo ?? null)
 
   if (isLocalMode()) {
     const db = readDb()

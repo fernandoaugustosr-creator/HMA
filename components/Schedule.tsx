@@ -1641,7 +1641,7 @@ export default function Schedule({
 
   const finalizeAssignNurse = async (observation: string) => {
     if (!doubleShiftModal) return
-    const { nurseId, sectionId, rosterId, isInsertion, insertionPosition, insertionOrderedIds, vinculoId } = doubleShiftModal as any
+    const { nurseId, sectionId, rosterId, isInsertion, insertionPosition, insertionOrderedIds, vinculoId, tipoVinculo } = doubleShiftModal as any
     setDoubleShiftModal(null)
     setInsertionData(null)
 
@@ -1660,7 +1660,8 @@ export default function Schedule({
                 true, // allow duplicate
                 null, // listOrder (initially null)
                 true,  // skipRevalidate
-                vinculoId ?? null // vinculoId ESCOLHIDO NO MODAL NURSESELECTION (LINHA SEPARADA POR VINCULO)
+                vinculoId ?? null, // vinculoId ESCOLHIDO NO MODAL NURSESELECTION (LINHA SEPARADA POR VINCULO)
+                tipoVinculo ?? null  // TIPO VINCULO EXATO (fallback split "CONCURSO / SELETIVO") - passado mesmo qndo vinculoId for null
             )
             
             if (res.success && res.rosterId) {
@@ -1713,7 +1714,8 @@ export default function Schedule({
                  allowDuplicate,
                  null, // listOrder
                  true,  // skipRevalidate
-                 vinculoId ?? null // vinculoId ESCOLHIDO NO MODAL NURSESELECTION (REATRIBUICAO / SUBSTITUICAO)
+                 vinculoId ?? null, // vinculoId ESCOLHIDO NO MODAL NURSESELECTION (REATRIBUICAO / SUBSTITUICAO)
+                 tipoVinculo ?? null // TIPO VINCULO EXATO fallback split
              )
              
              if (addRes.success && (addRes as any).rosterId) {
